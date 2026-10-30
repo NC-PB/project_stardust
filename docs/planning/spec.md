@@ -38,7 +38,7 @@ Solo developers who build software with coding agents lose the thread between se
 - The tool never writes to git: no commit, no staging, no branches. Read-only `git log` is allowed. Works in folders without git.
 - Plain markdown compatibility: every file renders on GitHub, GitLab, in Obsidian and VS Code. Tool semantics only through frontmatter, standard task lists, standard links, standard blockquotes and inline code. No custom syntax.
 - Frontend: React with TypeScript in strict mode, built with Vite, inside the Tauri webview (`S-frontend`).
-- Libraries for the heavy parts: CodeMirror 6, remark/rehype (unified), Markmap, Mermaid. Rust: `notify`, `tauri-plugin-global-shortcut`, `tauri-plugin-store`, `tauri-plugin-shell`.
+- Libraries for the heavy parts: CodeMirror 6, remark/rehype (unified), Markmap, Mermaid. Rust: `notify`, `tauri-plugin-global-shortcut`, `tauri-plugin-store`, `tauri-plugin-shell`, `tauri-plugin-dialog` (D-20261030-224813-t807).
 - Logic lives in Rust and in pure TypeScript modules with tests; React components only render.
 
 ## Domain
@@ -96,8 +96,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Every generated file renders on GitHub and in any markdown editor (`R-plain-markdown`).
     - An existing `docs/planner.yml` is kept and decides the planning root and the column folders; init then adds only what is missing. A `spec/` folder means no `spec.md` is created.
     - `spec.md` comes from the spec template (`S-templates`); spec and braindump get a new id and today's date.
-    - Init reports each path as created or existing, and whether the `.gitignore` entry and the planner block are missing; separate commands add each one. The dialog that shows these offers is task 20261030-220947-k07z (D-20261030-224049-19xh).
-    - Implemented in `src-tauri/src/domain/init.rs`; commands `init_project(repo_root)`, `add_images_to_gitignore(repo_root)`.
+    - Init reports each path as created or existing, and whether the `.gitignore` entry and the planner block are missing; separate commands add each one. The app shows each offer on its own with Add and Not now (D-20261030-224049-19xh).
+    - Init refuses a repository folder that does not exist instead of creating it.
+    - In the app: "Open repository" picks a folder with the native dialog; the folder is remembered in the app settings (`settings.json` of `tauri-plugin-store`, in the app data folder, never in the repository) and reopened on start. A folder without `docs/planner.yml` shows Initialize; after init the app lists created and existing paths and issues.
+    - Implemented in `src-tauri/src/domain/init.rs`; commands `init_project(repo_root)`, `add_images_to_gitignore(repo_root)`. Frontend: `src/lib/project.ts`, `src/stores/project-store.ts`, `src/components/project-panel.tsx`.
   - [x] Task file format `S-task-format`
     - One task per file (`R-one-task-per-file`). Filename `<id>-<slug>.md`.
     - Frontmatter: `id`, `title`, `created` required; `tags`, `priority` (1 to 5), `depends_on`, `parent`, `implements`, `completed` optional.
@@ -238,7 +240,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Tauri 2 app, signed builds for Windows, macOS, Linux.
     - `npm run tauri dev` opens one window titled "stardust" rendering the React page. Bundle identifier `dev.stardust.planner`.
     - The webview has a Content Security Policy that allows only the app itself and Tauri IPC; no remote sources.
-    - No Tauri plugins yet; capabilities grant `core:default` only.
+    - Tauri plugins: `tauri-plugin-dialog` (folder picker) and `tauri-plugin-store` (app settings). Capabilities grant `core:default`, `dialog:allow-open` and `store:default`.
   - [x] Frontend `S-frontend`
     - React with TypeScript (`strict: true`), Vite.
     - UI components: shadcn/ui with Tailwind; component code lives in the repository.
@@ -248,7 +250,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Tests: `cargo test` for Rust, Vitest for TypeScript. Lint and format: Biome.
     - Bindings are generated into `src/bindings.ts` on every debug start and by `cargo test`; the frontend calls Rust only through them. tauri-specta and specta are pinned to exact release candidates (D-20261030-211738-9tc3).
     - `npm run check` runs `tsc`, Biome and Vitest. Folder layout (Rust `domain/` and `commands.rs`; TypeScript `lib/`, `stores/`, `components/`) is described in `ARCHITECTURE.md`.
-    - Installed so far: shadcn/ui (Button), Tailwind 4, Zustand. dnd-kit, CodeMirror and remark/rehype come with their tasks.
+    - Installed so far: shadcn/ui (Button), Tailwind 4, Zustand, `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-store`. dnd-kit, CodeMirror and remark/rehype come with their tasks.
   - [x] Templates `S-templates`
     - Templates for spec, task, config, planner block and prompts ship inside the app.
     - If `templates_dir` (default `docs/templates/`) contains `task.md` or `spec.md`, the tool uses those instead of the built in ones.
@@ -458,6 +460,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: keeping the init task open until a UI exists.
 - Consequences: `S-init` criteria; task 20261030-220947-k07z also has to settle `tauri-plugin-dialog`, which the Constraints do not list.
 
+### D-20261030-224813-t807 · Native folder picker with tauri-plugin-dialog
+- Context: the app needs a repository folder before it can show anything, and the Constraints listed no plugin for a native folder dialog.
+- Decision: add `tauri-plugin-dialog` to the Constraints, with only `dialog:allow-open` granted. The chosen folder is kept with `tauri-plugin-store`, already in the Constraints. Decided by the user on 2026-10-30.
+- Rejected: typing or pasting the path.
+- Consequences: Constraints, `S-tauri`, `S-frontend` and `S-init` criteria.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -479,3 +487,4 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Slug: the readable part of a task filename after the id, built from the title.
 - Section: a `## ` part of a task body: Description, Acceptance criteria, Implementation notes, Result.
 - Issue: a problem found while reading a file or the config, reported with the field or key it concerns; the file is still used.
+- Offer: a change init proposes outside the planning root (the `.gitignore` entry, the planner block), applied only when the user accepts it.

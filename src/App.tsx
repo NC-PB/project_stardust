@@ -1,23 +1,24 @@
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { ProjectPanel } from "@/components/project-panel";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
+import { useProjectStore } from "@/stores/project-store";
 
 function App() {
   const version = useAppStore((state) => state.version);
   const loadVersion = useAppStore((state) => state.loadVersion);
+  const restore = useProjectStore((state) => state.restore);
 
   useEffect(() => {
     void loadVersion();
-  }, [loadVersion]);
+    void restore();
+  }, [loadVersion, restore]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
       <h1 className="text-2xl font-semibold">stardust</h1>
-      <p className="text-muted-foreground">{versionLabel(version)}</p>
-      <Button variant="outline" onClick={() => void loadVersion()}>
-        Reload version
-      </Button>
+      <ProjectPanel />
+      <p className="text-xs text-muted-foreground">{versionLabel(version)}</p>
     </main>
   );
 }

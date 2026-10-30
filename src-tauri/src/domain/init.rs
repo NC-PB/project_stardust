@@ -48,6 +48,9 @@ pub struct InitReport {
 /// Creates a project in the repository at `repo_root`. An existing `docs/planner.yml` is used
 /// as it is, so init on a configured repository fills in only what is missing.
 pub fn init_project(repo_root: &Path) -> Result<InitReport, String> {
+    if !repo_root.is_dir() {
+        return Err(format!("{} is not a folder", repo_root.display()));
+    }
     let mut report = InitReport {
         created: Vec::new(),
         existing: Vec::new(),
@@ -371,6 +374,17 @@ mod tests {
 
         assert!(listed);
         assert_eq!(appended, "dist\ndocs/images/\n");
+    }
+
+    #[test]
+    fn a_missing_repository_folder_is_not_created() {
+        let root = std::env::temp_dir().join(format!("stardust-init-{}", ids::random_suffix()));
+        assert!(
+            init_project(&root)
+                .unwrap_err()
+                .ends_with("is not a folder")
+        );
+        assert!(!root.exists());
     }
 
     #[test]

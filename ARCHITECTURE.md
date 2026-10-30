@@ -31,3 +31,5 @@ Commands are registered in `lib.rs` with `collect_commands!`. `src/bindings.ts` 
 ## Dependencies
 
 tauri-specta, specta and specta-typescript have no stable release for Tauri 2 and are pinned to exact release candidates in `src-tauri/Cargo.toml` (D-20261030-211738-9tc3). Everything else uses stable releases.
+
+Tauri plugins: `tauri-plugin-dialog` (folder picker) and `tauri-plugin-store` (app settings in `settings.json` in the app data folder, read and written through `src/stores/settings.ts`). Each plugin gets only the permissions it needs in `src-tauri/capabilities/default.json`.

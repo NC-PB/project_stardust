@@ -37,6 +37,8 @@ pub fn run() {
     export_bindings(&builder);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(builder.invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
