@@ -7,6 +7,9 @@ const initProject = vi.fn();
 const addImagesToGitignore = vi.fn();
 const writePlannerBlock = vi.fn();
 const watchProject = vi.fn();
+const loadBoard = vi.fn();
+const applyBatch = vi.fn();
+const clearBoard = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -17,6 +20,11 @@ vi.mock("@/bindings", () => ({
     watchProject: (...args: unknown[]) => watchProject(...args),
   },
   events: { planningChanged: { listen: vi.fn() } },
+}));
+vi.mock("./board-store", () => ({
+  useBoardStore: {
+    getState: () => ({ load: loadBoard, apply: applyBatch, clear: clearBoard }),
+  },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: () => pick() }));
 vi.mock("./settings", () => ({
@@ -132,6 +140,21 @@ describe("useProjectStore", () => {
     expect(watchProject).toHaveBeenCalledWith("/repo");
   });
 
+  it("loads the board of a project and clears it otherwise", async () => {
+    await useProjectStore.getState().openRepository("/empty");
+    expect(clearBoard).toHaveBeenCalled();
+    expect(loadBoard).not.toHaveBeenCalled();
+
+    const report = {
+      found: true,
+      config: { columns: [] },
+      missing_columns: [],
+    };
+    loadConfig.mockResolvedValue(report);
+    await useProjectStore.getState().openRepository("/repo");
+    expect(loadBoard).toHaveBeenCalledWith("/repo", report.config, []);
+  });
+
   it("starts watching after init", async () => {
     await useProjectStore.getState().openRepository("/repo");
     initProject.mockResolvedValue({ status: "ok", data: initReport });
@@ -160,6 +183,7 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().revision).toBe(1);
     expect(useProjectStore.getState().lastChange).toEqual(fileChange);
     expect(loadConfig).not.toHaveBeenCalled();
+    expect(applyBatch).toHaveBeenCalledWith(fileChange.batch);
 
     await useProjectStore.getState().receive({
       batch: { changes: [], config_changed: true },

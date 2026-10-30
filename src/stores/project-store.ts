@@ -9,6 +9,7 @@ import {
   type PlanningChanged_Serialize,
 } from "@/bindings";
 import { type Offer, offersOf } from "@/lib/project";
+import { useBoardStore } from "./board-store";
 import { readSetting, writeSetting } from "./settings";
 
 const REPO_ROOT_SETTING = "repoRoot";
@@ -40,13 +41,19 @@ interface ProjectState {
 
 /** The repository the app works on (`S-init`), remembered in app settings. */
 export const useProjectStore = create<ProjectState>()((set, get) => {
-  /** Loads the config and, once the project exists, (re)starts the watcher. */
+  /** Loads the config and, once the project exists, (re)starts the watcher and the board. */
   const load = async (repoRoot: string) => {
     const config = await commands.loadConfig(repoRoot);
     set({ config });
-    if (!config.found) return;
+    if (!config.found) {
+      useBoardStore.getState().clear();
+      return;
+    }
     const watched = await commands.watchProject(repoRoot);
     if (watched.status === "error") set({ error: watched.error });
+    await useBoardStore
+      .getState()
+      .load(repoRoot, config.config, config.missing_columns);
   };
   const without = (offer: Offer) =>
     get().offers.filter((pending) => pending !== offer);
@@ -73,6 +80,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       // The planning root may have moved, so the watcher restarts with the new config.
       if (change.batch.config_changed && repoRoot !== null)
         await load(repoRoot);
+      else await useBoardStore.getState().apply(change.batch);
     },
 
     restore: async () => {

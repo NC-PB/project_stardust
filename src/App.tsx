@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Board } from "@/components/board";
 import { ProjectPanel } from "@/components/project-panel";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
@@ -23,9 +24,10 @@ function App() {
   }, [listen]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+    <main className="flex h-screen flex-col items-center gap-6 p-6">
       <h1 className="text-2xl font-semibold">stardust</h1>
       <ProjectPanel />
+      <Board />
       <p className="text-xs text-muted-foreground">{versionLabel(version)}</p>
     </main>
   );

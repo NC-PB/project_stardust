@@ -31,5 +31,5 @@ The app now has a project panel: "Open repository" picks a folder, the folder is
 - The panel replaces the version button of the scaffold; the version is still shown.
 
 ### Next session
-- `next/` is empty. The [board](../inbox/20261030-220008-6c7c-board-columns-and-cards.md) can now take `repoRoot` and the config from `useProjectStore`; it also wants the [file watcher](20261030-220007-e420-file-watcher-with-move-detection.md) for live updates.
+- `next/` is empty. The [board](20261030-220008-6c7c-board-columns-and-cards.md) can now take `repoRoot` and the config from `useProjectStore`; it also wants the [file watcher](20261030-220007-e420-file-watcher-with-move-detection.md) for live updates.
 - Try the folder picker once by hand: `npm run tauri dev`, Open repository, cancel and pick.

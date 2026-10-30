@@ -34,6 +34,8 @@ pub struct Task {
     pub parent: Option<String>,
     pub implements: Vec<String>,
     pub completed: Option<String>,
+    /// When the file last changed on disk, RFC 3339 in UTC; `None` when not read from disk.
+    pub modified: Option<String>,
     /// The `## ` sections of the body, in file order.
     pub sections: Vec<Section>,
     pub issues: Vec<TaskIssue>,
@@ -95,14 +97,27 @@ pub fn read_task(path: &Path) -> Task {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    match std::fs::read_to_string(path) {
+    let mut task = match std::fs::read_to_string(path) {
         Ok(text) => parse_task(&file_name, &text),
         Err(err) => {
             let mut task = parse_task(&file_name, "");
             task.issues = vec![file_issue(format!("could not read the file: {err}"))];
             task
         }
-    }
+    };
+    task.modified = modified_time(path);
+    task
+}
+
+/// The last change time of the file at `path`, RFC 3339 in UTC.
+fn modified_time(path: &Path) -> Option<String> {
+    let time = std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()?;
+    Some(
+        chrono::DateTime::<chrono::Utc>::from(time)
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    )
 }
 
 /// Parses the text of a task file named `file_name`.
@@ -167,6 +182,7 @@ pub fn parse_task(file_name: &str, text: &str) -> Task {
         parent,
         implements,
         completed,
+        modified: None,
         sections: parse_sections(body),
         issues,
     }
@@ -735,6 +751,16 @@ mod tests {
         assert_eq!(names, [TEMPLATE_NAME, "broken.md"]);
         assert_eq!(tasks[0].issues, []);
         assert!(!tasks[1].issues.is_empty());
+        let modified = tasks[0].modified.as_deref().unwrap();
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(modified).is_ok(),
+            "{modified}"
+        );
+    }
+
+    #[test]
+    fn parsed_text_has_no_modified_time() {
+        assert_eq!(parse_task(TEMPLATE_NAME, TEMPLATE).modified, None);
     }
 
     #[test]

@@ -112,15 +112,28 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Writing a field replaces only that field's lines; a new field goes to the end of the frontmatter; removing a field deletes its lines. Comments, unknown fields, field order, list style, line endings and the body stay unchanged. Values are written plain when YAML reads them back unchanged, otherwise double quoted; lists in flow style `[a, b]`.
     - Implemented in `src-tauri/src/domain/task.rs`; commands `read_column`, `read_task`, `set_task_field`, `remove_task_field`.
   - [x] Board columns `S-board-columns`
-    - The board shows the folders listed in `columns`, in config order.
+    - The board shows the folders listed in `columns`, in config order, each with its task count; each column scrolls on its own.
     - Folders not listed in `columns` are not shown.
+    - A listed column without a folder is shown empty with "No folder for this column"; a folder that cannot be read shows the error.
+    - The board updates from watcher batches without reload: only the columns a batch touched are read again; a config change reloads the whole board (`S-watcher`).
+    - Implemented in `src/lib/board.ts` (`columnDir`, `touchedColumns`), `src/stores/board-store.ts` (`useBoardStore`, loaded and updated by `useProjectStore`), `src/components/board.tsx`; columns are read with `read_column`.
   - [x] Drag and drop `S-board-dnd`
     - Dropping a card in another column moves the file (`R-one-column`).
     - Moving into the terminal column sets `completed` to today; moving out removes it.
   - [x] Cards `S-board-card`
     - Show title, tags, age since last change, sub-task count, blocked marker, new-since-last-visit marker, commit info (`S-commit-info`).
+    - Commit info is not built yet (phase 4).
+    - Age is the time since the file's last change on disk (`modified` of a task), in the largest fitting unit: now, m, h, d, mo, y; recomputed every minute.
+    - The sub-task count counts tasks in any column whose `parent` is the card's id (`S-subtasks`).
+    - Blocked: a `depends_on` id whose task is in a column other than the terminal one (`S-dependencies`); the marker names the ids on hover. An id found in no column (archived or deleted) does not block (D-20261030-231221-spj4).
+    - New: the file changed after the previous visit of the project. A visit is recorded when the project is opened and with every batch seen while it is open; last visits are kept per repository in the app settings, never in the repository. On the first visit nothing is new (D-20261030-231221-spj4).
+    - Implemented in `src/lib/board.ts` (`cardsOf`, `ageLabel`, `isNewSince`).
   - [x] Tag filter `S-board-filter`
-    - Filtering by one or more tags hides cards without them, in all columns.
+    - Filtering by one or more tags hides cards without them, in all columns: a card stays only when it carries every selected tag (D-20261030-231541-84sn).
+    - The tag bar above the board lists every tag on the board; clicking a tag there or on a card adds it to the filter or removes it. "Clear filter" empties the filter in one action.
+    - While filtering, each column shows its count as "shown of total".
+    - The filter lives in the app for the session only; it is kept across watcher batches and reloads of the same project and emptied when another project is opened. Nothing is written to the repository or the settings.
+    - Implemented in `src/lib/board.ts` (`boardTags`, `filterCards`), `src/stores/board-store.ts` (`tagFilter`, `toggleTag`, `clearTagFilter`), `src/components/board.tsx`.
   - [x] Sort `S-board-sort`
     - Per column: priority, created, dependency order.
   - [x] Make task `S-make-task`
@@ -477,6 +490,18 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: `notify-debouncer-full` (another crate outside the Constraints, still platform specific for renames), trusting rename events.
 - Consequences: `S-watcher` criteria; a move whose two halves land in different batches (a slow copy over more than 1 s) shows as removed and created.
 
+### D-20261030-231221-spj4 · Last visit, file times and unknown dependencies on cards
+- Context: `S-board-card` names an age, a blocked marker and a new-since-last-visit marker but not what a visit is, where the age comes from, or what a dependency on a task that is not on the board means.
+- Decision: a task carries `modified`, the file time from disk (RFC 3339, UTC), read by `read_task`. A visit of a project is recorded when it is opened and with every watcher batch seen while it is open; a card is new when its file changed after the visit before the current one. Last visits live in `settings.json` of `tauri-plugin-store` under `lastVisits`, keyed by repository root. Nothing is new on the first visit. A dependency on an id found in no column does not block, since archived tasks in `done/YYYY-MM/` are not read.
+- Rejected: recording the visit when the app closes (no reliable hook, and a crash would mark everything new); the `created` date as age (says nothing about activity); treating unknown ids as blocking (every archived dependency would block forever).
+- Consequences: `S-board-card` criteria; `Task` has a new field `modified` that `S-task-format` does not list yet.
+
+### D-20261030-231541-84sn · Tag filter keeps cards with all selected tags, for the session only
+- Context: `S-board-filter` says filtering by one or more tags hides cards "without them" but not whether a card needs all selected tags or any of them, nor whether the filter is remembered.
+- Decision: a card stays when it carries every selected tag (narrowing). The filter is held in memory for the session and emptied when another project is opened; selected tags no longer on any card stay in the tag bar so they can be removed.
+- Rejected: any-of matching (adding a tag would widen the board, against "hides cards without them"); keeping the filter in the app settings (not asked for, easy to add later).
+- Consequences: `S-board-filter` criteria.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -500,3 +525,5 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Issue: a problem found while reading a file or the config, reported with the field or key it concerns; the file is still used.
 - Batch: the changes from one burst of events on disk, sent to the app together.
 - Offer: a change init proposes outside the planning root (the `.gitignore` entry, the planner block), applied only when the user accepts it.
+- Card: a task as shown on the board, with its markers.
+- Visit: opening a project in the app; the last visit per project decides which cards are new.

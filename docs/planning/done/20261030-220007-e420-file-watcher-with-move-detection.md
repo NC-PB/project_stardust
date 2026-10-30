@@ -35,5 +35,5 @@ The app watches the open repository. `watch_project(repoRoot)` starts a `notify`
 - Commands still write with `std::fs::write`; their writes come back as `modified` batches. The editor task has to decide whether its own saves need to be told apart.
 
 ### Next session
-- `next/` is empty. The [board](../inbox/20261030-220008-6c7c-board-columns-and-cards.md) can now read `repoRoot`, `config` and `revision` from `useProjectStore`.
+- `next/` is empty. The [board](20261030-220008-6c7c-board-columns-and-cards.md) can now read `repoRoot`, `config` and `revision` from `useProjectStore`.
 - Run the real watcher test on Windows and Linux when a machine is at hand.

@@ -250,6 +250,8 @@ export type Task_Deserialize = {
 	parent?: string | null,
 	implements: string[],
 	completed?: string | null,
+	/**  When the file last changed on disk, RFC 3339 in UTC; `None` when not read from disk. */
+	modified?: string | null,
 	/**  The `## ` sections of the body, in file order. */
 	sections: Section[],
 	issues: TaskIssue_Deserialize[],
@@ -273,6 +275,8 @@ export type Task_Serialize = {
 	parent: string | null,
 	implements: string[],
 	completed: string | null,
+	/**  When the file last changed on disk, RFC 3339 in UTC; `None` when not read from disk. */
+	modified: string | null,
 	/**  The `## ` sections of the body, in file order. */
 	sections: Section[],
 	issues: TaskIssue_Serialize[],
