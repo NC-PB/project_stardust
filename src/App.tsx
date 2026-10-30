@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Board } from "@/components/board";
 import { Editor } from "@/components/editor";
 import { ProjectPanel } from "@/components/project-panel";
+import { PromptNotice } from "@/components/prompt-notice";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
@@ -33,6 +34,7 @@ function App() {
         <Editor />
       </div>
       <p className="text-xs text-muted-foreground">{versionLabel(version)}</p>
+      <PromptNotice />
     </main>
   );
 }

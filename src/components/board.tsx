@@ -21,8 +21,10 @@ import {
   columnDir,
   filterCards,
 } from "@/lib/board";
+import { PROMPT_LABELS } from "@/lib/prompts";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
+import { usePromptStore } from "@/stores/prompt-store";
 
 /** Ages on the cards are recomputed this often. */
 const AGE_TICK_MS = 60_000;
@@ -55,6 +57,7 @@ export function Board() {
   } = useBoardStore();
   const openPath = useEditorStore((state) => state.path);
   const openFile = useEditorStore((state) => state.open);
+  const copyPrompt = usePromptStore((state) => state.copy);
   const [now, setNow] = useState(Date.now);
   const [dragged, setDragged] = useState<Card | null>(null);
   const sensors = useSensors(
@@ -121,8 +124,17 @@ export function Board() {
         onDragCancel={() => setDragged(null)}
       >
         <div className="flex min-h-0 w-full flex-1 gap-4 overflow-x-auto pb-2">
-          {columns.map((column) => (
+          {columns.map((column, index) => (
             <Column
+              triage={
+                index === 0
+                  ? () =>
+                      void copyPrompt(repoRoot, "triage-inbox", {
+                        task_path: null,
+                        node_id: null,
+                      })
+                  : undefined
+              }
               key={column.name}
               column={column}
               shown={cards.get(column.name) ?? []}
@@ -159,6 +171,7 @@ function Column({
   openPath,
   pathOf,
   onOpen,
+  triage,
 }: {
   column: BoardColumn;
   shown: Card[];
@@ -168,6 +181,8 @@ function Column({
   openPath: string | null;
   pathOf: (column: string, card: Card) => string;
   onOpen: (path: string) => void;
+  /** Copies the Triage inbox prompt; given for the first column (`S-prompts`). */
+  triage?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.name });
   return (
@@ -178,9 +193,19 @@ function Column({
         isOver && "ring-2 ring-primary/50",
       )}
     >
-      <header className="flex items-baseline justify-between px-1">
+      <header className="flex items-center gap-2 px-1">
         <h2 className="text-sm font-semibold">{column.name}</h2>
-        <span className="text-xs text-muted-foreground">
+        {triage && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={triage}
+            title="Copy the Triage inbox prompt"
+          >
+            {PROMPT_LABELS["triage-inbox"]}
+          </Button>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
           {filtering
             ? `${shown.length} of ${column.tasks.length}`
             : column.tasks.length}

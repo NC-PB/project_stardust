@@ -32,7 +32,10 @@ import {
   isShortcut,
   resolveLink,
 } from "@/lib/editor";
+import { PROMPT_LABELS, TASK_PROMPTS, taskPathOf } from "@/lib/prompts";
+import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
+import { usePromptStore } from "@/stores/prompt-store";
 
 /** Markup stays visible; headings are sized, the rest is coloured (`S-editor-layout`). */
 const sourceHighlight = HighlightStyle.define([
@@ -178,6 +181,7 @@ export function Editor() {
         </p>
       )}
       <ConflictBar />
+      <PromptBar path={path} />
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
         {task && frontmatterLineCount(text) > 0 && (
           <FrontmatterForm key={path} />
@@ -271,6 +275,37 @@ function Notice({
     >
       <span className="flex-1">{message}</span>
       {children}
+    </div>
+  );
+}
+
+/** Prompts for the open task, copied to the clipboard (`S-prompts`); hidden for other files. */
+function PromptBar({ path }: { path: string }) {
+  const { repoRoot, config } = useBoardStore();
+  const copy = usePromptStore((state) => state.copy);
+  if (repoRoot === null || config === null) return null;
+  const taskPath = taskPathOf(
+    path,
+    repoRoot,
+    config.planning_root,
+    config.columns,
+  );
+  if (taskPath === null) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="mr-1 text-xs text-muted-foreground">Copy prompt</span>
+      {TASK_PROMPTS.map((prompt) => (
+        <Button
+          key={prompt}
+          variant="secondary"
+          size="xs"
+          onClick={() =>
+            void copy(repoRoot, prompt, { task_path: taskPath, node_id: null })
+          }
+        >
+          {PROMPT_LABELS[prompt]}
+        </Button>
+      ))}
     </div>
   );
 }

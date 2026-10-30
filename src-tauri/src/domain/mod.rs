@@ -8,6 +8,7 @@ pub mod files;
 pub mod ids;
 pub mod init;
 pub mod make_task;
+pub mod prompts;
 pub mod task;
 pub mod templates;
 pub mod watch;

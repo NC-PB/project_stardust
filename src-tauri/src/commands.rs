@@ -12,7 +12,7 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, board, config, files, ids, init, make_task, task, templates, watch,
+    agents_block, board, config, files, ids, init, make_task, prompts, task, templates, watch,
 };
 
 #[tauri::command]
@@ -179,6 +179,20 @@ pub fn source_files(repo_root: String) -> make_task::SourceFiles {
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     make_task::source_files(repo_root, &config)
+}
+
+/// `prompt` filled for the repository at `repo_root` with `input`, ready for the clipboard
+/// (`S-prompts`).
+#[tauri::command]
+#[specta::specta]
+pub fn fill_prompt(
+    repo_root: String,
+    prompt: prompts::Prompt,
+    input: prompts::PromptInput,
+) -> Result<String, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    prompts::fill_prompt(prompt, repo_root, &config, &input)
 }
 
 /// The template of `kind` for the repository at `repo_root`: the project override from

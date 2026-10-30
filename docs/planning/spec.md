@@ -203,6 +203,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. The watcher regenerates the block when `docs/planner.yml` changes (`S-watcher`, D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
+    - Built so far (phase 1): Work on task, Verify task and Handoff in a "Copy prompt" row of the editor while the open file is a task directly in a column; Triage inbox on the header of the first column. The other five are readable and fillable but have no button yet.
+    - Each prompt is the fenced block under its `## ` heading in the built in `templates/prompts.md`. Placeholders filled: `{planning_root}`, `{spec_location}` from the config, `{task_path}` (relative to the repository root) and `{node_id}` from the button. A placeholder without a value is an error and nothing is copied.
+    - A notice confirms the copy for 2.5 s, or says why nothing was copied. The clipboard is written through the webview (D-20261031-001344-gumt).
+    - Implemented in `src-tauri/src/domain/prompts.rs` (`Prompt`, `fill_prompt`); command `fill_prompt(repo_root, prompt, input)`; `src/stores/prompt-store.ts`, `src/lib/prompts.ts`.
   - [x] Adapters `S-adapters`
     - On request, generates agent command files that wrap the prompts, starting with Claude Code (`.claude/commands/`). Never required.
   - [x] Open terminal `S-terminal`
@@ -550,6 +554,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: "Braindump" and "Spec" buttons in the project bar open those files (spec only as a single file). A new task keeps the template's layout and headings; id, title, created are set, lists emptied, priority removed, Description and Acceptance criteria replaced, the other sections kept. Decided by the user on 2026-10-31.
 - Rejected: a braindump button only (spec waits for `S-spec-file`); replacing only the Description (every task would carry the template's example tags and criteria).
 - Consequences: `S-make-task` criteria. The tag and criteria examples in a project's own `task.md` override are replaced too.
+
+### D-20261031-001344-gumt · Prompts copied through the webview clipboard, buttons where the task is
+- Context: `S-prompts` copies to the clipboard, but no clipboard plugin is in the Constraints. WebKit (macOS, Linux) only allows a clipboard write during the click, and the prompt is filled in Rust first. The node does not say where the buttons are.
+- Decision: the webview's `navigator.clipboard`; the write starts in the click with a `ClipboardItem` holding the pending prompt, with `writeText` as the fallback. Task prompts sit in a row of the editor while a task is open; Triage inbox on the first column's header.
+- Rejected: `tauri-plugin-clipboard-manager` (a plugin outside the Constraints for one call); buttons on every card (crowds the board).
+- Consequences: `S-prompts` criteria. Whether the copy works in each webview has to be checked by hand; a refused write shows as a notice.
 
 ## Glossary
 

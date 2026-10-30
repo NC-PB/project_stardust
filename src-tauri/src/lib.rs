@@ -27,6 +27,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::read_image,
             commands::make_task,
             commands::source_files,
+            commands::fill_prompt,
             commands::load_template,
             commands::write_planner_block,
             commands::init_project,

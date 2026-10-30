@@ -56,6 +56,11 @@ export const commands = {
 	/**  The braindump and the spec file of the repository at `repo_root`, where they exist. */
 	sourceFiles: (repoRoot: string) => __TAURI_INVOKE<SourceFiles_Serialize>("source_files", { repoRoot }),
 	/**
+	 *  `prompt` filled for the repository at `repo_root` with `input`, ready for the clipboard
+	 *  (`S-prompts`).
+	 */
+	fillPrompt: (repoRoot: string, prompt: Prompt, input: PromptInput_Deserialize) => typedError<string, string>(__TAURI_INVOKE("fill_prompt", { repoRoot, prompt, input })),
+	/**
 	 *  The template of `kind` for the repository at `repo_root`: the project override from
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */
@@ -220,6 +225,28 @@ export type PlanningChanged_Serialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error: string | null,
+};
+
+/**  A prompt of `templates/prompts.md`, named after its `## ` heading. */
+export type Prompt = "work-on-task" | "verify-task" | "verify-area" | "handoff" | "triage-inbox" | "structure-this" | "interview-me" | "integrate-answers" | "generate-tasks";
+
+/**  What a prompt is filled with besides the config. */
+export type PromptInput = PromptInput_Serialize | PromptInput_Deserialize;
+
+/**  What a prompt is filled with besides the config. */
+export type PromptInput_Deserialize = {
+	/**  The task file, relative to the repository root, with `/`. */
+	task_path?: string | null,
+	/**  A Structure node such as `S-board`. */
+	node_id?: string | null,
+};
+
+/**  What a prompt is filled with besides the config. */
+export type PromptInput_Serialize = {
+	/**  The task file, relative to the repository root, with `/`. */
+	task_path: string | null,
+	/**  A Structure node such as `S-board`. */
+	node_id: string | null,
 };
 
 /**  What happened to a save. */
