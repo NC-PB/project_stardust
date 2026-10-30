@@ -36,6 +36,6 @@ Implements `S-task-format` in the [spec](../spec.md).
 - Commands write with `std::fs::write`; once the watcher lands, consider whether its own writes need to be told apart.
 
 ### Next session
-- [Built in templates](../next/20261030-220004-2a22-built-in-templates-with-project-overrides.md) is in `next/`; `config.rs` and the tests here already load templates with `include_str!`.
+- [Built in templates](20261030-220004-2a22-built-in-templates-with-project-overrides.md) is in `next/`; `config.rs` and the tests here already load templates with `include_str!`.
 - New in inbox: [valid frontmatter and id wording](../inbox/20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), needs the user's approval for `AGENTS.md` wording.
 - Now unblocked: file watcher, markdown editor, deletes to trash.

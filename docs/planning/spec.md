@@ -245,6 +245,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Templates for spec, task, config, planner block and prompts ship inside the app.
     - If `templates_dir` (default `docs/templates/`) contains `task.md` or `spec.md`, the tool uses those instead of the built in ones.
     - The planner block and the prompts are not overridable.
+    - The config template is not overridable either; its defaults are the config defaults (`S-config`).
+    - An override that exists but cannot be read is reported and the built in template is used (D-20261030-215352-tr40).
+    - Implemented in `src-tauri/src/domain/templates.rs` (`TemplateKind`, `resolve`); command `load_template(repo_root, kind)` returns the text, the override path if one was used, and an issue.
 - Editor `S-editor`
   - [x] Editing `S-editor-core`
     - CodeMirror 6 with markdown preview. Frontmatter editable as a form on top of the file.
@@ -428,6 +431,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: writing replaces only the lines of the changed field and quotes values that plain YAML would misread. Reading reports invalid YAML as an issue and still takes `id`, `title`, `created`, `completed`, `parent` from their `key: value` lines, so such tasks keep their title on the board.
 - Rejected: full YAML round trip (loses comments and formatting), dropping files with invalid frontmatter (breaks `S-task-format`).
 - Consequences: `S-task-format` criteria; fixing the existing files and the agent instructions is task 20261030-215109-0my7 in the inbox.
+
+### D-20261030-215352-tr40 · Unreadable template overrides fall back to the built in template
+- Context: `S-templates` says which templates are overridable but not what happens when an override file exists and cannot be read.
+- Decision: the built in template is used and the problem is returned as an issue with the override path, like config issues (D-20261030-214550-gl67). The config template is embedded once and `config.rs` reads its defaults through `TemplateKind::Config`.
+- Rejected: failing the command (a broken file would block creating tasks).
+- Consequences: `S-templates` criteria.
 
 ## Glossary
 

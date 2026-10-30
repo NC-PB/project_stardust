@@ -4,6 +4,7 @@
 pub mod config;
 pub mod ids;
 pub mod task;
+pub mod templates;
 
 /// Version of the app as set in `Cargo.toml`.
 pub fn app_version() -> &'static str {

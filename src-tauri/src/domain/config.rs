@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_norway::{Mapping, Value};
 use specta::Type;
 
+use super::templates::TemplateKind;
+
 /// Location of the config, relative to the repository root.
 pub const CONFIG_PATH: &str = "docs/planner.yml";
-
-const DEFAULT_CONFIG_YAML: &str = include_str!("../../../templates/planner.yml");
 
 /// The contents of `docs/planner.yml`. Paths are relative to the repository root.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -69,7 +69,7 @@ pub enum Adapter {
 
 impl Default for Config {
     fn default() -> Self {
-        serde_norway::from_str(DEFAULT_CONFIG_YAML)
+        serde_norway::from_str(TemplateKind::Config.builtin())
             .expect("templates/planner.yml is a complete, valid config")
     }
 }
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn the_template_parses_without_issues() {
-        let (config, issues) = parse_config(DEFAULT_CONFIG_YAML);
+        let (config, issues) = parse_config(TemplateKind::Config.builtin());
         assert_eq!(issues, []);
         assert_eq!(config, Config::default());
     }

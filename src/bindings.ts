@@ -21,6 +21,11 @@ export const commands = {
 	setTaskField: (path: string, key: string, value: FieldValue) => typedError<null, string>(__TAURI_INVOKE("set_task_field", { path, key, value })),
 	/**  Removes one frontmatter field of the task file at `path`, leaving the rest of the file as is. */
 	removeTaskField: (path: string, key: string) => typedError<null, string>(__TAURI_INVOKE("remove_task_field", { path, key })),
+	/**
+	 *  The template of `kind` for the repository at `repo_root`: the project override from
+	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
+	 */
+	loadTemplate: (repoRoot: string, kind: TemplateKind) => __TAURI_INVOKE<Template_Serialize>("load_template", { repoRoot, kind }),
 };
 
 /* Types */
@@ -188,6 +193,38 @@ export type Task_Serialize = {
 	/**  The `## ` sections of the body, in file order. */
 	sections: Section[],
 	issues: TaskIssue_Serialize[],
+};
+
+/**  A resolved template and where its text came from. */
+export type Template = Template_Serialize | Template_Deserialize;
+
+/**  A template the app ships. */
+export type TemplateKind = "spec" | "task" | "config" | "agents-block" | "prompts";
+
+/**  A resolved template and where its text came from. */
+export type Template_Deserialize = {
+	kind: TemplateKind,
+	text: string,
+	/**
+	 *  The override file the text was read from, relative to the repository root;
+	 *  `None` for the built in template.
+	 */
+	override_path?: string | null,
+	/**  Why an existing override file was not used, if one was found but could not be read. */
+	issue?: string | null,
+};
+
+/**  A resolved template and where its text came from. */
+export type Template_Serialize = {
+	kind: TemplateKind,
+	text: string,
+	/**
+	 *  The override file the text was read from, relative to the repository root;
+	 *  `None` for the built in template.
+	 */
+	override_path: string | null,
+	/**  Why an existing override file was not used, if one was found but could not be read. */
+	issue: string | null,
 };
 
 /* Tauri Specta runtime */

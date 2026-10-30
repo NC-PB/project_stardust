@@ -34,4 +34,4 @@ Implements `S-config` in the [spec](../spec.md).
 - `new_id` in `ids.rs` still takes the planning root from its caller; callers now get it from `config.planning_root`.
 
 ### Next session
-- `next/` is empty. Now unblocked: [task file model](20261030-220003-9910-task-file-model-frontmatter-and-sections.md) and [built in templates](../next/20261030-220004-2a22-built-in-templates-with-project-overrides.md); the templates task can reuse the `include_str!` pattern from `config.rs`.
+- `next/` is empty. Now unblocked: [task file model](20261030-220003-9910-task-file-model-frontmatter-and-sections.md) and [built in templates](20261030-220004-2a22-built-in-templates-with-project-overrides.md); the templates task can reuse the `include_str!` pattern from `config.rs`.

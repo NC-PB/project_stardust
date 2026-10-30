@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use crate::domain;
-use crate::domain::{config, ids, task};
+use crate::domain::{config, ids, task, templates};
 
 #[tauri::command]
 #[specta::specta]
@@ -74,4 +74,14 @@ pub fn remove_task_field(path: String, key: String) -> Result<(), String> {
         std::fs::write(&path, written).map_err(|err| err.to_string())?;
     }
     Ok(())
+}
+
+/// The template of `kind` for the repository at `repo_root`: the project override from
+/// `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
+#[tauri::command]
+#[specta::specta]
+pub fn load_template(repo_root: String, kind: templates::TemplateKind) -> templates::Template {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    templates::resolve(kind, repo_root, &config)
 }
