@@ -30,7 +30,7 @@ Prompts can be copied from the app. While a task file is open, the editor shows 
 
 - Not yet checked by hand in the running app, the clipboard on macOS included.
 - The other five prompts are fillable in Rust but have no button; they come with phase 2.
-- Triage inbox still names `inbox/` and `next/` literally, as the template does; see [column names in the planner block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), which should cover `prompts.md` too.
+- Triage inbox still names `inbox/` and `next/` literally, as the template does; see [column names in the planner block](20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), which should cover `prompts.md` too.
 
 ### Next session
-- `next/` is empty. Remaining phase 1 tasks in the inbox: [column names in the planner block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](../inbox/20261030-220014-91bd-full-text-search.md), [open a terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [light and dark theme](../inbox/20261030-220018-573e-light-and-dark-theme.md).
+- `next/` is empty. Remaining phase 1 tasks in the inbox: [column names in the planner block](20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](../inbox/20261030-220014-91bd-full-text-search.md), [open a terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [light and dark theme](../inbox/20261030-220018-573e-light-and-dark-theme.md).

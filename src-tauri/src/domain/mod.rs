@@ -3,6 +3,7 @@
 
 pub mod agents_block;
 pub mod board;
+pub mod columns;
 pub mod config;
 pub mod files;
 pub mod ids;

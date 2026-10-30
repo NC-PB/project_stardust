@@ -31,4 +31,4 @@ Text selected in any open file, in source or read mode, becomes a task with "Mak
 - In read mode the selection is the rendered text, so markdown markup in it (links, emphasis) is lost; source mode keeps it.
 
 ### Next session
-- `next/` is empty. Phase 1 candidates in the inbox: [column names in the planner block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [prompt buttons](20261030-220015-a006-prompt-buttons-for-the-task-workflow.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](../inbox/20261030-220014-91bd-full-text-search.md).
+- `next/` is empty. Phase 1 candidates in the inbox: [column names in the planner block](20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [prompt buttons](20261030-220015-a006-prompt-buttons-for-the-task-workflow.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](../inbox/20261030-220014-91bd-full-text-search.md).

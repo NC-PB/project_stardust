@@ -9,6 +9,7 @@ use std::path::Path;
 use serde::Serialize;
 use specta::Type;
 
+use super::columns::fill_columns;
 use super::config::{Config, SpecLocation};
 use super::templates::TemplateKind;
 
@@ -21,11 +22,12 @@ pub const CLAUDE_FILE: &str = "CLAUDE.md";
 /// The block for `config`, from the start marker to the end marker, without a final newline.
 /// `repo_root` decides `spec: auto`.
 pub fn render_block(config: &Config, repo_root: &Path) -> String {
-    TemplateKind::AgentsBlock
+    let text = TemplateKind::AgentsBlock
         .builtin()
         .trim_end()
         .replace("{planning_root}", &config.planning_root)
-        .replace("{spec_location}", &spec_location(config, repo_root))
+        .replace("{spec_location}", &spec_location(config, repo_root));
+    fill_columns(&text, config)
 }
 
 /// The spec path agents are pointed to, relative to the repository root.
@@ -209,6 +211,44 @@ mod tests {
         });
         assert!(!unfilled, "unfilled placeholder in {block}");
         assert!(block.lines().count() < 60);
+    }
+
+    #[test]
+    fn the_block_names_the_configured_columns() {
+        let config = Config {
+            columns: vec![
+                "backlog".into(),
+                "todo".into(),
+                "doing".into(),
+                "shipped".into(),
+            ],
+            terminal: "shipped".into(),
+            ..Config::default()
+        };
+        let block = render_block(&config, Path::new("/nonexistent"));
+        assert!(block.contains(
+            "Columns: `backlog/` (new), `todo/` (ready for you), `doing/`, `shipped/` (finished)."
+        ));
+        assert!(block.contains(
+            "Read `todo/` and the Result of the most recently completed task in `shipped/`."
+        ));
+        assert!(block.contains("goes into `backlog/` as a new task file"));
+        assert!(block.contains("the task stays in `todo/`."));
+        assert!(block.contains("move the file to `shipped/`."));
+        for name in ["inbox/", "next/", "done/"] {
+            assert!(!block.contains(name), "{name} in {block}");
+        }
+    }
+
+    #[test]
+    fn the_default_block_names_inbox_next_and_done() {
+        let block = render_block(&Config::default(), Path::new("/nonexistent"));
+        assert!(
+            block.contains("Columns: `inbox/` (new), `next/` (ready for you), `done/` (finished).")
+        );
+        assert!(block.contains(
+            "Read `next/` and the Result of the most recently completed task in `done/`."
+        ));
     }
 
     #[test]

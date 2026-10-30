@@ -1,14 +1,14 @@
 <!-- planner:start -->
 ## Planning conventions
 
-Planning lives in `{planning_root}/`. Columns: `inbox/` (new), `next/` (ready for you), `done/` (finished).
+Planning lives in `{planning_root}/`. Columns: {columns}.
 One task per file, filename `<id>-<slug>.md`, id format `YYYYMMDD-HHMMSS-xxxx` (local time to the second plus 4 characters from `[a-z0-9]`).
 Frontmatter must be valid YAML: double-quote a text value that contains `: ` or ` #` or starts with a special character such as `[ { & * ! | > ' " % @ -`, e.g. `title: "Board: columns and cards"`.
 The spec (`{spec_location}`) is the source of truth: Constraints, Domain (areas, rules, workflows), Structure (nodes `S-...` with acceptance criteria), Questions, Decisions, Glossary. Tasks are changes that implement nodes.
 
 ### At session start
 1. Read Constraints, Rules and the last 10 Decisions in the spec, and its open Questions.
-2. Read `next/` and the Result of the most recently completed task in `done/`.
+2. Read `{ready_column}/` and the Result of the most recently completed task in `{terminal_column}/`.
 3. Do not plan from memory. The code is the current state, the spec is the intent. Where they disagree, report the difference before continuing.
 
 ### Before starting a task
@@ -16,14 +16,14 @@ The spec (`{spec_location}`) is the source of truth: Constraints, Domain (areas,
 
 ### While working
 - Keep the Implementation notes current: done, open, next step. Sessions can end at any time.
-- Work you discover goes into `inbox/` as a new task file with the id format above.
+- Work you discover goes into `{new_column}/` as a new task file with the id format above.
 - Name things in code after the Glossary. Add a term to the Glossary when you introduce one.
 - If you add, remove or rename an area, module or view, update the Structure.
 
 ### When finishing a task
-1. Check every acceptance criterion of the task against the code. Unmet criteria stay unchecked and the task stays in `next/`.
+1. Check every acceptance criterion of the task against the code. Unmet criteria stay unchecked and the task stays in `{ready_column}/`.
 2. Update the criteria of the nodes in `implements` so they describe what the code now does.
-3. Fill the Result section, set `completed: <date>`, move the file to `done/`.
+3. Fill the Result section, set `completed: <date>`, move the file to `{terminal_column}/`.
 4. Append any decision you had to make on the way to the Decisions.
 
 ### Always

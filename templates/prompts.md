@@ -2,7 +2,7 @@
 
 Text only, agent agnostic. The tool fills the placeholders and copies the prompt to the clipboard. Adapters wrap the same text as agent command files.
 
-Placeholders: `{planning_root}`, `{task_path}`, `{spec_location}` (`docs/planning/spec.md` or `docs/planning/spec/`), `{node_id}`.
+Placeholders: `{planning_root}`, `{task_path}`, `{spec_location}` (`docs/planning/spec.md` or `docs/planning/spec/`), `{node_id}`, and the column names `{new_column}` (first column), `{ready_column}` (second), `{terminal_column}`.
 
 Each prompt repeats the one check that matters for its step, because standing instructions in AGENTS.md fade during a session.
 
@@ -37,7 +37,7 @@ The session is ending. In {task_path}, update the Implementation notes with thre
 ## Triage inbox
 
 ```
-Read every task in {planning_root}/inbox/. For each one: if it is clear, has acceptance criteria, references nodes in implements and is not blocked, move it to {planning_root}/next/ and set a priority. If not, leave it in inbox/ and add a proposal describing what is missing. Change no other files.
+Read every task in {planning_root}/{new_column}/. For each one: if it is clear, has acceptance criteria, references nodes in implements and is not blocked, move it to {planning_root}/{ready_column}/ and set a priority. If not, leave it in {new_column}/ and add a proposal describing what is missing. Change no other files.
 ```
 
 ## Structure this
@@ -61,5 +61,5 @@ Read {spec_location}. For every question in Open that now has an answer: re-read
 ## Generate tasks
 
 ```
-Read {spec_location}. First verify every ticked node against the current code; a node the code contradicts becomes an open question, not a task, and a node the code already fulfils gets no task. Then create task files in {planning_root}/inbox/ for the remaining work, following the task template and the id format in AGENTS.md. Every task lists the nodes it implements in implements and takes its acceptance criteria from those nodes. Order core areas first. Skip nodes tagged #later. Change no other files.
+Read {spec_location}. First verify every ticked node against the current code; a node the code contradicts becomes an open question, not a task, and a node the code already fulfils gets no task. Then create task files in {planning_root}/{new_column}/ for the remaining work, following the task template and the id format in AGENTS.md. Every task lists the nodes it implements in implements and takes its acceptance criteria from those nodes. Order core areas first. Skip nodes tagged #later. Change no other files.
 ```

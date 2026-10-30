@@ -198,13 +198,14 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - With `claude_mirror: true`, the block is also written into `CLAUDE.md` between the same markers, for agents without imports.
     - Without markers the block is appended; without the file it is created. Only files whose content changes are written; line endings are kept.
     - A start or end marker alone, or the two out of order, is an error and nothing is written. Turning `claude_mirror` off does not remove an earlier mirrored block (`R-no-destroy`).
-    - Placeholders filled from the config: `{planning_root}`, `{spec_location}` (`spec/` or `spec.md` under the planning root, following `spec`).
+    - Placeholders filled from the config: `{planning_root}`, `{spec_location}` (`spec/` or `spec.md` under the planning root, following `spec`), and the columns: `{columns}` lists every column in config order with its role, `{new_column}`, `{ready_column}`, `{terminal_column}` name one (D-20261031-001850-0g9f).
+    - Column roles, counted without the terminal column: new is the first column, ready for you the second; with one column before the terminal it is both; finished is the terminal column. Other columns are listed without a role. With the default config the block reads `inbox/`, `next/`, `done/` as before. Implemented in `src-tauri/src/domain/columns.rs`.
     - The block gives the id format as local time to the second plus 4 characters from `[a-z0-9]` (D-20261030-213854-k3cv), and tells agents to double-quote frontmatter values that YAML would misread, such as a title containing `: ` (`R-plain-markdown`).
     - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. The watcher regenerates the block when `docs/planner.yml` changes (`S-watcher`, D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
     - Built so far (phase 1): Work on task, Verify task and Handoff in a "Copy prompt" row of the editor while the open file is a task directly in a column; Triage inbox on the header of the first column. The other five are readable and fillable but have no button yet.
-    - Each prompt is the fenced block under its `## ` heading in the built in `templates/prompts.md`. Placeholders filled: `{planning_root}`, `{spec_location}` from the config, `{task_path}` (relative to the repository root) and `{node_id}` from the button. A placeholder without a value is an error and nothing is copied.
+    - Each prompt is the fenced block under its `## ` heading in the built in `templates/prompts.md`. Placeholders filled: `{planning_root}`, `{spec_location}` and the column names (`S-agents-block`) from the config, `{task_path}` (relative to the repository root) and `{node_id}` from the button. A placeholder without a value is an error and nothing is copied.
     - A notice confirms the copy for 2.5 s, or says why nothing was copied. The clipboard is written through the webview (D-20261031-001344-gumt).
     - Implemented in `src-tauri/src/domain/prompts.rs` (`Prompt`, `fill_prompt`); command `fill_prompt(repo_root, prompt, input)`; `src/stores/prompt-store.ts`, `src/lib/prompts.ts`.
   - [x] Adapters `S-adapters`
@@ -560,6 +561,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: the webview's `navigator.clipboard`; the write starts in the click with a `ClipboardItem` holding the pending prompt, with `writeText` as the fallback. Task prompts sit in a row of the editor while a task is open; Triage inbox on the first column's header.
 - Rejected: `tauri-plugin-clipboard-manager` (a plugin outside the Constraints for one call); buttons on every card (crowds the board).
 - Consequences: `S-prompts` criteria. Whether the copy works in each webview has to be checked by hand; a refused write shows as a notice.
+
+### D-20261031-001850-0g9f · Column roles by position
+- Context: the planner block and the prompts name three roles (new, ready for you, finished) by the folders `inbox/`, `next/`, `done/`, but `columns` and `terminal` are configurable and the config says nothing about which column is "ready".
+- Decision: counted without the terminal column, the first column is new and the second is ready for you; with one such column it is both. `templates/AGENTS-block.md` and `templates/prompts.md` use placeholders for the names; the default output is unchanged. Decided by the user on 2026-10-31.
+- Rejected: the column before the terminal as ready (with `backlog, todo, doing, review, done` that is `review`); a new config key `ready` (one more key for a case the position already covers).
+- Consequences: `S-agents-block` and `S-prompts` criteria. The Triage inbox button already sits on the first column.
 
 ## Glossary
 

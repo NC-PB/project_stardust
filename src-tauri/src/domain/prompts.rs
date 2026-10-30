@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::agents_block::spec_location;
+use super::columns::fill_columns;
 use super::config::Config;
 use super::templates::TemplateKind;
 
@@ -77,9 +78,10 @@ pub fn fill_prompt(
     config: &Config,
     input: &PromptInput,
 ) -> Result<String, String> {
-    let mut text = prompt_text(prompt)?
+    let text = prompt_text(prompt)?
         .replace("{planning_root}", &config.planning_root)
         .replace("{spec_location}", &spec_location(config, repo_root));
+    let mut text = fill_columns(&text, config);
     for (placeholder, value, what) in [
         ("{task_path}", &input.task_path, "a task"),
         ("{node_id}", &input.node_id, "a node"),
@@ -167,6 +169,27 @@ mod tests {
         )
         .unwrap();
         assert!(structure.contains("create docs/planning/spec.md "));
+    }
+
+    #[test]
+    fn names_the_configured_columns() {
+        let config = Config {
+            columns: vec!["backlog".into(), "todo".into(), "shipped".into()],
+            terminal: "shipped".into(),
+            ..Config::default()
+        };
+        let root = Path::new("/nonexistent");
+        let triage = fill_prompt(Prompt::TriageInbox, root, &config, &input(None)).unwrap();
+        assert!(triage.starts_with("Read every task in docs/planning/backlog/."));
+        assert!(triage.contains("move it to docs/planning/todo/ "));
+        assert!(triage.contains("leave it in backlog/ "));
+        let generate = fill_prompt(Prompt::GenerateTasks, root, &config, &input(None)).unwrap();
+        assert!(generate.contains("create task files in docs/planning/backlog/ "));
+        for prompt in Prompt::ALL {
+            let text = prompt_text(prompt).unwrap();
+            let filled = fill_columns(&text, &config);
+            assert!(!filled.contains("_column}"), "{prompt:?}");
+        }
     }
 
     #[test]
