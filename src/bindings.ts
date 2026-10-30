@@ -61,6 +61,11 @@ export const commands = {
 	 */
 	fillPrompt: (repoRoot: string, prompt: Prompt, input: PromptInput_Deserialize) => typedError<string, string>(__TAURI_INVOKE("fill_prompt", { repoRoot, prompt, input })),
 	/**
+	 *  Files under the planning root of the watched repository containing every word of `query`,
+	 *  best first, at most `limit`.
+	 */
+	search: (query: string, limit: number) => typedError<SearchHit[], string>(__TAURI_INVOKE("search", { query, limit })),
+	/**
 	 *  The template of `kind` for the repository at `repo_root`: the project override from
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */
@@ -87,7 +92,7 @@ export const commands = {
 	 *  previous watcher; call again after the planning root changed.
 	 */
 	watchProject: (repoRoot: string) => typedError<null, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
-	/**  Stops watching. */
+	/**  Stops watching and forgets the search index. */
 	unwatchProject: () => typedError<null, string>(__TAURI_INVOKE("unwatch_project")),
 };
 
@@ -255,6 +260,17 @@ export type SaveOutcome =
 { kind: "saved" } | 
 /**  The file changed on disk since it was read; it was left as is and holds `text`. */
 { kind: "changed_on_disk"; text: string };
+
+/**  One file found by a search. */
+export type SearchHit = {
+	/**  Relative to the repository root, with `/`. */
+	path: string,
+	title: string,
+	/**  The line of the first match, shortened around it. */
+	snippet: string,
+	/**  1-based line number of the snippet. */
+	line: number,
+};
 
 /**  A `## ` section of a task body. */
 export type Section = {

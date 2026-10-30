@@ -320,6 +320,11 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Full text `S-search-fulltext`
     - Searches all files under the planning root, results while typing.
     - Index updated incrementally from watcher events. Thousands of files without noticeable lag.
+    - Every `*.md` file under the planning root is searched, archive and notes folders included; hidden files and editor backups are not. The text is held in memory, read when the watcher starts and updated from each batch before the app receives it; nothing is written to disk (D-20261031-002734-fwvh).
+    - A file matches when it contains every word of the query, ignoring case, as a substring of its text, title or path, so ids and node slugs match as typed. Matches in title or path rank first, then the number of matches, then the path. At most 30 results, each with title, path, line and a snippet of the first matching line with the words marked.
+    - The search box above the board sends the query 120 ms after typing stops and drops answers to older queries; results refresh after every batch. A result opens in the editor; arrow keys choose, Enter opens, Escape clears.
+    - Measured on 5,000 generated task files (14 MB): building the index 113 ms, the slowest query 11 ms, one update under 1 ms in a release build; 197 ms, 77 ms and under 1 ms in a debug build.
+    - Implemented in `src-tauri/src/domain/search.rs` (`SearchIndex`); command `search(query, limit)`, index built by `watch_project` and dropped by `unwatch_project`; `src/stores/search-store.ts`, `src/components/search-box.tsx`.
 
 ## Questions
 
@@ -567,6 +572,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: counted without the terminal column, the first column is new and the second is ready for you; with one such column it is both. `templates/AGENTS-block.md` and `templates/prompts.md` use placeholders for the names; the default output is unchanged. Decided by the user on 2026-10-31.
 - Rejected: the column before the terminal as ready (with `backlog, todo, doing, review, done` that is `review`); a new config key `ready` (one more key for a case the position already covers).
 - Consequences: `S-agents-block` and `S-prompts` criteria. The Triage inbox button already sits on the first column.
+
+### D-20261031-002734-fwvh · Search scans the planning files in memory, no library
+- Context: the Domain calls search "a full text index from a library" and the task suggested tantivy. Planning files are few and small, users search for ids and node slugs, and the Constraints list no search library.
+- Decision: Rust keeps the lowercased text of every markdown file under the planning root in memory and matches every query word as a substring. Built when the watcher starts, updated from its batches. Measured fast enough on 5,000 files. Decided by the user on 2026-10-31.
+- Rejected: tantivy with an in-memory index (a large dependency; its tokenizer splits ids at `-`, so id searches become phrase queries).
+- Consequences: `S-search-fulltext` criteria. The Domain wording for Search still says "from a library"; a proposal to change it is in task 20261030-220014-91bd. Phase 3's "search scaling" starts from this scan.
 
 ## Glossary
 

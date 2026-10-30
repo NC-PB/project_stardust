@@ -28,6 +28,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::make_task,
             commands::source_files,
             commands::fill_prompt,
+            commands::search,
             commands::load_template,
             commands::write_planner_block,
             commands::init_project,
@@ -55,6 +56,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(commands::WatchState::default())
+        .manage(commands::SearchState::default())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

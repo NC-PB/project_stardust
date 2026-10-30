@@ -3,7 +3,7 @@
 //! so the frontend calls it only through the generated `src/bindings.ts`.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -12,7 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, board, config, files, ids, init, make_task, prompts, task, templates, watch,
+    agents_block, board, config, files, ids, init, make_task, prompts, search, task, templates,
+    watch,
 };
 
 #[tauri::command]
@@ -234,6 +235,27 @@ pub fn add_images_to_gitignore(repo_root: String) -> Result<bool, String> {
     init::add_images_to_gitignore(repo_root, &config)
 }
 
+/// The search index of the open repository (`S-search-fulltext`), built by `watch_project`
+/// and updated by its batches.
+#[derive(Default)]
+pub struct SearchState(Arc<Mutex<Option<search::SearchIndex>>>);
+
+/// Files under the planning root of the watched repository containing every word of `query`,
+/// best first, at most `limit`.
+#[tauri::command]
+#[specta::specta]
+pub fn search(
+    state: tauri::State<'_, SearchState>,
+    query: String,
+    limit: u32,
+) -> Result<Vec<search::SearchHit>, String> {
+    let index = state.0.lock().map_err(|err| err.to_string())?;
+    Ok(index
+        .as_ref()
+        .map(|index| index.search(&query, limit as usize))
+        .unwrap_or_default())
+}
+
 /// The watcher of the open repository; replaced by every `watch_project` call.
 #[derive(Default)]
 pub struct WatchState(Mutex<Option<watch::PlanningWatcher>>);
@@ -256,13 +278,23 @@ pub struct PlanningChanged {
 pub fn watch_project(
     app: AppHandle,
     state: tauri::State<'_, WatchState>,
+    search_state: tauri::State<'_, SearchState>,
     repo_root: String,
 ) -> Result<(), String> {
     let mut current = state.0.lock().map_err(|err| err.to_string())?;
     *current = None;
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
+    let index = Arc::clone(&search_state.0);
+    *index.lock().map_err(|err| err.to_string())? =
+        Some(search::SearchIndex::build(&root, &config.planning_root));
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
+        // The index is current before the app hears of the batch.
+        if let Ok(mut index) = index.lock()
+            && let Some(index) = index.as_mut()
+        {
+            index.apply(&batch);
+        }
         let (block_written, block_error) = if batch.config_changed {
             let config = config::load_config(&root).config;
             match agents_block::write_planner_block(&root, &config) {
@@ -283,10 +315,14 @@ pub fn watch_project(
     Ok(())
 }
 
-/// Stops watching.
+/// Stops watching and forgets the search index.
 #[tauri::command]
 #[specta::specta]
-pub fn unwatch_project(state: tauri::State<'_, WatchState>) -> Result<(), String> {
+pub fn unwatch_project(
+    state: tauri::State<'_, WatchState>,
+    search_state: tauri::State<'_, SearchState>,
+) -> Result<(), String> {
     *state.0.lock().map_err(|err| err.to_string())? = None;
+    *search_state.0.lock().map_err(|err| err.to_string())? = None;
     Ok(())
 }
