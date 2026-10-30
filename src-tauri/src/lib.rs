@@ -18,6 +18,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::remove_task_field,
         commands::load_template,
         commands::write_planner_block,
+        commands::init_project,
+        commands::add_images_to_gitignore,
     ])
 }
 

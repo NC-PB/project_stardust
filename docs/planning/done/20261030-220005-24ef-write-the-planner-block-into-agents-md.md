@@ -38,5 +38,5 @@ Implements `S-agents-block` in the [spec](../spec.md).
 - Regeneration on config change moved to the [file watcher task](../inbox/20261030-220007-e420-file-watcher-with-move-detection.md).
 
 ### Next session
-- `next/` is empty. Phase 1 candidates: [project init](../inbox/20261030-220006-6602-project-init.md) (all dependencies done now) and the [file watcher](../inbox/20261030-220007-e420-file-watcher-with-move-detection.md).
+- `next/` is empty. Phase 1 candidates: [project init](20261030-220006-6602-project-init.md) (all dependencies done now) and the [file watcher](../inbox/20261030-220007-e420-file-watcher-with-move-detection.md).
 - Waiting for wording approval: [frontmatter and id wording](../inbox/20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), [column names in the block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md).

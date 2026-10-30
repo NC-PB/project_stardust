@@ -94,6 +94,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Offers to add the image root to `.gitignore` and the planner block to `AGENTS.md`.
     - Never overwrites an existing file (`R-no-destroy`).
     - Every generated file renders on GitHub and in any markdown editor (`R-plain-markdown`).
+    - An existing `docs/planner.yml` is kept and decides the planning root and the column folders; init then adds only what is missing. A `spec/` folder means no `spec.md` is created.
+    - `spec.md` comes from the spec template (`S-templates`); spec and braindump get a new id and today's date.
+    - Init reports each path as created or existing, and whether the `.gitignore` entry and the planner block are missing; separate commands add each one. The dialog that shows these offers is task 20261030-220947-k07z (D-20261030-224049-19xh).
+    - Implemented in `src-tauri/src/domain/init.rs`; commands `init_project(repo_root)`, `add_images_to_gitignore(repo_root)`.
   - [x] Task file format `S-task-format`
     - One task per file (`R-one-task-per-file`). Filename `<id>-<slug>.md`.
     - Frontmatter: `id`, `title`, `created` required; `tags`, `priority` (1 to 5), `depends_on`, `parent`, `implements`, `completed` optional.
@@ -447,6 +451,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: the planner block task ships the writer and the command `write_planner_block`; regenerating on config change is a criterion of the file watcher task, which also has to watch `docs/planner.yml` outside the planning root. Accepted by the user on 2026-10-30.
 - Rejected: keeping the planner block task open until the watcher exists.
 - Consequences: `S-agents-block` criteria; task 20261030-220007-e420 implements `S-agents-block` too.
+
+### D-20261030-224049-19xh · Project init offers come with the open repository screen
+- Context: `S-init` says init offers the `.gitignore` entry and the planner block, but the app has no screen to open a repository or show a dialog, and no phase 1 task added one.
+- Decision: the init task ships the backend (report of what is missing, a command for each); showing the offers moves to the new task for opening a repository and running init from the app. Accepted by the user on 2026-10-30.
+- Rejected: keeping the init task open until a UI exists.
+- Consequences: `S-init` criteria; task 20261030-220947-k07z also has to settle `tauri-plugin-dialog`, which the Constraints do not list.
 
 ## Glossary
 

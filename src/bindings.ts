@@ -31,6 +31,17 @@ export const commands = {
 	 *  import or mirror into `CLAUDE.md` as configured. Returns the files that changed.
 	 */
 	writePlannerBlock: (repoRoot: string) => typedError<BlockReport, string>(__TAURI_INVOKE("write_planner_block", { repoRoot })),
+	/**
+	 *  Creates the config, spec, braindump and column folders in the repository at `repo_root`,
+	 *  never overwriting a file, and says whether the `.gitignore` entry and the planner block
+	 *  can be offered.
+	 */
+	initProject: (repoRoot: string) => typedError<InitReport, string>(__TAURI_INVOKE("init_project", { repoRoot })),
+	/**
+	 *  Adds the image root to `.gitignore` of the repository at `repo_root`. Returns whether the
+	 *  file changed.
+	 */
+	addImagesToGitignore: (repoRoot: string) => typedError<boolean, string>(__TAURI_INVOKE("add_images_to_gitignore", { repoRoot })),
 };
 
 /* Types */
@@ -116,6 +127,20 @@ export type GateConfig = {
 
 /**  What an id is for; decides the prefix. */
 export type IdKind = "Task" | "Question" | "Decision";
+
+/**  What init did and what it can offer next. Paths are relative to the repository root. */
+export type InitReport = {
+	/**  Files and folders init created. */
+	created: string[],
+	/**  Files and folders that already existed and were left unchanged. */
+	existing: string[],
+	/**  Problems that did not stop init, such as an unreadable spec template override. */
+	issues: string[],
+	/**  Whether `.gitignore` does not yet list the image root. */
+	offer_gitignore: boolean,
+	/**  Whether the agents file does not yet hold the current planner block. */
+	offer_planner_block: boolean,
+};
 
 /**  A `## ` section of a task body. */
 export type Section = {

@@ -4,6 +4,7 @@
 pub mod agents_block;
 pub mod config;
 pub mod ids;
+pub mod init;
 pub mod task;
 pub mod templates;
 

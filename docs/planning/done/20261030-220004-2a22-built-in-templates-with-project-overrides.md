@@ -31,4 +31,4 @@ Implements `S-templates` in the [spec](../spec.md).
 - `load_template` loads the config on every call; callers that need many templates can keep using `templates::resolve` with one loaded config once a project store exists.
 
 ### Next session
-- `next/` is empty. Candidates from the inbox: [planner block into AGENTS.md](20261030-220005-24ef-write-the-planner-block-into-agents-md.md) and [project init](../inbox/20261030-220006-6602-project-init.md) can now use `templates::resolve`.
+- `next/` is empty. Candidates from the inbox: [planner block into AGENTS.md](20261030-220005-24ef-write-the-planner-block-into-agents-md.md) and [project init](20261030-220006-6602-project-init.md) can now use `templates::resolve`.

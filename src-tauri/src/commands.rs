@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use crate::domain;
-use crate::domain::{agents_block, config, ids, task, templates};
+use crate::domain::{agents_block, config, ids, init, task, templates};
 
 #[tauri::command]
 #[specta::specta]
@@ -94,4 +94,23 @@ pub fn write_planner_block(repo_root: String) -> Result<agents_block::BlockRepor
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     agents_block::write_planner_block(repo_root, &config)
+}
+
+/// Creates the config, spec, braindump and column folders in the repository at `repo_root`,
+/// never overwriting a file, and says whether the `.gitignore` entry and the planner block
+/// can be offered.
+#[tauri::command]
+#[specta::specta]
+pub fn init_project(repo_root: String) -> Result<init::InitReport, String> {
+    init::init_project(Path::new(&repo_root))
+}
+
+/// Adds the image root to `.gitignore` of the repository at `repo_root`. Returns whether the
+/// file changed.
+#[tauri::command]
+#[specta::specta]
+pub fn add_images_to_gitignore(repo_root: String) -> Result<bool, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    init::add_images_to_gitignore(repo_root, &config)
 }
