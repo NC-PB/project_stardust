@@ -32,6 +32,7 @@ serde_norway = "0.9"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 notify = "8"
+trash = "5"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

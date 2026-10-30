@@ -30,4 +30,4 @@ Implements `S-terminal` in the [spec](../spec.md).
 - The Settings menu now also holds the theme switch.
 
 ### Next session
-- `next/` is empty. The last phase 1 task in the inbox is [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md); the app deletes nothing yet.
+- `next/` is empty. The last phase 1 task in the inbox is [deletes to the OS trash](20261030-220017-e886-deletes-go-to-the-os-trash.md); the app deletes nothing yet.

@@ -37,6 +37,8 @@ export const commands = {
 	saveText: (path: string, expected: string, text: string) => typedError<SaveOutcome, string>(__TAURI_INVOKE("save_text", { path, expected, text })),
 	/**  Creates the file at `path` with `text`; never overwrites one. */
 	createText: (path: string, text: string) => typedError<null, string>(__TAURI_INVOKE("create_text", { path, text })),
+	/**  Moves the file at `path`, inside the repository at `repo_root`, to the OS trash. */
+	trashFile: (repoRoot: string, path: string) => typedError<null, string>(__TAURI_INVOKE("trash_file", { repoRoot, path })),
 	/**  The task in `text`, an unsaved version of the file `file_name`. */
 	parseTaskText: (fileName: string, text: string) => __TAURI_INVOKE<Task_Serialize>("parse_task_text", { fileName, text }),
 	/**  `text` with frontmatter field `key` set to `value`; only the lines of that field change. */

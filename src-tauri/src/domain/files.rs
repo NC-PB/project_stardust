@@ -76,6 +76,45 @@ pub fn create_text(path: &Path, text: &str) -> Result<(), String> {
         .map_err(|err| err.to_string())
 }
 
+/// Moves the file at `path` to the OS trash (`S-trash`, `R-no-destroy`). Only files inside
+/// `repo_root` are moved; nothing is ever removed for good.
+pub fn trash_file(repo_root: &Path, path: &Path) -> Result<(), String> {
+    trash_file_with(repo_root, path, os_trash)
+}
+
+fn trash_file_with(
+    repo_root: &Path,
+    path: &Path,
+    trash: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<(), String> {
+    let file = path
+        .canonicalize()
+        .map_err(|_| NO_LONGER_EXISTS.to_string())?;
+    let root = repo_root.canonicalize().map_err(|err| err.to_string())?;
+    if !file.starts_with(&root) {
+        return Err(format!("{} is outside the repository", path.display()));
+    }
+    if !file.is_file() {
+        return Err(format!("{} is not a file", path.display()));
+    }
+    trash(&file)
+}
+
+/// The OS trash. On macOS through `NSFileManager`, which needs no automation permission;
+/// Finder then offers no "Put Back", but the file is in the Trash as usual.
+fn os_trash(path: &Path) -> Result<(), String> {
+    #[allow(unused_mut)] // Only macOS changes the context.
+    let mut context = trash::TrashContext::default();
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        context.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    context
+        .delete(path)
+        .map_err(|err| format!("could not move to the trash: {err}"))
+}
+
 /// The image `src` of the markdown file `file` as a `data:` URL. `src` is relative to the
 /// folder of `file`, or to `repo_root` when it starts with `/`; it must stay inside
 /// `repo_root`. Remote and other non-file sources are refused, since the app makes no
@@ -248,6 +287,47 @@ mod tests {
                 .contains("exists again")
         );
         assert_eq!(read_text(&file).unwrap(), "restored");
+        std::fs::remove_dir_all(repo).unwrap();
+    }
+
+    #[test]
+    fn trashes_only_existing_files_inside_the_repository() {
+        let repo = temp_repo("trash");
+        let file = repo.join("docs/planning/next/a.md");
+        std::fs::write(&file, "x").unwrap();
+        let mut trashed = Vec::new();
+        trash_file_with(&repo, &file, |path| {
+            trashed.push(path.to_path_buf());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(trashed, [file.canonicalize().unwrap()]);
+
+        let never = |_: &Path| -> Result<(), String> { panic!("must not trash") };
+        let folder = repo.join("docs/planning/next");
+        assert!(
+            trash_file_with(&repo, &folder, never)
+                .unwrap_err()
+                .contains("not a file")
+        );
+        let missing = repo.join("docs/planning/next/missing.md");
+        assert_eq!(
+            trash_file_with(&repo, &missing, never),
+            Err(NO_LONGER_EXISTS.to_string())
+        );
+        let outside_name = format!("stardust-trash-outside-{}.md", fastrand::u32(..));
+        let outside = repo.parent().unwrap().join(outside_name);
+        std::fs::write(&outside, "x").unwrap();
+        let err = trash_file_with(&repo, &outside, never).unwrap_err();
+        std::fs::remove_file(&outside).unwrap();
+        assert!(err.contains("outside the repository"), "{err}");
+        let sneaky = repo
+            .join("docs/planning/next/../../../../")
+            .join(outside.file_name().unwrap());
+        std::fs::write(&outside, "x").unwrap();
+        let err = trash_file_with(&repo, &sneaky, never).unwrap_err();
+        std::fs::remove_file(&outside).unwrap();
+        assert!(err.contains("outside the repository"), "{err}");
         std::fs::remove_dir_all(repo).unwrap();
     }
 

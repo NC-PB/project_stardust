@@ -4,6 +4,7 @@ const files = new Map<string, string>();
 const writeText = vi.fn();
 const createText = vi.fn();
 const makeTask = vi.fn();
+const trashed: string[] = [];
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -22,6 +23,13 @@ vi.mock("@/bindings", () => ({
     },
     createText: (...args: [string, string]) => createText(...args),
     makeTask: (...args: [string, string, string]) => makeTask(...args),
+    trashFile: async (_repoRoot: string, path: string) => {
+      if (!files.has(path))
+        return { status: "error", error: "the file no longer exists" };
+      trashed.push(files.get(path) as string);
+      files.delete(path);
+      return { status: "ok", data: null };
+    },
     parseTaskText: async (fileName: string, text: string) => ({
       file_name: fileName,
       title: text.match(/title: (.*)/)?.[1] ?? "",
@@ -75,6 +83,7 @@ describe("useEditorStore", () => {
       error: null,
     });
     makeTask.mockReset();
+    trashed.length = 0;
   });
 
   afterEach(() => {
@@ -212,6 +221,34 @@ describe("useEditorStore", () => {
     expect(state.path).toBe(A);
     expect(state.selection).toBe("idea");
     expect(state.error).toContain("no columns");
+  });
+
+  it("saves edits before moving the file to the trash, then closes it", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    useEditorStore.getState().edit("last words");
+    await useEditorStore.getState().trash();
+    expect(trashed).toEqual(["last words"]);
+    expect(files.has(A)).toBe(false);
+    expect(useEditorStore.getState().path).toBeNull();
+  });
+
+  it("does not delete while the file changed on disk", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    useEditorStore.getState().edit("mine");
+    files.set(A, "agent");
+    await useEditorStore.getState().save();
+    await useEditorStore.getState().trash();
+    expect(trashed).toEqual([]);
+    expect(files.get(A)).toBe("agent");
+    expect(useEditorStore.getState().error).toContain("Resolve");
+  });
+
+  it("keeps the file open when the trash refuses", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    files.delete(A);
+    await useEditorStore.getState().trash();
+    expect(useEditorStore.getState().path).toBe(A);
+    expect(useEditorStore.getState().error).toContain("Not deleted");
   });
 
   describe("changes on disk", () => {

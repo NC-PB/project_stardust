@@ -121,6 +121,13 @@ pub fn save_text(
     files::save_text(Path::new(&path), &expected, &text)
 }
 
+/// Moves the file at `path`, inside the repository at `repo_root`, to the OS trash.
+#[tauri::command]
+#[specta::specta]
+pub fn trash_file(repo_root: String, path: String) -> Result<(), String> {
+    files::trash_file(Path::new(&repo_root), Path::new(&path))
+}
+
 /// Creates the file at `path` with `text`; never overwrites one.
 #[tauri::command]
 #[specta::specta]

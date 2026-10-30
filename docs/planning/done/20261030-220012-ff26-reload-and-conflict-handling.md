@@ -31,4 +31,4 @@ An open file now follows the disk. Without unsaved edits it reloads silently. Wi
 - `S-frontend` still lists CodeMirror and remark/rehype as "come with their tasks" (outside this task).
 
 ### Next session
-- `next/` is empty. Phase 1 candidates in the inbox: [column names in the planner block](20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [frontmatter and id wording](20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md). A hand check of the board and editor in `npm run tauri dev` is overdue.
+- `next/` is empty. Phase 1 candidates in the inbox: [column names in the planner block](20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md), [frontmatter and id wording](20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), [deletes to the OS trash](20261030-220017-e886-deletes-go-to-the-os-trash.md). A hand check of the board and editor in `npm run tauri dev` is overdue.

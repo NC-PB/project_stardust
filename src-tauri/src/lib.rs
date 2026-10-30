@@ -21,6 +21,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::read_text,
             commands::save_text,
             commands::create_text,
+            commands::trash_file,
             commands::parse_task_text,
             commands::set_field_in_text,
             commands::remove_field_in_text,

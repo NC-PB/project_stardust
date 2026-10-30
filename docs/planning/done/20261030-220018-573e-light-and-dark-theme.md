@@ -28,4 +28,4 @@ The app has a light and a dark theme. By default it follows the system and switc
 - `S-tauri` still lists the capabilities without `core:window:allow-set-theme` (outside this task).
 
 ### Next session
-- `next/` is empty. Phase 1 tasks left in the inbox: [open a terminal](20261030-220016-3964-open-terminal-in-the-repository.md), [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md).
+- `next/` is empty. Phase 1 tasks left in the inbox: [open a terminal](20261030-220016-3964-open-terminal-in-the-repository.md), [deletes to the OS trash](20261030-220017-e886-deletes-go-to-the-os-trash.md).

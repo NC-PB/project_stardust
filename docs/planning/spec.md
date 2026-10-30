@@ -38,7 +38,7 @@ Solo developers who build software with coding agents lose the thread between se
 - The tool never writes to git: no commit, no staging, no branches. Read-only `git log` is allowed. Works in folders without git.
 - Plain markdown compatibility: every file renders on GitHub, GitLab, in Obsidian and VS Code. Tool semantics only through frontmatter, standard task lists, standard links, standard blockquotes and inline code. No custom syntax.
 - Frontend: React with TypeScript in strict mode, built with Vite, inside the Tauri webview (`S-frontend`).
-- Libraries for the heavy parts: CodeMirror 6, remark/rehype (unified), Markmap, Mermaid. Rust: `notify`, `tauri-plugin-global-shortcut`, `tauri-plugin-store`, `tauri-plugin-shell`, `tauri-plugin-dialog` (D-20261030-224813-t807).
+- Libraries for the heavy parts: CodeMirror 6, remark/rehype (unified), Markmap, Mermaid. Rust: `notify`, `tauri-plugin-global-shortcut`, `tauri-plugin-store`, `tauri-plugin-shell`, `tauri-plugin-dialog` (D-20261030-224813-t807), `trash` (D-20261031-005236-kuwe).
 - Logic lives in Rust and in pure TypeScript modules with tests; React components only render.
 
 ## Domain
@@ -255,6 +255,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Never fixes without confirmation.
   - [x] Trash `S-trash`
     - Every delete goes to the OS trash (`R-no-destroy`).
+    - The only delete so far: "Delete" in the editor header while a task file is open, confirmed in a bar that names the file. Unsaved edits are saved first, so the trash holds the latest text; while the file changed on disk, deleting is refused. The file is closed after it moved.
+    - Only existing files inside the repository are moved; nothing is removed for good. macOS uses `NSFileManager` (no automation permission; Finder offers no "Put Back"), Windows the Recycle Bin, Linux the freedesktop trash, all through the `trash` crate.
+    - Implemented in `src-tauri/src/domain/files.rs` (`trash_file`); command `trash_file(repo_root, path)`; `trash` in `src/stores/editor-store.ts`.
   - [x] Git attributes `S-gitattributes`
     - On request, writes `merge=union` for the questions and decisions files only.
 - Workspace `S-workspace`
@@ -597,6 +600,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: one Rust command starts the terminal with `std::process::Command`, from a fixed list per platform led by the configured terminal; no plugin and no frontend permission. A Settings menu in the header holds the terminal field and the theme switch.
 - Rejected: `tauri-plugin-shell` (a frontend-reachable shell scope for one fixed launch); a separate settings window.
 - Consequences: `S-terminal` criteria. `tauri-plugin-shell` stays unused so far.
+
+### D-20261031-005236-kuwe · The trash crate, deleting from the editor
+- Context: `S-trash` sends every delete to the OS trash, but the app deleted nothing yet and the Constraints list no trash library. On macOS the crate's default asks Finder through AppleScript, which prompts for automation permission and needs an extra entitlement in signed builds.
+- Decision: add `trash` 5 to the Constraints; on macOS use its `NSFileManager` method. The first delete is "Delete" in the editor header for task files, with an inline confirmation (no dialog permission needed). Decided by the user on 2026-10-31, except the macOS method.
+- Rejected: own code per platform (AppleScript, Windows shell FFI, freedesktop by hand); a delete control on every card (easy to hit while dragging); Finder as the macOS method (permission prompt, entitlement).
+- Consequences: Constraints, `S-trash` criteria. Files trashed on macOS have no "Put Back" in Finder; they can be dragged back.
 
 ## Glossary
 

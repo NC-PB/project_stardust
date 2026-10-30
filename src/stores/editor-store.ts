@@ -62,6 +62,11 @@ interface EditorState {
   restoreReplaced: () => void;
   dismissReplaced: () => void;
   setSelection: (selection: string) => void;
+  /**
+   * Moves the open file to the OS trash and closes it (`S-trash`). Unsaved edits are saved
+   * first, so the trash holds the latest text; refused while a conflict is open.
+   */
+  trash: () => Promise<void>;
   /** Creates a task in the first column from the selection and opens it (`S-make-task`). */
   makeTask: () => Promise<void>;
 }
@@ -260,6 +265,22 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     dismissReplaced: () => set({ replaced: null }),
 
     setSelection: (selection) => set({ selection }),
+
+    trash: async () => {
+      const { repoRoot, path } = get();
+      if (repoRoot === null || path === null) return;
+      if (get().conflict !== null) {
+        set({ error: "Resolve the change on disk before deleting" });
+        return;
+      }
+      await get().save();
+      if (get().path !== path || get().text !== get().saved) return;
+      const result = await commands.trashFile(repoRoot, path);
+      if (get().path !== path) return;
+      if (result.status === "error")
+        set({ error: `Not deleted: ${result.error}` });
+      else set(CLOSED);
+    },
 
     makeTask: async () => {
       const { repoRoot, path, selection } = get();

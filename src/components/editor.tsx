@@ -141,7 +141,10 @@ export function Editor() {
     selection,
     setSelection,
     makeTask,
+    trash,
   } = useEditorStore();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const isTask = useIsTask(path);
   const theme = useThemeStore((state) => state.theme);
 
   useEffect(() => {
@@ -188,10 +191,47 @@ export function Editor() {
         >
           {mode === "source" ? "Read" : "Source"}
         </Button>
+        {isTask && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => setConfirmDelete(path)}
+            title="Moves the file to the trash"
+          >
+            Delete
+          </Button>
+        )}
         <Button variant="ghost" size="xs" onClick={() => void close()}>
           Close
         </Button>
       </header>
+      {confirmDelete === path && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/50 px-2 py-1 text-xs"
+        >
+          <span className="flex-1">
+            Move {fileNameOf(path)} to the trash? It can be restored from there.
+          </span>
+          <Button
+            variant="destructive"
+            size="xs"
+            onClick={() => {
+              setConfirmDelete(null);
+              void trash();
+            }}
+          >
+            Move to trash
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => setConfirmDelete(null)}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}
@@ -297,18 +337,23 @@ function Notice({
   );
 }
 
+/** The path of the open file relative to the repository when it is a task, else `null`. */
+function useTaskPath(path: string | null): string | null {
+  const { repoRoot, config } = useBoardStore();
+  if (path === null || repoRoot === null || config === null) return null;
+  return taskPathOf(path, repoRoot, config.planning_root, config.columns);
+}
+
+function useIsTask(path: string | null): boolean {
+  return useTaskPath(path) !== null;
+}
+
 /** Prompts for the open task, copied to the clipboard (`S-prompts`); hidden for other files. */
 function PromptBar({ path }: { path: string }) {
-  const { repoRoot, config } = useBoardStore();
+  const repoRoot = useBoardStore((state) => state.repoRoot);
   const copy = usePromptStore((state) => state.copy);
-  if (repoRoot === null || config === null) return null;
-  const taskPath = taskPathOf(
-    path,
-    repoRoot,
-    config.planning_root,
-    config.columns,
-  );
-  if (taskPath === null) return null;
+  const taskPath = useTaskPath(path);
+  if (repoRoot === null || taskPath === null) return null;
   return (
     <div className="flex flex-wrap items-center gap-1">
       <span className="mr-1 text-xs text-muted-foreground">Copy prompt</span>
