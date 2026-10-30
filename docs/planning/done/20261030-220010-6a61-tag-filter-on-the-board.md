@@ -27,4 +27,4 @@ The board has a tag filter. A tag bar above the columns lists every tag on the b
 - Not yet checked by hand in the running app.
 
 ### Next session
-- `next/` is empty. [Drag and drop](../inbox/20261030-220009-9c40-drag-and-drop-between-columns.md) is the remaining board task in the inbox.
+- `next/` is empty. [Drag and drop](20261030-220009-9c40-drag-and-drop-between-columns.md) is the remaining board task in the inbox.

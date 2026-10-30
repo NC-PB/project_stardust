@@ -152,3 +152,35 @@ export function filterCards(
     ]),
   );
 }
+
+/**
+ * The board after moving the task `fileName` from column `from` to the end of column `to`
+ * (`S-board-dnd`); unchanged when the task is not in `from` or the columns are the same. A
+ * task already in `to` (re-read from disk meanwhile) is not added twice.
+ */
+export function moveCard(
+  columns: BoardColumn[],
+  fileName: string,
+  from: string,
+  to: string,
+): BoardColumn[] {
+  if (from === to) return columns;
+  const task = columns
+    .find((column) => column.name === from)
+    ?.tasks.find((candidate) => candidate.file_name === fileName);
+  if (task === undefined || !columns.some((column) => column.name === to))
+    return columns;
+  return columns.map((column) => {
+    if (column.name === from)
+      return {
+        ...column,
+        tasks: column.tasks.filter((other) => other !== task),
+      };
+    if (
+      column.name === to &&
+      !column.tasks.some((other) => other.file_name === fileName)
+    )
+      return { ...column, tasks: [...column.tasks, task] };
+    return column;
+  });
+}

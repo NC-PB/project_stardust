@@ -2,7 +2,9 @@
 //! Planning modules (ids, task files, config, ...) live here as their tasks land.
 
 pub mod agents_block;
+pub mod board;
 pub mod config;
+pub mod files;
 pub mod ids;
 pub mod init;
 pub mod task;

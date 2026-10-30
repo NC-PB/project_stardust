@@ -10,6 +10,7 @@ import {
 } from "@/bindings";
 import { type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
+import { useEditorStore } from "./editor-store";
 import { readSetting, writeSetting } from "./settings";
 
 const REPO_ROOT_SETTING = "repoRoot";
@@ -78,6 +79,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       }));
       const { repoRoot } = get();
       // The planning root may have moved, so the watcher restarts with the new config.
+      await useEditorStore.getState().apply(change.batch);
       if (change.batch.config_changed && repoRoot !== null)
         await load(repoRoot);
       else await useBoardStore.getState().apply(change.batch);
@@ -94,6 +96,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     },
 
     openRepository: async (repoRoot) => {
+      await useEditorStore.getState().close();
       set({
         repoRoot,
         config: null,

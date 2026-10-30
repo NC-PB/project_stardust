@@ -118,8 +118,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - The board updates from watcher batches without reload: only the columns a batch touched are read again; a config change reloads the whole board (`S-watcher`).
     - Implemented in `src/lib/board.ts` (`columnDir`, `touchedColumns`), `src/stores/board-store.ts` (`useBoardStore`, loaded and updated by `useProjectStore`), `src/components/board.tsx`; columns are read with `read_column`.
   - [x] Drag and drop `S-board-dnd`
-    - Dropping a card in another column moves the file (`R-one-column`).
-    - Moving into the terminal column sets `completed` to today; moving out removes it.
+    - Dropping a card in another column moves the file (`R-one-column`). Cards are dragged with the mouse (after 5 px, so clicks on tags still work) or the keyboard; the target column is highlighted.
+    - Moving into the terminal column sets `completed` to today; moving out removes it. A move between two other columns leaves the file text unchanged.
+    - The card moves at once and lands at the end of the column. A failed move (a file with the same name in the target, a column without folder, an unreadable file) leaves the file and the card in the original column and shows the error until dismissed. An existing file is never overwritten (`R-no-destroy`) (D-20261030-232042-h9dm).
+    - Implemented in `src-tauri/src/domain/board.rs` (`move_task`); command `move_task(repo_root, file_name, from, to)`. Frontend: `src/lib/board.ts` (`moveCard`), `src/stores/board-store.ts` (`moveTask`, `moveError`), `src/components/board.tsx` with `@dnd-kit/core`.
   - [x] Cards `S-board-card`
     - Show title, tags, age since last change, sub-task count, blocked marker, new-since-last-visit marker, commit info (`S-commit-info`).
     - Commit info is not built yet (phase 4).
@@ -279,11 +281,22 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
 - Editor `S-editor`
   - [x] Editing `S-editor-core`
     - CodeMirror 6 with markdown preview. Frontmatter editable as a form on top of the file.
+    - Clicking a card title opens its file in a pane beside the board; one file is open at a time.
+    - The form shows `id` and edits `title`, `tags`, `created`, `completed`, `priority`, `implements`, `depends_on`, `parent`. A field is written into the editor text when it loses focus or on Enter, through the same line writer as `set_task_field`; input `read_task` would report (empty title, priority outside 1 to 5, a date not like 2026-10-30) is refused at the field. Empty lists stay `[]`, other empty fields are removed. Frontmatter issues of the text show under the form.
+    - Edits are saved 1 s after typing stops, on Ctrl+S (⌘S on macOS), before another file opens and on close (D-20261030-233646-imm8). Saving never creates a file: a file moved or removed since it was opened is not written back to its old place.
+    - A watcher batch that moves the open file makes the editor follow it and save pending edits there; a removed file closes when it had no unsaved edits, otherwise it stays open with a notice.
+    - Implemented in `src/lib/editor.ts`, `src/stores/editor-store.ts`, `src/components/editor.tsx`; Rust `src-tauri/src/domain/files.rs`; commands `read_text`, `write_text`, `parse_task_text`, `set_field_in_text`, `remove_field_in_text`, `read_image`.
   - [x] Layout `S-editor-layout`
     - Two modes per file, toggled with one shortcut: styled source and rendered read.
     - Styled source: CodeMirror 6 with sized headings, highlighted task lists, links, inline code and frontmatter; markup stays visible.
     - Read mode: remark/rehype rendering with images, Mermaid and proposal actions (`S-proposals`).
     - No split view.
+    - The shortcut is Ctrl+E (⌘E on macOS); the mode is remembered per file for the session and follows a moved file. Source is the default.
+    - Styled source: the frontmatter lines are set in a muted monospace block; task markers, links and inline code are coloured; markup stays visible.
+    - Read mode renders the body without the frontmatter with `react-markdown` and `remark-gfm`: GFM task lists and tables, images, and `mermaid` fenced blocks drawn by Mermaid (`securityLevel: "strict"`, loaded on first use).
+    - Images are read through Rust as `data:` URLs (D-20261030-233646-imm8): relative to the file, or to the repository root with a leading `/`, never outside the repository; remote images and other sources show a notice instead, since the app makes no network calls.
+    - Links never navigate the window; a relative link to a `.md` file opens it in the editor.
+    - Proposal actions come with `S-proposals` and are not built yet.
   - [ ] Live preview `S-editor-live-preview` #later
     - Markup hidden until the cursor enters the line, in one pane.
 - Search `S-search`
@@ -502,6 +515,18 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: any-of matching (adding a tag would widen the board, against "hides cards without them"); keeping the filter in the app settings (not asked for, easy to add later).
 - Consequences: `S-board-filter` criteria.
 
+### D-20261030-232042-h9dm · Moving a task renames first, then writes `completed`
+- Context: `S-board-dnd` says a drop moves the file and sets or removes `completed`, but not in which order, what happens when the target already has a file with that name, or when the card moves on screen.
+- Decision: the file is renamed into the target folder, then `completed` is written; if that write fails the file is renamed back. A file with the same name in the target is never overwritten; the move fails. The card moves on screen at once and goes back with the error when the command fails. A moved card goes to the end of the column until `S-board-sort` exists.
+- Rejected: writing `completed` before the rename (a failed rename would leave a task outside the terminal column marked completed); waiting for the watcher batch before moving the card (the card jumps back for at least 150 ms).
+- Consequences: `S-board-dnd` criteria; dependency `@dnd-kit/core` 6.3.1.
+
+### D-20261030-233646-imm8 · Autosave, editor pane beside the board, images as data URLs
+- Context: `S-editor-core` and `S-editor-layout` do not say when edits reach the disk, where the editor sits next to the board, or how read mode shows local images when the CSP allows only the app itself. The conflict handling task builds on what counts as unsaved.
+- Decision: edits are saved 1 s after typing stops, on Ctrl/⌘+S, before another file opens and on close; saving only overwrites an existing file. The editor is a pane beside the board, opened by clicking a card title. Read mode asks Rust for each image as a `data:` URL, limited to files inside the repository; the CSP already allows `img-src data:`. Decided by the user on 2026-10-30.
+- Rejected: saving only on Ctrl/⌘+S (unsaved text is lost more easily); the editor replacing the board; the Tauri asset protocol (a Cargo feature, a runtime scope and a CSP entry for one feature).
+- Consequences: `S-editor-core` and `S-editor-layout` criteria; new dependencies `@uiw/react-codemirror`, `@codemirror/lang-markdown`, `@codemirror/language`, `@codemirror/view`, `@lezer/highlight`, `react-markdown`, `remark-gfm`, `mermaid`.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -527,3 +552,5 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Offer: a change init proposes outside the planning root (the `.gitignore` entry, the planner block), applied only when the user accepts it.
 - Card: a task as shown on the board, with its markers.
 - Visit: opening a project in the app; the last visit per project decides which cards are new.
+- Source mode: the editor showing the file text with styled markup.
+- Read mode: the editor showing the rendered body of the file.

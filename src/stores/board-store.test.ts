@@ -3,9 +3,13 @@ import type { Config } from "@/bindings";
 
 const settings = new Map<string, unknown>();
 const readColumn = vi.fn();
+const moveTask = vi.fn();
 
 vi.mock("@/bindings", () => ({
-  commands: { readColumn: (...args: unknown[]) => readColumn(...args) },
+  commands: {
+    readColumn: (...args: unknown[]) => readColumn(...args),
+    moveTask: (...args: unknown[]) => moveTask(...args),
+  },
 }));
 vi.mock("./settings", () => ({
   readSetting: async (key: string) => settings.get(key),
@@ -127,5 +131,33 @@ describe("useBoardStore", () => {
     expect(useBoardStore.getState().tagFilter).toEqual(["ui"]);
     await useBoardStore.getState().load("/other", config, []);
     expect(useBoardStore.getState().tagFilter).toEqual([]);
+  });
+
+  it("moves the card at once and calls move_task", async () => {
+    await useBoardStore.getState().load("/repo", config, []);
+    moveTask.mockResolvedValue({ status: "ok", data: null });
+    await useBoardStore.getState().moveTask("inbox.md", "inbox", "done");
+    expect(moveTask).toHaveBeenCalledWith("/repo", "inbox.md", "inbox", "done");
+    const { columns, moveError } = useBoardStore.getState();
+    expect(columns[0].tasks).toEqual([]);
+    expect(columns[2].tasks.map((task) => task.file_name)).toEqual([
+      "done.md",
+      "inbox.md",
+    ]);
+    expect(moveError).toBeNull();
+  });
+
+  it("puts the card back and keeps the error when the move fails", async () => {
+    await useBoardStore.getState().load("/repo", config, []);
+    moveTask.mockResolvedValue({ status: "error", error: "denied" });
+    await useBoardStore.getState().moveTask("inbox.md", "inbox", "next");
+    const { columns, moveError } = useBoardStore.getState();
+    expect(columns[0].tasks.map((task) => task.file_name)).toEqual([
+      "inbox.md",
+    ]);
+    expect(columns[1].tasks.map((task) => task.file_name)).toEqual(["next.md"]);
+    expect(moveError).toBe("denied");
+    useBoardStore.getState().dismissMoveError();
+    expect(useBoardStore.getState().moveError).toBeNull();
   });
 });

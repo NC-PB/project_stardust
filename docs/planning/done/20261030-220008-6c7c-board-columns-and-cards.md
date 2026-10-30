@@ -35,5 +35,5 @@ The app now shows the board: the columns from `columns` in config order, each sc
 - `S-task-format` does not yet list the new `modified` field of a task; that node was outside this task.
 
 ### Next session
-- `next/` is empty. [Drag and drop](../inbox/20261030-220009-9c40-drag-and-drop-between-columns.md) and the [tag filter](20261030-220010-6a61-tag-filter-on-the-board.md) build on `useBoardStore` and `cardsOf`.
+- `next/` is empty. [Drag and drop](20261030-220009-9c40-drag-and-drop-between-columns.md) and the [tag filter](20261030-220010-6a61-tag-filter-on-the-board.md) build on `useBoardStore` and `cardsOf`.
 - The project panel sits above the board and takes vertical space; a compact header may be wanted once the board is in daily use.

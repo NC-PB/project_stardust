@@ -23,6 +23,30 @@ export const commands = {
 	/**  Removes one frontmatter field of the task file at `path`, leaving the rest of the file as is. */
 	removeTaskField: (path: string, key: string) => typedError<null, string>(__TAURI_INVOKE("remove_task_field", { path, key })),
 	/**
+	 *  Moves the task file `file_name` from column `from` to column `to` of the repository at
+	 *  `repo_root`, setting `completed` to today when `to` is the terminal column and removing it
+	 *  when `from` is. Never overwrites a file; a failed move leaves the task where it was.
+	 */
+	moveTask: (repoRoot: string, fileName: string, from: string, to: string) => typedError<null, string>(__TAURI_INVOKE("move_task", { repoRoot, fileName, from, to })),
+	/**  The whole text of the file at `path`, as the editor opens it. */
+	readText: (path: string) => typedError<string, string>(__TAURI_INVOKE("read_text", { path })),
+	/**
+	 *  Replaces the text of the file at `path`. Fails instead of creating a file that was moved
+	 *  or removed.
+	 */
+	writeText: (path: string, text: string) => typedError<null, string>(__TAURI_INVOKE("write_text", { path, text })),
+	/**  The task in `text`, an unsaved version of the file `file_name`. */
+	parseTaskText: (fileName: string, text: string) => __TAURI_INVOKE<Task_Serialize>("parse_task_text", { fileName, text }),
+	/**  `text` with frontmatter field `key` set to `value`; only the lines of that field change. */
+	setFieldInText: (text: string, key: string, value: FieldValue) => typedError<string, string>(__TAURI_INVOKE("set_field_in_text", { text, key, value })),
+	/**  `text` without frontmatter field `key`. */
+	removeFieldInText: (text: string, key: string) => typedError<string, string>(__TAURI_INVOKE("remove_field_in_text", { text, key })),
+	/**
+	 *  The image `src` of the markdown file `file` as a `data:` URL, if it is a local image inside
+	 *  the repository at `repo_root`.
+	 */
+	readImage: (repoRoot: string, file: string, src: string) => typedError<string, string>(__TAURI_INVOKE("read_image", { repoRoot, file, src })),
+	/**
 	 *  The template of `kind` for the repository at `repo_root`: the project override from
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */

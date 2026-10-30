@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { type ChangeBatch, type Config, commands } from "@/bindings";
-import { type BoardColumn, columnDir, touchedColumns } from "@/lib/board";
+import {
+  type BoardColumn,
+  columnDir,
+  moveCard,
+  touchedColumns,
+} from "@/lib/board";
 import { readSetting, writeSetting } from "./settings";
 
 /** Last visit per repository root, in milliseconds since the epoch. */
@@ -17,10 +22,18 @@ interface BoardState {
   since: number | null;
   /** Cards must carry every one of these tags (`S-board-filter`); kept for this session only. */
   tagFilter: string[];
+  /** Why the last move failed (`S-board-dnd`); `null` after a successful move. */
+  moveError: string | null;
   /** Reads every column of the project and records this visit. */
   load: (repoRoot: string, config: Config, missing: string[]) => Promise<void>;
   /** Re-reads the columns a batch of changes on disk touched. */
   apply: (batch: ChangeBatch) => Promise<void>;
+  /**
+   * Moves the task file `fileName` from column `from` to column `to`. The card moves at once
+   * and goes back when the move fails, with `moveError` saying why.
+   */
+  moveTask: (fileName: string, from: string, to: string) => Promise<void>;
+  dismissMoveError: () => void;
   /** Adds `tag` to the filter, or removes it when selected. */
   toggleTag: (tag: string) => void;
   clearTagFilter: () => void;
@@ -58,13 +71,21 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
   columns: [],
   since: null,
   tagFilter: [],
+  moveError: null,
 
   load: async (repoRoot, config, missing) => {
     const sameProject = get().repoRoot === repoRoot;
     set(
       sameProject
         ? { config }
-        : { repoRoot, config, columns: [], since: null, tagFilter: [] },
+        : {
+            repoRoot,
+            config,
+            columns: [],
+            since: null,
+            tagFilter: [],
+            moveError: null,
+          },
     );
     const since = sameProject ? get().since : await recordVisit(repoRoot);
     const columns = await Promise.all(
@@ -96,6 +117,24 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
     }));
   },
 
+  moveTask: async (fileName, from, to) => {
+    const { repoRoot, config } = get();
+    if (repoRoot === null || config === null || from === to) return;
+    set((state) => ({
+      columns: moveCard(state.columns, fileName, from, to),
+      moveError: null,
+    }));
+    const result = await commands.moveTask(repoRoot, fileName, from, to);
+    if (result.status === "ok" || get().repoRoot !== repoRoot) return;
+    // A failed move leaves the file where it was; the next batch re-reads anything else.
+    set((state) => ({
+      columns: moveCard(state.columns, fileName, to, from),
+      moveError: result.error,
+    }));
+  },
+
+  dismissMoveError: () => set({ moveError: null }),
+
   toggleTag: (tag) =>
     set((state) => ({
       tagFilter: state.tagFilter.includes(tag)
@@ -112,5 +151,6 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
       columns: [],
       since: null,
       tagFilter: [],
+      moveError: null,
     }),
 }));

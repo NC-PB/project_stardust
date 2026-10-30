@@ -11,7 +11,7 @@ use tauri::AppHandle;
 use tauri_specta::Event;
 
 use crate::domain;
-use crate::domain::{agents_block, config, ids, init, task, templates, watch};
+use crate::domain::{agents_block, board, config, files, ids, init, task, templates, watch};
 
 #[tauri::command]
 #[specta::specta]
@@ -80,6 +80,71 @@ pub fn remove_task_field(path: String, key: String) -> Result<(), String> {
         std::fs::write(&path, written).map_err(|err| err.to_string())?;
     }
     Ok(())
+}
+
+/// Moves the task file `file_name` from column `from` to column `to` of the repository at
+/// `repo_root`, setting `completed` to today when `to` is the terminal column and removing it
+/// when `from` is. Never overwrites a file; a failed move leaves the task where it was.
+#[tauri::command]
+#[specta::specta]
+pub fn move_task(
+    repo_root: String,
+    file_name: String,
+    from: String,
+    to: String,
+) -> Result<(), String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    board::move_task(repo_root, &config, &file_name, &from, &to, &today)
+}
+
+/// The whole text of the file at `path`, as the editor opens it.
+#[tauri::command]
+#[specta::specta]
+pub fn read_text(path: String) -> Result<String, String> {
+    files::read_text(Path::new(&path))
+}
+
+/// Replaces the text of the file at `path`. Fails instead of creating a file that was moved
+/// or removed.
+#[tauri::command]
+#[specta::specta]
+pub fn write_text(path: String, text: String) -> Result<(), String> {
+    files::write_existing(Path::new(&path), &text)
+}
+
+/// The task in `text`, an unsaved version of the file `file_name`.
+#[tauri::command]
+#[specta::specta]
+pub fn parse_task_text(file_name: String, text: String) -> task::Task {
+    task::parse_task(&file_name, &text)
+}
+
+/// `text` with frontmatter field `key` set to `value`; only the lines of that field change.
+#[tauri::command]
+#[specta::specta]
+pub fn set_field_in_text(
+    text: String,
+    key: String,
+    value: task::FieldValue,
+) -> Result<String, String> {
+    task::set_field(&text, &key, &value)
+}
+
+/// `text` without frontmatter field `key`.
+#[tauri::command]
+#[specta::specta]
+pub fn remove_field_in_text(text: String, key: String) -> Result<String, String> {
+    task::remove_field(&text, &key)
+}
+
+/// The image `src` of the markdown file `file` as a `data:` URL, if it is a local image inside
+/// the repository at `repo_root`.
+#[tauri::command]
+#[specta::specta]
+pub fn read_image(repo_root: String, file: String, src: String) -> Result<String, String> {
+    files::image_data_url(Path::new(&repo_root), Path::new(&file), &src)
 }
 
 /// The template of `kind` for the repository at `repo_root`: the project override from

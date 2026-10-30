@@ -9,6 +9,7 @@ import {
   columnDir,
   filterCards,
   isNewSince,
+  moveCard,
   touchedColumns,
 } from "./board";
 
@@ -221,5 +222,38 @@ describe("filterCards", () => {
       inbox: ["a"],
       done: [],
     });
+  });
+});
+
+describe("moveCard", () => {
+  const board = () => [
+    column("inbox", [task("a"), task("b")]),
+    column("next", [task("c")]),
+    column("done", []),
+  ];
+  const names = (columns: BoardColumn[]) =>
+    columns.map((col) => col.tasks.map((t) => t.id).join(","));
+
+  it("moves the task to the end of the target column", () => {
+    expect(names(moveCard(board(), "a-x.md", "inbox", "next"))).toEqual([
+      "b",
+      "c,a",
+      "",
+    ]);
+  });
+
+  it("leaves the board as is for an unknown task, column or the same column", () => {
+    const columns = board();
+    expect(moveCard(columns, "z-x.md", "inbox", "next")).toBe(columns);
+    expect(moveCard(columns, "a-x.md", "inbox", "later")).toBe(columns);
+    expect(moveCard(columns, "a-x.md", "inbox", "inbox")).toBe(columns);
+  });
+
+  it("does not add a task twice when the target already has it", () => {
+    const columns = [column("inbox", [task("a")]), column("next", [task("a")])];
+    expect(names(moveCard(columns, "a-x.md", "inbox", "next"))).toEqual([
+      "",
+      "a",
+    ]);
   });
 });
