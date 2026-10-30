@@ -36,6 +36,7 @@ import { PROMPT_LABELS, TASK_PROMPTS, taskPathOf } from "@/lib/prompts";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePromptStore } from "@/stores/prompt-store";
+import { useThemeStore } from "@/stores/theme-store";
 
 /** Markup stays visible; headings are sized, the rest is coloured (`S-editor-layout`). */
 const sourceHighlight = HighlightStyle.define([
@@ -93,18 +94,33 @@ const sourceExtensions = [
   syntaxHighlighting(sourceHighlight),
   frontmatterPlugin,
   EditorView.lineWrapping,
-  EditorView.theme({
-    "&": { backgroundColor: "transparent", height: "100%" },
-    "&.cm-focused": { outline: "none" },
-    ".cm-content": { fontFamily: "var(--font-sans)", padding: "8px 0" },
-    ".cm-frontmatter": {
-      fontFamily: "ui-monospace, monospace",
-      fontSize: "0.85em",
-      backgroundColor: "var(--color-muted)",
-      color: "var(--color-muted-foreground)",
-    },
-  }),
 ];
+
+const sourceStyle = {
+  "&": { backgroundColor: "transparent", height: "100%" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-content": {
+    fontFamily: "var(--font-sans)",
+    padding: "8px 0",
+    caretColor: "var(--color-foreground)",
+  },
+  ".cm-cursor": { borderLeftColor: "var(--color-foreground)" },
+  ".cm-frontmatter": {
+    fontFamily: "ui-monospace, monospace",
+    fontSize: "0.85em",
+    backgroundColor: "var(--color-muted)",
+    color: "var(--color-muted-foreground)",
+  },
+};
+
+/**
+ * The editor follows the app colours in both themes (`S-theme`); the `dark` flag switches
+ * CodeMirror's own selection colours.
+ */
+const sourceThemes = {
+  light: EditorView.theme(sourceStyle, { dark: false }),
+  dark: EditorView.theme(sourceStyle, { dark: true }),
+};
 
 /**
  * The open file beside the board: a frontmatter form on top, then styled source or rendered
@@ -126,6 +142,7 @@ export function Editor() {
     setSelection,
     makeTask,
   } = useEditorStore();
+  const theme = useThemeStore((state) => state.theme);
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -190,6 +207,7 @@ export function Editor() {
           <CodeMirror
             value={text}
             onChange={edit}
+            theme={sourceThemes[theme]}
             onUpdate={(update) => {
               if (update.selectionSet) setSelection(selectedText(update));
             }}
@@ -489,6 +507,7 @@ function CodeBlock({
 let mermaidCount = 0;
 
 function Mermaid({ source }: { source: string }) {
+  const theme = useThemeStore((state) => state.theme);
   const [svg, setSvg] = useState<string>();
   const [error, setError] = useState<string>();
 
@@ -496,7 +515,11 @@ function Mermaid({ source }: { source: string }) {
     let current = true;
     void (async () => {
       const { default: mermaid } = await import("mermaid");
-      mermaid.initialize({ startOnLoad: false, securityLevel: "strict" });
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: theme === "dark" ? "dark" : "default",
+      });
       try {
         mermaidCount += 1;
         const { svg } = await mermaid.render(`mermaid-${mermaidCount}`, source);
@@ -511,7 +534,7 @@ function Mermaid({ source }: { source: string }) {
     return () => {
       current = false;
     };
-  }, [source]);
+  }, [source, theme]);
 
   if (error)
     return (

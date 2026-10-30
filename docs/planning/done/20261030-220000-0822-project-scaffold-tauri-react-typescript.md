@@ -41,7 +41,7 @@ The skeleton runs: `npm run tauri dev` opens a Tauri 2 window with a React page 
 
 ### Next session
 - Nothing is committed yet: the scaffold, `ARCHITECTURE.md`, the spec changes and this task's move from `inbox/` to `done/` are all in the working tree.
-- `next/` is empty. Run Triage inbox first. Now unblocked by this task: [ids](20261030-220001-3fab-id-generation-and-filename-parsing.md), [planner.yml](20261030-220002-5dbd-read-and-validate-planner-yml.md), [open terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [theme](../inbox/20261030-220018-573e-light-and-dark-theme.md), [signed builds](../inbox/20261030-220019-45ec-signed-release-builds.md). Ids and planner.yml unblock most of phase 1 (task file model, templates, planner block).
+- `next/` is empty. Run Triage inbox first. Now unblocked by this task: [ids](20261030-220001-3fab-id-generation-and-filename-parsing.md), [planner.yml](20261030-220002-5dbd-read-and-validate-planner-yml.md), [open terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [theme](20261030-220018-573e-light-and-dark-theme.md), [signed builds](../inbox/20261030-220019-45ec-signed-release-builds.md). Ids and planner.yml unblock most of phase 1 (task file model, templates, planner block).
 - Setup after a fresh clone: `npm install`; checks are `npm run check` and `cd src-tauri && cargo test`. Toolchain used: Node 22.20, Rust 1.99.
 - New Rust commands: add to `commands.rs` with `#[specta::specta]`, register in `collect_commands!` in `lib.rs`, run `cargo test` to regenerate `src/bindings.ts`, call them only through `@/bindings`.
 - New shadcn components: `npx shadcn@4.23.0 add <name> -y`.

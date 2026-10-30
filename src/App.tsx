@@ -4,15 +4,20 @@ import { Editor } from "@/components/editor";
 import { ProjectPanel } from "@/components/project-panel";
 import { PromptNotice } from "@/components/prompt-notice";
 import { SearchBox } from "@/components/search-box";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useThemeStore } from "@/stores/theme-store";
 
 function App() {
   const version = useAppStore((state) => state.version);
   const loadVersion = useAppStore((state) => state.loadVersion);
   const restore = useProjectStore((state) => state.restore);
   const listen = useProjectStore((state) => state.listen);
+  const startTheme = useThemeStore((state) => state.start);
+
+  useEffect(() => startTheme(), [startTheme]);
 
   useEffect(() => {
     void loadVersion();
@@ -28,7 +33,12 @@ function App() {
 
   return (
     <main className="flex h-screen flex-col items-center gap-6 p-6">
-      <h1 className="text-2xl font-semibold">stardust</h1>
+      <header className="relative flex w-full items-center justify-center">
+        <h1 className="text-2xl font-semibold">stardust</h1>
+        <div className="absolute right-0">
+          <ThemeSwitch />
+        </div>
+      </header>
       <ProjectPanel />
       <SearchBox />
       <div className="flex min-h-0 w-full flex-1 gap-4">

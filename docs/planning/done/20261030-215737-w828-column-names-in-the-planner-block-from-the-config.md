@@ -33,4 +33,4 @@ The planner block and the prompts now name the configured columns. The first col
 - The prompt headings ("Triage inbox") and button labels keep the word inbox.
 
 ### Next session
-- `next/` is empty. Remaining phase 1 tasks in the inbox: [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](20261030-220014-91bd-full-text-search.md), [open a terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [light and dark theme](../inbox/20261030-220018-573e-light-and-dark-theme.md).
+- `next/` is empty. Remaining phase 1 tasks in the inbox: [deletes to the OS trash](../inbox/20261030-220017-e886-deletes-go-to-the-os-trash.md), [full text search](20261030-220014-91bd-full-text-search.md), [open a terminal](../inbox/20261030-220016-3964-open-terminal-in-the-repository.md), [light and dark theme](20261030-220018-573e-light-and-dark-theme.md).

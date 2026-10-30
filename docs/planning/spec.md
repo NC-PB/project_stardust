@@ -272,6 +272,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Every command is reachable from the palette.
   - [x] Theme `S-theme`
     - Light and dark, following the system by default.
+    - A System / Light / Dark switch in the app header; the choice is kept in the app settings (`settings.json` of `tauri-plugin-store`, key `theme`), never in a repository. An unknown or missing value means System (D-20261031-003015-8wy7).
+    - The page, the editor (its own colours follow the app, CodeMirror's dark flag for selection and cursor), Mermaid diagrams (`dark` or `default` theme) and the native window frame follow the theme; with System the frame follows the operating system by itself. A system change shows at once.
+    - Implemented in `src/lib/theme.ts`, `src/stores/theme-store.ts`, `src/components/theme-switch.tsx`; the frame through `getCurrentWindow().setTheme`, which needs the `core:window:allow-set-theme` permission.
 - Platform `S-platform`
   - [x] Shell `S-tauri`
     - Tauri 2 app, signed builds for Windows, macOS, Linux.
@@ -578,6 +581,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: Rust keeps the lowercased text of every markdown file under the planning root in memory and matches every query word as a substring. Built when the watcher starts, updated from its batches. Measured fast enough on 5,000 files. Decided by the user on 2026-10-31.
 - Rejected: tantivy with an in-memory index (a large dependency; its tokenizer splits ids at `-`, so id searches become phrase queries).
 - Consequences: `S-search-fulltext` criteria. The Domain wording for Search still says "from a library"; a proposal to change it is in task 20261030-220014-91bd. Phase 3's "search scaling" starts from this scan.
+
+### D-20261031-003015-8wy7 · Theme switch in the header, window frame themed too
+- Context: `S-theme` asks for an override "in app settings", but the app has no settings screen; a page in dark with a light native title bar looks broken, and setting the frame's theme needs a Tauri permission `S-tauri` does not list.
+- Decision: a System / Light / Dark switch in the app header writes the choice to the app settings. The frame follows the choice through `getCurrentWindow().setTheme`, with `core:window:allow-set-theme` as the only new permission. The editor gets a theme from the app's colour tokens instead of One Dark.
+- Rejected: a settings screen for one switch; leaving the frame on the system theme; `@uiw/react-codemirror`'s One Dark (its own background and colours clash with the app).
+- Consequences: `S-theme` criteria. `S-tauri` still lists the capabilities without `core:window:allow-set-theme`; it was outside this task.
 
 ## Glossary
 
