@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { offerLabel, projectStatus } from "@/lib/project";
+import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
 import { useProjectStore } from "@/stores/project-store";
 
 /** Chooses the repository, runs init and shows its offers (`S-init`). */
@@ -10,6 +10,7 @@ export function ProjectPanel() {
     initReport,
     offers,
     error,
+    lastChange,
     choose,
     initialize,
     accept,
@@ -64,6 +65,14 @@ export function ProjectPanel() {
             </div>
           </div>
         ))}
+
+      {lastChange && (
+        <p className="text-sm text-muted-foreground">
+          Changed on disk: {describeBatch(lastChange.batch)}
+          {lastChange.block_written.length > 0 &&
+            `; planner block rewritten in ${lastChange.block_written.join(", ")}`}
+        </p>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
     </section>

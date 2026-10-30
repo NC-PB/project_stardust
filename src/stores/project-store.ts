@@ -1,9 +1,12 @@
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import {
   type ConfigReport_Serialize,
   commands,
+  events,
   type InitReport,
+  type PlanningChanged_Serialize,
 } from "@/bindings";
 import { type Offer, offersOf } from "@/lib/project";
 import { readSetting, writeSetting } from "./settings";
@@ -18,6 +21,13 @@ interface ProjectState {
   /** Offers from the last init not yet accepted or dismissed. */
   offers: Offer[];
   error: string | null;
+  /** The last burst of changes on disk (`S-watcher`). */
+  lastChange: PlanningChanged_Serialize | null;
+  /** Counts bursts of changes, so views can reload when it grows. */
+  revision: number;
+  /** Subscribes to changes on disk; returns the function that unsubscribes. */
+  listen: () => Promise<UnlistenFn>;
+  receive: (change: PlanningChanged_Serialize) => Promise<void>;
   /** Opens the repository remembered in the app settings, if any. */
   restore: () => Promise<void>;
   /** Lets the user pick a repository folder and opens it. */
@@ -30,8 +40,13 @@ interface ProjectState {
 
 /** The repository the app works on (`S-init`), remembered in app settings. */
 export const useProjectStore = create<ProjectState>()((set, get) => {
+  /** Loads the config and, once the project exists, (re)starts the watcher. */
   const load = async (repoRoot: string) => {
-    set({ config: await commands.loadConfig(repoRoot) });
+    const config = await commands.loadConfig(repoRoot);
+    set({ config });
+    if (!config.found) return;
+    const watched = await commands.watchProject(repoRoot);
+    if (watched.status === "error") set({ error: watched.error });
   };
   const without = (offer: Offer) =>
     get().offers.filter((pending) => pending !== offer);
@@ -42,6 +57,23 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     initReport: null,
     offers: [],
     error: null,
+    lastChange: null,
+    revision: 0,
+
+    listen: () =>
+      events.planningChanged.listen((event) => get().receive(event.payload)),
+
+    receive: async (change) => {
+      set((state) => ({
+        lastChange: change,
+        revision: state.revision + 1,
+        error: change.block_error,
+      }));
+      const { repoRoot } = get();
+      // The planning root may have moved, so the watcher restarts with the new config.
+      if (change.batch.config_changed && repoRoot !== null)
+        await load(repoRoot);
+    },
 
     restore: async () => {
       const repoRoot = await readSetting<string>(REPO_ROOT_SETTING);
@@ -60,6 +92,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         initReport: null,
         offers: [],
         error: null,
+        lastChange: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);

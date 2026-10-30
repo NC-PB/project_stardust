@@ -6,6 +6,7 @@ const loadConfig = vi.fn();
 const initProject = vi.fn();
 const addImagesToGitignore = vi.fn();
 const writePlannerBlock = vi.fn();
+const watchProject = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -13,7 +14,9 @@ vi.mock("@/bindings", () => ({
     initProject: (...args: unknown[]) => initProject(...args),
     addImagesToGitignore: (...args: unknown[]) => addImagesToGitignore(...args),
     writePlannerBlock: (...args: unknown[]) => writePlannerBlock(...args),
+    watchProject: (...args: unknown[]) => watchProject(...args),
   },
+  events: { planningChanged: { listen: vi.fn() } },
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: () => pick() }));
 vi.mock("./settings", () => ({
@@ -38,12 +41,15 @@ describe("useProjectStore", () => {
     settings.clear();
     vi.clearAllMocks();
     loadConfig.mockResolvedValue({ found: false });
+    watchProject.mockResolvedValue({ status: "ok", data: null });
     useProjectStore.setState({
       repoRoot: null,
       config: null,
       initReport: null,
       offers: [],
       error: null,
+      lastChange: null,
+      revision: 0,
     });
   });
 
@@ -115,5 +121,64 @@ describe("useProjectStore", () => {
     await useProjectStore.getState().accept("gitignore");
     expect(useProjectStore.getState().offers).toEqual(["gitignore"]);
     expect(useProjectStore.getState().error).toBe("read-only");
+  });
+
+  it("watches only a repository that has a config", async () => {
+    await useProjectStore.getState().openRepository("/empty");
+    expect(watchProject).not.toHaveBeenCalled();
+
+    loadConfig.mockResolvedValue({ found: true });
+    await useProjectStore.getState().openRepository("/repo");
+    expect(watchProject).toHaveBeenCalledWith("/repo");
+  });
+
+  it("starts watching after init", async () => {
+    await useProjectStore.getState().openRepository("/repo");
+    initProject.mockResolvedValue({ status: "ok", data: initReport });
+    loadConfig.mockResolvedValue({ found: true });
+    await useProjectStore.getState().initialize();
+    expect(watchProject).toHaveBeenCalledWith("/repo");
+  });
+
+  it("counts changes on disk and reloads the config when it changed", async () => {
+    loadConfig.mockResolvedValue({ found: true });
+    await useProjectStore.getState().openRepository("/repo");
+    loadConfig.mockClear();
+    watchProject.mockClear();
+
+    const fileChange = {
+      batch: {
+        changes: [
+          { kind: "created" as const, path: "docs/planning/inbox/a.md" },
+        ],
+        config_changed: false,
+      },
+      block_written: [],
+      block_error: null,
+    };
+    await useProjectStore.getState().receive(fileChange);
+    expect(useProjectStore.getState().revision).toBe(1);
+    expect(useProjectStore.getState().lastChange).toEqual(fileChange);
+    expect(loadConfig).not.toHaveBeenCalled();
+
+    await useProjectStore.getState().receive({
+      batch: { changes: [], config_changed: true },
+      block_written: ["AGENTS.md"],
+      block_error: null,
+    });
+    expect(useProjectStore.getState().revision).toBe(2);
+    expect(loadConfig).toHaveBeenCalledWith("/repo");
+    expect(watchProject).toHaveBeenCalledWith("/repo");
+  });
+
+  it("shows why the planner block could not be regenerated", async () => {
+    await useProjectStore.getState().receive({
+      batch: { changes: [], config_changed: true },
+      block_written: [],
+      block_error: "AGENTS.md: markers out of order",
+    });
+    expect(useProjectStore.getState().error).toBe(
+      "AGENTS.md: markers out of order",
+    );
   });
 });

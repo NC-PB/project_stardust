@@ -1,26 +1,30 @@
 mod commands;
 pub mod domain;
 
-use tauri_specta::{Builder, collect_commands};
+use tauri_specta::{Builder, collect_commands, collect_events};
 
 const BINDINGS_PATH: &str = "../src/bindings.ts";
 
 fn specta_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        commands::app_version,
-        commands::new_id,
-        commands::parse_task_filename,
-        commands::task_filename,
-        commands::load_config,
-        commands::read_column,
-        commands::read_task,
-        commands::set_task_field,
-        commands::remove_task_field,
-        commands::load_template,
-        commands::write_planner_block,
-        commands::init_project,
-        commands::add_images_to_gitignore,
-    ])
+    Builder::<tauri::Wry>::new()
+        .commands(collect_commands![
+            commands::app_version,
+            commands::new_id,
+            commands::parse_task_filename,
+            commands::task_filename,
+            commands::load_config,
+            commands::read_column,
+            commands::read_task,
+            commands::set_task_field,
+            commands::remove_task_field,
+            commands::load_template,
+            commands::write_planner_block,
+            commands::init_project,
+            commands::add_images_to_gitignore,
+            commands::watch_project,
+            commands::unwatch_project,
+        ])
+        .events(collect_events![commands::PlanningChanged])
 }
 
 fn export_bindings(builder: &Builder<tauri::Wry>) {
@@ -39,7 +43,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .manage(commands::WatchState::default())
         .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

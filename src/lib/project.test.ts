@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Config, ConfigReport_Serialize, InitReport } from "@/bindings";
-import { offerLabel, offersOf, projectStatus } from "./project";
+import { describeBatch, offerLabel, offersOf, projectStatus } from "./project";
 
 const report = (found: boolean) => ({ found }) as ConfigReport_Serialize;
 
@@ -51,5 +51,21 @@ describe("offerLabel", () => {
     expect(offerLabel("planner-block", config)).toBe(
       "Add the planner block to AGENTS.md",
     );
+  });
+});
+
+describe("describeBatch", () => {
+  it("counts changes by kind in a fixed order", () => {
+    expect(
+      describeBatch({
+        changes: [
+          { kind: "removed", path: "a" },
+          { kind: "created", path: "b" },
+          { kind: "created", path: "c" },
+          { kind: "moved", id: "x", from: "d", to: "e" },
+        ],
+        config_changed: true,
+      }),
+    ).toBe("2 created, 1 moved, 1 removed, config changed");
   });
 });

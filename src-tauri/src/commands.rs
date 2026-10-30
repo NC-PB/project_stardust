@@ -3,9 +3,15 @@
 //! so the frontend calls it only through the generated `src/bindings.ts`.
 
 use std::path::Path;
+use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use tauri::AppHandle;
+use tauri_specta::Event;
 
 use crate::domain;
-use crate::domain::{agents_block, config, ids, init, task, templates};
+use crate::domain::{agents_block, config, ids, init, task, templates, watch};
 
 #[tauri::command]
 #[specta::specta]
@@ -113,4 +119,61 @@ pub fn add_images_to_gitignore(repo_root: String) -> Result<bool, String> {
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     init::add_images_to_gitignore(repo_root, &config)
+}
+
+/// The watcher of the open repository; replaced by every `watch_project` call.
+#[derive(Default)]
+pub struct WatchState(Mutex<Option<watch::PlanningWatcher>>);
+
+/// Sent once per burst of changes under the planning root or to the config.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct PlanningChanged {
+    pub batch: watch::ChangeBatch,
+    /// Files rewritten because the config changed and the planner block was regenerated.
+    pub block_written: Vec<String>,
+    /// Why the planner block could not be regenerated, if it could not.
+    pub block_error: Option<String>,
+}
+
+/// Watches the planning root and the config of the repository at `repo_root`, sending
+/// `PlanningChanged` events. A config change regenerates the planner block first. Stops the
+/// previous watcher; call again after the planning root changed.
+#[tauri::command]
+#[specta::specta]
+pub fn watch_project(
+    app: AppHandle,
+    state: tauri::State<'_, WatchState>,
+    repo_root: String,
+) -> Result<(), String> {
+    let mut current = state.0.lock().map_err(|err| err.to_string())?;
+    *current = None;
+    let root = Path::new(&repo_root).to_path_buf();
+    let config = config::load_config(&root).config;
+    let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
+        let (block_written, block_error) = if batch.config_changed {
+            let config = config::load_config(&root).config;
+            match agents_block::write_planner_block(&root, &config) {
+                Ok(report) => (report.written, None),
+                Err(err) => (Vec::new(), Some(err)),
+            }
+        } else {
+            (Vec::new(), None)
+        };
+        let _ = PlanningChanged {
+            batch,
+            block_written,
+            block_error,
+        }
+        .emit(&app);
+    })?;
+    *current = Some(watcher);
+    Ok(())
+}
+
+/// Stops watching.
+#[tauri::command]
+#[specta::specta]
+pub fn unwatch_project(state: tauri::State<'_, WatchState>) -> Result<(), String> {
+    *state.0.lock().map_err(|err| err.to_string())? = None;
+    Ok(())
 }

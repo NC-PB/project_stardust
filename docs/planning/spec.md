@@ -179,7 +179,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Without markers the block is appended; without the file it is created. Only files whose content changes are written; line endings are kept.
     - A start or end marker alone, or the two out of order, is an error and nothing is written. Turning `claude_mirror` off does not remove an earlier mirrored block (`R-no-destroy`).
     - Placeholders filled from the config: `{planning_root}`, `{spec_location}` (`spec/` or `spec.md` under the planning root, following `spec`).
-    - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. Regeneration on config change comes with the watcher (D-20261030-220523-8397).
+    - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. The watcher regenerates the block when `docs/planner.yml` changes (`S-watcher`, D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
   - [x] Adapters `S-adapters`
@@ -199,6 +199,11 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Watcher `S-watcher`
     - Changes on disk appear on the board and in open files without user action.
     - Moves are detected as moves by id, not as delete and create.
+    - Watches the planning root recursively and the folder of `docs/planner.yml`; hidden files and editor backups (`.x.swp`, `x~`) are ignored.
+    - Events are collected until no event arrived for 150 ms, at most 1 s, then sent as one batch: created, modified, removed and moved files with paths relative to the repository root, and whether the config changed (D-20261030-225824-5045).
+    - A move is a file that disappeared and a file that appeared with the same task id in one batch; a touched folder covers every file under it.
+    - A config change regenerates the planner block before the batch is sent (`S-agents-block`); the app then reloads the config and restarts the watcher.
+    - Implemented in `src-tauri/src/domain/watch.rs`; commands `watch_project(repo_root)`, `unwatch_project`; event `PlanningChanged`. Frontend: `useProjectStore` keeps the last batch and a `revision` count.
   - [x] Conflicts `S-conflicts`
     - An open file without unsaved edits reloads silently.
     - An open file with unsaved edits keeps the user's version and shows "changed on disk" with a reload button.
@@ -466,6 +471,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: typing or pasting the path.
 - Consequences: Constraints, `S-tauri`, `S-frontend` and `S-init` criteria.
 
+### D-20261030-225824-5045 · Moves are found by comparing files, not from rename events
+- Context: `S-watcher` requires moves by id. `notify` reports renames differently on each platform (rename pairs, single events, create and remove), and an agent moving many files causes bursts.
+- Decision: own debounce in the watcher thread (150 ms quiet, at most 1 s); per batch the touched paths are compared with the files known before; a removed and a created file with the same task id are a move. Only `notify` itself is used.
+- Rejected: `notify-debouncer-full` (another crate outside the Constraints, still platform specific for renames), trusting rename events.
+- Consequences: `S-watcher` criteria; a move whose two halves land in different batches (a slow copy over more than 1 s) shows as removed and created.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -487,4 +498,5 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Slug: the readable part of a task filename after the id, built from the title.
 - Section: a `## ` part of a task body: Description, Acceptance criteria, Implementation notes, Result.
 - Issue: a problem found while reading a file or the config, reported with the field or key it concerns; the file is still used.
+- Batch: the changes from one burst of events on disk, sent to the app together.
 - Offer: a change init proposes outside the planning root (the `.gitignore` entry, the planner block), applied only when the user accepts it.
