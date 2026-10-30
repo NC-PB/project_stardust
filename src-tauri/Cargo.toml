@@ -1,0 +1,36 @@
+[package]
+name = "stardust"
+version = "0.1.0"
+description = "Markdown planning board for coding agents"
+authors = ["Peter"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "stardust_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# tauri-specta has no stable release for Tauri 2; pinned exactly (D-20261030-211738-9tc3).
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["typescript"] }
+specta = "=2.0.0-rc.26"
+specta-typescript = "=0.0.13"
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

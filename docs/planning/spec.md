@@ -212,6 +212,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
 - Platform `S-platform`
   - [x] Shell `S-tauri`
     - Tauri 2 app, signed builds for Windows, macOS, Linux.
+    - `npm run tauri dev` opens one window titled "stardust" rendering the React page. Bundle identifier `dev.stardust.planner`.
+    - The webview has a Content Security Policy that allows only the app itself and Tauri IPC; no remote sources.
+    - No Tauri plugins yet; capabilities grant `core:default` only.
   - [x] Frontend `S-frontend`
     - React with TypeScript (`strict: true`), Vite.
     - UI components: shadcn/ui with Tailwind; component code lives in the repository.
@@ -219,6 +222,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Rust commands and TypeScript calls share generated types (tauri-specta); a signature mismatch is a compile error.
     - File operations, ids, frontmatter, links and gate checks are functions in Rust or plain TypeScript modules, not in components.
     - Tests: `cargo test` for Rust, Vitest for TypeScript. Lint and format: Biome.
+    - Bindings are generated into `src/bindings.ts` on every debug start and by `cargo test`; the frontend calls Rust only through them. tauri-specta and specta are pinned to exact release candidates (D-20261030-211738-9tc3).
+    - `npm run check` runs `tsc`, Biome and Vitest. Folder layout (Rust `domain/` and `commands.rs`; TypeScript `lib/`, `stores/`, `components/`) is described in `ARCHITECTURE.md`.
+    - Installed so far: shadcn/ui (Button), Tailwind 4, Zustand. dnd-kit, CodeMirror and remark/rehype come with their tasks.
   - [x] Templates `S-templates`
     - Templates for spec, task, config, planner block and prompts ship inside the app.
     - If `templates_dir` (default `docs/templates/`) contains `task.md` or `spec.md`, the tool uses those instead of the built in ones.
@@ -382,6 +388,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: all templates ship in the app; `task.md` and `spec.md` can be overridden per project in `templates_dir`.
 - Rejected: fully overridable templates, templates only in the project.
 - Consequences: `S-templates` ticked; config key `templates_dir`.
+
+### D-20261030-211738-9tc3 · tauri-specta release candidates, pinned exactly
+- Context: D-20261030-210000-7b4e chose tauri-specta, but it has no stable release for Tauri 2; only `2.0.0-rc.x` exists, and the project uses stable releases otherwise.
+- Decision: use `tauri-specta =2.0.0-rc.26`, `specta =2.0.0-rc.26`, `specta-typescript =0.0.13`, pinned with `=` as the crate documentation requires. Approved by the user on 2026-10-30.
+- Rejected: replacing tauri-specta (ts-rs, taurpc), which would change the decided stack.
+- Consequences: updates to these crates are deliberate and checked against the generated `src/bindings.ts`; move to the stable release once it exists.
 
 ## Glossary
 
