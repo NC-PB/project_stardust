@@ -212,6 +212,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - On request, generates agent command files that wrap the prompts, starting with Claude Code (`.claude/commands/`). Never required.
   - [x] Open terminal `S-terminal`
     - Opens the user's terminal in the repository root. Nothing else.
+    - An "Open terminal" button in the project bar. Only the terminal program starts, with the repository root as its folder; no command is passed to it, and the app does not wait for it.
+    - macOS: `open -a <app> <repository>`, Terminal unless another application is set. Windows: the set program, then Windows Terminal (`wt -d`), then a new `cmd` console. Linux: the set program, then `x-terminal-emulator`, gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, wezterm, foot, xterm, each with its working directory flag where it needs one. The first that exists starts; if none does, the error lists what was tried.
+    - The terminal is set in the Settings menu of the header and kept in the app settings (`settings.json`, key `terminal`); empty means the default (D-20261031-003519-cfn5).
+    - Implemented in `src-tauri/src/domain/terminal.rs` (`launches`, `open_terminal`); command `open_terminal(repo_root, terminal)`; `src/stores/terminal-store.ts`, `src/components/settings-menu.tsx`.
   - [x] Session panel `S-session-panel`
     - Computed, nothing written: tasks in `next/` in order, last five decisions, open blocking questions, Result of the most recently completed task.
 - Files `S-files`
@@ -587,6 +591,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: a System / Light / Dark switch in the app header writes the choice to the app settings. The frame follows the choice through `getCurrentWindow().setTheme`, with `core:window:allow-set-theme` as the only new permission. The editor gets a theme from the app's colour tokens instead of One Dark.
 - Rejected: a settings screen for one switch; leaving the frame on the system theme; `@uiw/react-codemirror`'s One Dark (its own background and colours clash with the app).
 - Consequences: `S-theme` criteria. `S-tauri` still lists the capabilities without `core:window:allow-set-theme`; it was outside this task.
+
+### D-20261031-003519-cfn5 · Terminal started from Rust, set in a Settings menu
+- Context: `S-terminal` opens the user's terminal and nothing else, configurable in app settings. The Constraints allow `tauri-plugin-shell`, but its permissions are scoped commands run from the frontend; the app has no settings screen.
+- Decision: one Rust command starts the terminal with `std::process::Command`, from a fixed list per platform led by the configured terminal; no plugin and no frontend permission. A Settings menu in the header holds the terminal field and the theme switch.
+- Rejected: `tauri-plugin-shell` (a frontend-reachable shell scope for one fixed launch); a separate settings window.
+- Consequences: `S-terminal` criteria. `tauri-plugin-shell` stays unused so far.
 
 ## Glossary
 

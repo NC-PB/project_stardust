@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useTerminalStore } from "@/stores/terminal-store";
 
 /** Chooses the repository, runs init and shows its offers (`S-init`). */
 export function ProjectPanel() {
@@ -20,6 +21,7 @@ export function ProjectPanel() {
   } = useProjectStore();
   const status = projectStatus(repoRoot, config);
   const openFile = useEditorStore((state) => state.open);
+  const terminal = useTerminalStore();
   const openSource = (path: string) => {
     if (repoRoot !== null) void openFile(repoRoot, path);
   };
@@ -30,10 +32,32 @@ export function ProjectPanel() {
         <p className="truncate text-sm text-muted-foreground">
           {repoRoot ?? "No repository chosen"}
         </p>
-        <Button variant="outline" onClick={() => void choose()}>
-          Open repository
-        </Button>
+        <div className="flex gap-2">
+          {repoRoot !== null && (
+            <Button
+              variant="outline"
+              onClick={() => void terminal.open(repoRoot)}
+              title="Opens your terminal in the repository root"
+            >
+              Open terminal
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => void choose()}>
+            Open repository
+          </Button>
+        </div>
       </div>
+      {terminal.error && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-2 text-sm text-destructive"
+        >
+          <span>{terminal.error}</span>
+          <Button variant="ghost" size="xs" onClick={terminal.dismiss}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {status === "needs-init" && (
         <div className="flex items-center justify-between gap-4">

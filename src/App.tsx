@@ -4,10 +4,11 @@ import { Editor } from "@/components/editor";
 import { ProjectPanel } from "@/components/project-panel";
 import { PromptNotice } from "@/components/prompt-notice";
 import { SearchBox } from "@/components/search-box";
-import { ThemeSwitch } from "@/components/theme-switch";
+import { SettingsMenu } from "@/components/settings-menu";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useTerminalStore } from "@/stores/terminal-store";
 import { useThemeStore } from "@/stores/theme-store";
 
 function App() {
@@ -16,8 +17,12 @@ function App() {
   const restore = useProjectStore((state) => state.restore);
   const listen = useProjectStore((state) => state.listen);
   const startTheme = useThemeStore((state) => state.start);
+  const loadTerminal = useTerminalStore((state) => state.load);
 
   useEffect(() => startTheme(), [startTheme]);
+  useEffect(() => {
+    void loadTerminal();
+  }, [loadTerminal]);
 
   useEffect(() => {
     void loadVersion();
@@ -36,7 +41,7 @@ function App() {
       <header className="relative flex w-full items-center justify-center">
         <h1 className="text-2xl font-semibold">stardust</h1>
         <div className="absolute right-0">
-          <ThemeSwitch />
+          <SettingsMenu />
         </div>
       </header>
       <ProjectPanel />

@@ -66,6 +66,12 @@ export const commands = {
 	 */
 	search: (query: string, limit: number) => typedError<SearchHit[], string>(__TAURI_INVOKE("search", { query, limit })),
 	/**
+	 *  Starts the user's terminal in `repo_root` and nothing else (`S-terminal`). `terminal` is the
+	 *  app setting: an application name on macOS, a program elsewhere; empty for the default.
+	 *  Returns the program that started.
+	 */
+	openTerminal: (repoRoot: string, terminal: string | null) => typedError<string, string>(__TAURI_INVOKE("open_terminal", { repoRoot, terminal })),
+	/**
 	 *  The template of `kind` for the repository at `repo_root`: the project override from
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */

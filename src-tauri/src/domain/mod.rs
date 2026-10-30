@@ -13,6 +13,7 @@ pub mod prompts;
 pub mod search;
 pub mod task;
 pub mod templates;
+pub mod terminal;
 pub mod watch;
 
 /// Version of the app as set in `Cargo.toml`.

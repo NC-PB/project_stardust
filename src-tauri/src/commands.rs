@@ -13,7 +13,7 @@ use tauri_specta::Event;
 use crate::domain;
 use crate::domain::{
     agents_block, board, config, files, ids, init, make_task, prompts, search, task, templates,
-    watch,
+    terminal, watch,
 };
 
 #[tauri::command]
@@ -194,6 +194,20 @@ pub fn fill_prompt(
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     prompts::fill_prompt(prompt, repo_root, &config, &input)
+}
+
+/// Starts the user's terminal in `repo_root` and nothing else (`S-terminal`). `terminal` is the
+/// app setting: an application name on macOS, a program elsewhere; empty for the default.
+/// Returns the program that started.
+#[tauri::command]
+#[specta::specta]
+pub fn open_terminal(repo_root: String, terminal: Option<String>) -> Result<String, String> {
+    let launches = terminal::launches(
+        terminal::Platform::current(),
+        terminal.as_deref(),
+        &repo_root,
+    );
+    terminal::open_terminal(&launches, Path::new(&repo_root))
 }
 
 /// The template of `kind` for the repository at `repo_root`: the project override from
