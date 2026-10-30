@@ -1,12 +1,22 @@
 mod commands;
 pub mod domain;
 
-use tauri_specta::{collect_commands, Builder};
+use tauri_specta::{Builder, collect_commands};
 
 const BINDINGS_PATH: &str = "../src/bindings.ts";
 
 fn specta_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![commands::app_version])
+    Builder::<tauri::Wry>::new().commands(collect_commands![
+        commands::app_version,
+        commands::new_id,
+        commands::parse_task_filename,
+        commands::task_filename,
+        commands::load_config,
+        commands::read_column,
+        commands::read_task,
+        commands::set_task_field,
+        commands::remove_task_field,
+    ])
 }
 
 fn export_bindings(builder: &Builder<tauri::Wry>) {

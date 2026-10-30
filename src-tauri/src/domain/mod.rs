@@ -1,6 +1,10 @@
 //! Domain logic: plain Rust with no Tauri dependency, tested with `cargo test`.
 //! Planning modules (ids, task files, config, ...) live here as their tasks land.
 
+pub mod config;
+pub mod ids;
+pub mod task;
+
 /// Version of the app as set in `Cargo.toml`.
 pub fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")

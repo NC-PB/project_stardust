@@ -5,5 +5,198 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
+	/**  A new id for `kind`, unique across every file under `planning_root`. */
+	newId: (planningRoot: string, kind: IdKind) => typedError<string, string>(__TAURI_INVOKE("new_id", { planningRoot, kind })),
+	/**  Id and slug of a task filename, or `null` when the name is not a task file. */
+	parseTaskFilename: (name: string) => __TAURI_INVOKE<TaskFilename | null>("parse_task_filename", { name }),
+	/**  The filename `<id>-<slug>.md` for a task with `title`. */
+	taskFilename: (id: string, title: string) => __TAURI_INVOKE<string>("task_filename", { id, title }),
+	/**  The config of the repository at `repo_root`, with every problem found in it. */
+	loadConfig: (repoRoot: string) => __TAURI_INVOKE<ConfigReport_Serialize>("load_config", { repoRoot }),
+	/**  Every task file directly in the column folder `dir`, broken ones included. */
+	readColumn: (dir: string) => typedError<Task_Serialize[], string>(__TAURI_INVOKE("read_column", { dir })),
+	/**  One task file. */
+	readTask: (path: string) => __TAURI_INVOKE<Task_Serialize>("read_task", { path }),
+	/**  Sets one frontmatter field of the task file at `path`, leaving the rest of the file as is. */
+	setTaskField: (path: string, key: string, value: FieldValue) => typedError<null, string>(__TAURI_INVOKE("set_task_field", { path, key, value })),
+	/**  Removes one frontmatter field of the task file at `path`, leaving the rest of the file as is. */
+	removeTaskField: (path: string, key: string) => typedError<null, string>(__TAURI_INVOKE("remove_task_field", { path, key })),
 };
+
+/* Types */
+/**  Agent command file generators (`S-adapters`). */
+export type Adapter = "claude-code";
+
+/**  The contents of `docs/planner.yml`. Paths are relative to the repository root. */
+export type Config = {
+	planning_root: string,
+	images_root: string,
+	templates_dir: string,
+	/**  Column folders under the planning root, in display order. */
+	columns: string[],
+	/**  The column that means finished; always one of `columns`. */
+	terminal: string,
+	/**  Folders under the planning root that hold notes, not tasks. */
+	notes: string[],
+	spec: SpecLocation,
+	stale_after_days: number,
+	review_after_days: number,
+	gate: GateConfig,
+	agents_file: string,
+	claude_import: boolean,
+	claude_mirror: boolean,
+	adapters: Adapter[],
+};
+
+/**  A problem in the config. The value it concerns has been replaced by its default. */
+export type ConfigIssue = ConfigIssue_Serialize | ConfigIssue_Deserialize;
+
+/**  A problem in the config. The value it concerns has been replaced by its default. */
+export type ConfigIssue_Deserialize = {
+	/**  The key, `gate.` prefixed for gate keys; `None` for problems with the whole file. */
+	key?: string | null,
+	message: string,
+};
+
+/**  A problem in the config. The value it concerns has been replaced by its default. */
+export type ConfigIssue_Serialize = {
+	/**  The key, `gate.` prefixed for gate keys; `None` for problems with the whole file. */
+	key: string | null,
+	message: string,
+};
+
+/**  The loaded config and everything wrong with it. */
+export type ConfigReport = ConfigReport_Serialize | ConfigReport_Deserialize;
+
+/**  The loaded config and everything wrong with it. */
+export type ConfigReport_Deserialize = {
+	config: Config,
+	/**  Whether `docs/planner.yml` exists. Without it every value is a default. */
+	found: boolean,
+	issues: ConfigIssue_Deserialize[],
+	/**  Entries of `columns` with no folder under the planning root. */
+	missing_columns: string[],
+};
+
+/**  The loaded config and everything wrong with it. */
+export type ConfigReport_Serialize = {
+	config: Config,
+	/**  Whether `docs/planner.yml` exists. Without it every value is a default. */
+	found: boolean,
+	issues: ConfigIssue_Serialize[],
+	/**  Entries of `columns` with no folder under the planning root. */
+	missing_columns: string[],
+};
+
+/**  A value to write into a frontmatter field. */
+export type FieldValue = ({ Text: string }) & { List?: never; Number?: never } | ({ List: string[] }) & { Number?: never; Text?: never } | ({ Number: number }) & { List?: never; Text?: never };
+
+/**  Which checks the gate applies (`S-gate`). */
+export type GateConfig = {
+	no_open_blocking_questions: boolean,
+	nodes_ticked_and_specified: boolean,
+	rules_referenced: boolean,
+};
+
+/**  What an id is for; decides the prefix. */
+export type IdKind = "Task" | "Question" | "Decision";
+
+/**  A `## ` section of a task body. */
+export type Section = {
+	heading: string,
+	/**  The text up to the next `## ` heading, without surrounding blank lines. */
+	content: string,
+};
+
+/**  Which form of the spec to use. */
+export type SpecLocation = 
+/**  `spec/` if the folder exists, otherwise `spec.md`. */
+"auto" | 
+/**  Always `spec.md`. */
+"file" | 
+/**  Always the `spec/` folder. */
+"folder";
+
+/**  One task file as read from disk. */
+export type Task = Task_Serialize | Task_Deserialize;
+
+/**  The parts of a task filename `<id>-<slug>.md`. */
+export type TaskFilename = {
+	id: string,
+	/**  Empty when the file is named `<id>.md`. */
+	slug: string,
+};
+
+/**  A problem in a task file. The file is still listed. */
+export type TaskIssue = TaskIssue_Serialize | TaskIssue_Deserialize;
+
+/**  A problem in a task file. The file is still listed. */
+export type TaskIssue_Deserialize = {
+	/**  The frontmatter field; `None` for problems with the file as a whole. */
+	key?: string | null,
+	message: string,
+};
+
+/**  A problem in a task file. The file is still listed. */
+export type TaskIssue_Serialize = {
+	/**  The frontmatter field; `None` for problems with the file as a whole. */
+	key: string | null,
+	message: string,
+};
+
+/**  One task file as read from disk. */
+export type Task_Deserialize = {
+	file_name: string,
+	/**
+	 *  The id from the filename (`R-filename-truth`); from the frontmatter only when the
+	 *  filename has none; `None` when neither has a valid id.
+	 */
+	id?: string | null,
+	/**  From the frontmatter, or derived from the filename when missing. */
+	title: string,
+	created?: string | null,
+	tags: string[],
+	/**  1 to 5. */
+	priority?: number | null,
+	depends_on: string[],
+	parent?: string | null,
+	implements: string[],
+	completed?: string | null,
+	/**  The `## ` sections of the body, in file order. */
+	sections: Section[],
+	issues: TaskIssue_Deserialize[],
+};
+
+/**  One task file as read from disk. */
+export type Task_Serialize = {
+	file_name: string,
+	/**
+	 *  The id from the filename (`R-filename-truth`); from the frontmatter only when the
+	 *  filename has none; `None` when neither has a valid id.
+	 */
+	id: string | null,
+	/**  From the frontmatter, or derived from the filename when missing. */
+	title: string,
+	created: string | null,
+	tags: string[],
+	/**  1 to 5. */
+	priority: number | null,
+	depends_on: string[],
+	parent: string | null,
+	implements: string[],
+	completed: string | null,
+	/**  The `## ` sections of the body, in file order. */
+	sections: Section[],
+	issues: TaskIssue_Serialize[],
+};
+
+/* Tauri Specta runtime */
+async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+    try {
+        return { status: "ok", data: await result };
+    } catch (e) {
+        if (e instanceof Error) throw e;
+        return { status: "error", error: e as any };
+    }
+}
 

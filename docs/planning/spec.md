@@ -98,6 +98,13 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - One task per file (`R-one-task-per-file`). Filename `<id>-<slug>.md`.
     - Frontmatter: `id`, `title`, `created` required; `tags`, `priority` (1 to 5), `depends_on`, `parent`, `implements`, `completed` optional.
     - Sections: Description, Acceptance criteria, Implementation notes, Result. See `templates/task.md`.
+    - Reading never drops a file: every `*.md` file in a column is listed, with issues for a filename without id, missing frontmatter, invalid YAML, missing required fields and invalid values (field named). Invalid values are left out; a missing title is derived from the filename.
+    - Frontmatter that is not valid YAML is reported, and `id`, `title`, `created`, `completed`, `parent` are still read from their `key: value` lines (D-20261030-215110-cgf7).
+    - The filename id is the task id; a different frontmatter id is reported (`R-filename-truth`). Without an id in the filename the frontmatter id is used.
+    - Dates are `YYYY-MM-DD`; `depends_on` and `parent` hold task ids. Unknown fields are kept and not reported.
+    - Sections are the `## ` headings of the body outside code fences, with their text.
+    - Writing a field replaces only that field's lines; a new field goes to the end of the frontmatter; removing a field deletes its lines. Comments, unknown fields, field order, list style, line endings and the body stay unchanged. Values are written plain when YAML reads them back unchanged, otherwise double quoted; lists in flow style `[a, b]`.
+    - Implemented in `src-tauri/src/domain/task.rs`; commands `read_column`, `read_task`, `set_task_field`, `remove_task_field`.
   - [x] Board columns `S-board-columns`
     - The board shows the folders listed in `columns`, in config order.
     - Folders not listed in `columns` are not shown.
@@ -173,8 +180,11 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Computed, nothing written: tasks in `next/` in order, last five decisions, open blocking questions, Result of the most recently completed task.
 - Files `S-files`
   - [x] Ids `S-ids`
-    - Tasks: millisecond timestamp plus 4 random characters, `YYYYMMDD-HHMMSS-xxxx`.
+    - Tasks: local time to the second plus 4 random characters from `[a-z0-9]`, `YYYYMMDD-HHMMSS-xxxx` (D-20261030-213854-k3cv).
     - Questions and decisions: same with `Q-` and `D-` prefix.
+    - A new id is checked against every id-shaped token in the filenames and markdown contents under the planning root, archive included, and regenerated on collision (`R-unique-ids`). Task ids and Q/D ids share one space: the part after the prefix is unique.
+    - Task filenames are `<id>-<slug>.md`; `<id>.md` is accepted when a title has no usable characters. The slug is the title in lowercase ascii words joined by hyphens, common Latin diacritics transliterated (umlauts as `ae`, `oe`, `ue`), at most 60 characters cut at a word boundary.
+    - Implemented in `src-tauri/src/domain/ids.rs`; commands `new_id`, `parse_task_filename`, `task_filename`. The planning root is passed by the caller until `S-config` provides it.
     - Nodes and rules: readable slugs with `S-` and `R-` prefix.
   - [x] Watcher `S-watcher`
     - Changes on disk appear on the board and in open files without user action.
@@ -199,6 +209,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
 - Workspace `S-workspace`
   - [x] Config `S-config`
     - `docs/planner.yml`. See `templates/planner.yml`.
+    - Every key is optional. Defaults are parsed from `templates/planner.yml` itself, so template and code agree.
+    - Each key is read on its own: an invalid value is reported with its key (`gate.` prefixed for gate keys) and replaced by its default; the other keys still apply. Unknown keys are reported and ignored. Unreadable or non-YAML files are reported and give all defaults. Loading never fails (D-20261030-214550-gl67).
+    - Paths must be relative to the repository root without `..`; `columns` and `notes` are plain folder names, each listed once, `columns` not empty; day counts are at least 1; `spec` is `auto`, `file` or `folder`; `adapters` accepts `claude-code`.
+    - `terminal` must be one of `columns`; otherwise it is reported and the last column takes its place.
+    - The report also says whether the file exists and lists columns without a folder under the planning root.
+    - Implemented in `src-tauri/src/domain/config.rs`; command `load_config(repo_root)` returns the config with its issues.
   - [x] Projects `S-multi-project`
     - A workspace list of repositories, one tab and one board per project, recent projects on the start screen.
   - [ ] Combined view `S-combined-view` #later
@@ -395,6 +411,24 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: replacing tauri-specta (ts-rs, taurpc), which would change the decided stack.
 - Consequences: updates to these crates are deliberate and checked against the generated `src/bindings.ts`; move to the stable release once it exists.
 
+### D-20261030-213854-k3cv · Ids keep second resolution, suffix is base36
+- Context: `S-ids` and D-20260919-103000-c8d4 said "millisecond timestamp", but the format `YYYYMMDD-HHMMSS-xxxx` only holds seconds; the ids task asked for a hex suffix, but existing ids such as `D-20261030-211738-9tc3` already use other letters.
+- Decision: keep `YYYYMMDD-HHMMSS-xxxx` in local time to the second; the suffix is 4 characters from `[a-z0-9]` (about 1.7 million per second); a new id is checked against all ids under the planning root and regenerated on collision. Decided by the user on 2026-10-30.
+- Rejected: adding milliseconds (`YYYYMMDD-HHMMSS-mmm-xxxx`; two formats to parse forever), hex suffix (makes an existing id invalid).
+- Consequences: `S-ids` criteria corrected. `AGENTS.md` and `templates/AGENTS-block.md` still say "millisecond". Direct Rust dependencies `chrono`, `fastrand`, `walkdir`, all already in the lock file through Tauri.
+
+### D-20261030-214550-gl67 · Config is read key by key and never fails
+- Context: `S-config` requires that an invalid value names its key and the app keeps running with defaults; Rust has no YAML parser in the tree, and `serde_yaml` is deprecated.
+- Decision: YAML is parsed with `serde_norway` (maintained fork of `serde_yaml`, stable, MIT or Apache-2.0). Each key is deserialized and checked on its own and falls back to its default on failure; unknown keys are reported. A `terminal` outside `columns` falls back to the last column. `spec` accepts `auto`, `file`, `folder`.
+- Rejected: all-or-nothing parsing (one typo resets the whole file), `serde_yml` (deprecated), `serde-saphyr` (newer, less used).
+- Consequences: `S-config` criteria. Defaults are parsed from `templates/planner.yml` with `include_str!`, which the templates task can build on.
+
+### D-20261030-215110-cgf7 · Task files are written line by line and read leniently
+- Context: task files are edited by humans and agents; a YAML round trip would drop comments and reformat lists, and two existing task files have titles with an unquoted `: `, which is not valid YAML.
+- Decision: writing replaces only the lines of the changed field and quotes values that plain YAML would misread. Reading reports invalid YAML as an issue and still takes `id`, `title`, `created`, `completed`, `parent` from their `key: value` lines, so such tasks keep their title on the board.
+- Rejected: full YAML round trip (loses comments and formatting), dropping files with invalid frontmatter (breaks `S-task-format`).
+- Consequences: `S-task-format` criteria; fixing the existing files and the agent instructions is task 20261030-215109-0my7 in the inbox.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -413,3 +447,6 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Prompt: a template copied to an agent for one step.
 - Adapter: generated agent command files wrapping the prompts.
 - Area: a top level part of the domain, core, supporting or generic.
+- Slug: the readable part of a task filename after the id, built from the title.
+- Section: a `## ` part of a task body: Description, Acceptance criteria, Implementation notes, Result.
+- Issue: a problem found while reading a file or the config, reported with the field or key it concerns; the file is still used.
