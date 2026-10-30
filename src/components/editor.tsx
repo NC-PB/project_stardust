@@ -119,6 +119,9 @@ export function Editor() {
     save,
     close,
     toggleMode,
+    selection,
+    setSelection,
+    makeTask,
   } = useEditorStore();
 
   useEffect(() => {
@@ -151,6 +154,15 @@ export function Editor() {
         <Button
           variant="outline"
           size="xs"
+          disabled={selection.trim() === ""}
+          onClick={() => void makeTask()}
+          title="Select text first; the task goes to the first column"
+        >
+          Make task
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           onClick={toggleMode}
           title="Ctrl/⌘+E"
         >
@@ -174,6 +186,9 @@ export function Editor() {
           <CodeMirror
             value={text}
             onChange={edit}
+            onUpdate={(update) => {
+              if (update.selectionSet) setSelection(selectedText(update));
+            }}
             extensions={sourceExtensions}
             basicSetup={{
               lineNumbers: false,
@@ -260,6 +275,15 @@ function Notice({
   );
 }
 
+/** The text of every selected range, one per line. */
+function selectedText(update: ViewUpdate): string {
+  const { state } = update;
+  return state.selection.ranges
+    .filter((range) => !range.empty)
+    .map((range) => state.sliceDoc(range.from, range.to))
+    .join("\n");
+}
+
 /** The frontmatter fields of the open file; a field is written when it loses focus. */
 function FrontmatterForm() {
   const task = useEditorStore((state) => state.task);
@@ -338,8 +362,16 @@ function FieldInput({ field, value }: { field: FormField; value: string }) {
 
 /** The body rendered with GFM, local images and Mermaid diagrams. */
 function ReadView({ text }: { text: string }) {
+  const setSelection = useEditorStore((state) => state.setSelection);
+  // The rendered text of the selection, read when the mouse or a key is released.
+  const readSelection = () =>
+    setSelection(window.getSelection()?.toString() ?? "");
   return (
-    <article className="markdown-read text-sm">
+    <article
+      className="markdown-read text-sm"
+      onMouseUp={readSelection}
+      onKeyUp={readSelection}
+    >
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{ img: LocalImage, a: Link, pre: CodeBlock }}

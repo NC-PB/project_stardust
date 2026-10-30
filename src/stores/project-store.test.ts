@@ -10,6 +10,10 @@ const watchProject = vi.fn();
 const loadBoard = vi.fn();
 const applyBatch = vi.fn();
 const clearBoard = vi.fn();
+const sources = {
+  braindump: "/repo/docs/planning/braindump.md",
+  spec: "/repo/docs/planning/spec.md",
+};
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -18,6 +22,7 @@ vi.mock("@/bindings", () => ({
     addImagesToGitignore: (...args: unknown[]) => addImagesToGitignore(...args),
     writePlannerBlock: (...args: unknown[]) => writePlannerBlock(...args),
     watchProject: (...args: unknown[]) => watchProject(...args),
+    sourceFiles: async () => sources,
   },
   events: { planningChanged: { listen: vi.fn() } },
 }));
@@ -153,6 +158,11 @@ describe("useProjectStore", () => {
     loadConfig.mockResolvedValue(report);
     await useProjectStore.getState().openRepository("/repo");
     expect(loadBoard).toHaveBeenCalledWith("/repo", report.config, []);
+    expect(useProjectStore.getState().sources).toEqual(sources);
+
+    loadConfig.mockResolvedValue({ found: false });
+    await useProjectStore.getState().openRepository("/empty");
+    expect(useProjectStore.getState().sources).toBeNull();
   });
 
   it("starts watching after init", async () => {

@@ -140,6 +140,11 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Per column: priority, created, dependency order.
   - [x] Make task `S-make-task`
     - Selecting text in any file and choosing "Make task" creates a task file in `inbox/` with the selection as Description and a link back to the source file.
+    - "Make task" is a button in the editor header, enabled while text is selected: the markdown in source mode, the rendered text in read mode. The task goes to the first column of `columns`; the new file opens in the editor.
+    - "Braindump" and "Spec" buttons in the project bar open those files in the editor; Spec only when the spec is a single file (D-20261031-000940-bhg8).
+    - The new task is the task template (`S-templates`, override included) with its examples replaced: a new id, `title` from the first non-empty line of the selection without list, heading and quote markers (at most 80 characters, cut at a word), `created` today, `tags`, `implements`, `depends_on` as `[]`, no `priority`, `completed` or `parent`. Description is the selection followed by `Source: [<file name>](<relative link>)`; Acceptance criteria is one empty `- [ ] `; the other sections keep the template's text.
+    - An empty selection, a missing first column folder or an existing file name is an error; nothing is overwritten.
+    - Implemented in `src-tauri/src/domain/make_task.rs`; commands `make_task(repo_root, source, selection)` returning the new path, `source_files(repo_root)`.
   - [x] Sub-tasks `S-subtasks`
     - A task with `parent: <id>` is a child. The parent card shows the child count.
   - [x] Dependencies `S-dependencies`
@@ -540,6 +545,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: last write wins (overwrites agent changes silently); a three-way merge (out of proportion for phase 1); relying on the CodeMirror undo history to bring back replaced edits (invisible, lost when the editor remounts).
 - Consequences: `S-conflicts` and `S-editor-core` criteria; command `write_text` replaced by `save_text` and `create_text`.
 
+### D-20261031-000940-bhg8 · Braindump and spec open from the project bar, new tasks replace the template's examples
+- Context: `S-make-task` selects text "in any file", but only task cards opened in the editor; the task template is a filled-in example (title, tags, priority, two board criteria), so "uses the task template" does not say which parts a new task keeps.
+- Decision: "Braindump" and "Spec" buttons in the project bar open those files (spec only as a single file). A new task keeps the template's layout and headings; id, title, created are set, lists emptied, priority removed, Description and Acceptance criteria replaced, the other sections kept. Decided by the user on 2026-10-31.
+- Rejected: a braindump button only (spec waits for `S-spec-file`); replacing only the Description (every task would carry the template's example tags and criteria).
+- Consequences: `S-make-task` criteria. The tag and criteria examples in a project's own `task.md` override are replaced too.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -568,3 +579,4 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Source mode: the editor showing the file text with styled markup.
 - Read mode: the editor showing the rendered body of the file.
 - Conflict: unsaved edits of the open file meeting a different text on disk, or a removed file.
+- Source file: the file text was selected in for Make task; the new task links back to it.

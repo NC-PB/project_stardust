@@ -7,6 +7,7 @@ import {
   events,
   type InitReport,
   type PlanningChanged_Serialize,
+  type SourceFiles,
 } from "@/bindings";
 import { type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
@@ -23,6 +24,8 @@ interface ProjectState {
   /** Offers from the last init not yet accepted or dismissed. */
   offers: Offer[];
   error: string | null;
+  /** The braindump and spec file, which open in the editor from the project bar. */
+  sources: SourceFiles | null;
   /** The last burst of changes on disk (`S-watcher`). */
   lastChange: PlanningChanged_Serialize | null;
   /** Counts bursts of changes, so views can reload when it grows. */
@@ -47,9 +50,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     const config = await commands.loadConfig(repoRoot);
     set({ config });
     if (!config.found) {
+      set({ sources: null });
       useBoardStore.getState().clear();
       return;
     }
+    set({ sources: await commands.sourceFiles(repoRoot) });
     const watched = await commands.watchProject(repoRoot);
     if (watched.status === "error") set({ error: watched.error });
     await useBoardStore
@@ -65,6 +70,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     initReport: null,
     offers: [],
     error: null,
+    sources: null,
     lastChange: null,
     revision: 0,
 
@@ -103,6 +109,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         initReport: null,
         offers: [],
         error: null,
+        sources: null,
         lastChange: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);

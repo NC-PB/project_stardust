@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
+import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 
 /** Chooses the repository, runs init and shows its offers (`S-init`). */
@@ -11,12 +12,17 @@ export function ProjectPanel() {
     offers,
     error,
     lastChange,
+    sources,
     choose,
     initialize,
     accept,
     dismiss,
   } = useProjectStore();
   const status = projectStatus(repoRoot, config);
+  const openFile = useEditorStore((state) => state.open);
+  const openSource = (path: string) => {
+    if (repoRoot !== null) void openFile(repoRoot, path);
+  };
 
   return (
     <section className="flex w-full max-w-xl flex-col gap-4">
@@ -37,7 +43,27 @@ export function ProjectPanel() {
       )}
 
       {status === "ready" && !initReport && (
-        <p className="text-sm">Planning root: {config?.config.planning_root}</p>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm">
+            Planning root: {config?.config.planning_root}
+          </p>
+          <div className="flex gap-2">
+            {sources?.braindump && (
+              <SourceButton
+                label="Braindump"
+                path={sources.braindump}
+                onOpen={openSource}
+              />
+            )}
+            {sources?.spec && (
+              <SourceButton
+                label="Spec"
+                path={sources.spec}
+                onOpen={openSource}
+              />
+            )}
+          </div>
+        </div>
       )}
 
       {initReport && (
@@ -90,5 +116,22 @@ function PathList({ title, paths }: { title: string; paths: string[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Opens a planning file other than a task in the editor (`S-make-task`). */
+function SourceButton({
+  label,
+  path,
+  onOpen,
+}: {
+  label: string;
+  path: string;
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <Button variant="outline" size="sm" onClick={() => onOpen(path)}>
+      {label}
+    </Button>
   );
 }

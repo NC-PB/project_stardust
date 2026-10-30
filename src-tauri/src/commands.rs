@@ -11,7 +11,9 @@ use tauri::AppHandle;
 use tauri_specta::Event;
 
 use crate::domain;
-use crate::domain::{agents_block, board, config, files, ids, init, task, templates, watch};
+use crate::domain::{
+    agents_block, board, config, files, ids, init, make_task, task, templates, watch,
+};
 
 #[tauri::command]
 #[specta::specta]
@@ -156,6 +158,27 @@ pub fn remove_field_in_text(text: String, key: String) -> Result<String, String>
 #[specta::specta]
 pub fn read_image(repo_root: String, file: String, src: String) -> Result<String, String> {
     files::image_data_url(Path::new(&repo_root), Path::new(&file), &src)
+}
+
+/// A new task in the first column from `selection`, text selected in the file `source`
+/// (`S-make-task`). Returns the path of the new file.
+#[tauri::command]
+#[specta::specta]
+pub fn make_task(repo_root: String, source: String, selection: String) -> Result<String, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    make_task::make_task(repo_root, &config, Path::new(&source), &selection, &today)
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
+}
+
+/// The braindump and the spec file of the repository at `repo_root`, where they exist.
+#[tauri::command]
+#[specta::specta]
+pub fn source_files(repo_root: String) -> make_task::SourceFiles {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    make_task::source_files(repo_root, &config)
 }
 
 /// The template of `kind` for the repository at `repo_root`: the project override from

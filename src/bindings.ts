@@ -49,6 +49,13 @@ export const commands = {
 	 */
 	readImage: (repoRoot: string, file: string, src: string) => typedError<string, string>(__TAURI_INVOKE("read_image", { repoRoot, file, src })),
 	/**
+	 *  A new task in the first column from `selection`, text selected in the file `source`
+	 *  (`S-make-task`). Returns the path of the new file.
+	 */
+	makeTask: (repoRoot: string, source: string, selection: string) => typedError<string, string>(__TAURI_INVOKE("make_task", { repoRoot, source, selection })),
+	/**  The braindump and the spec file of the repository at `repo_root`, where they exist. */
+	sourceFiles: (repoRoot: string) => __TAURI_INVOKE<SourceFiles_Serialize>("source_files", { repoRoot }),
+	/**
 	 *  The template of `kind` for the repository at `repo_root`: the project override from
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */
@@ -227,6 +234,30 @@ export type Section = {
 	heading: string,
 	/**  The text up to the next `## ` heading, without surrounding blank lines. */
 	content: string,
+};
+
+/**
+ *  The files besides tasks that text is usually selected in, as absolute paths; `None` when the
+ *  file does not exist. A spec split into a folder has no single file.
+ */
+export type SourceFiles = SourceFiles_Serialize | SourceFiles_Deserialize;
+
+/**
+ *  The files besides tasks that text is usually selected in, as absolute paths; `None` when the
+ *  file does not exist. A spec split into a folder has no single file.
+ */
+export type SourceFiles_Deserialize = {
+	braindump?: string | null,
+	spec?: string | null,
+};
+
+/**
+ *  The files besides tasks that text is usually selected in, as absolute paths; `None` when the
+ *  file does not exist. A spec split into a folder has no single file.
+ */
+export type SourceFiles_Serialize = {
+	braindump: string | null,
+	spec: string | null,
 };
 
 /**  Which form of the spec to use. */

@@ -33,6 +33,8 @@ interface EditorState {
   conflict: Conflict | null;
   /** The edits a reload replaced, kept so they can be brought back until dismissed. */
   replaced: string | null;
+  /** The text selected in the open file, in either mode; empty without a selection. */
+  selection: string;
   /** Why the file could not be read or saved; cleared by the next successful save. */
   error: string | null;
   /** Opens the file at `path` of the repository at `repoRoot`, saving the open file first. */
@@ -59,6 +61,9 @@ interface EditorState {
   /** Brings back the edits the last reload replaced. */
   restoreReplaced: () => void;
   dismissReplaced: () => void;
+  setSelection: (selection: string) => void;
+  /** Creates a task in the first column from the selection and opens it (`S-make-task`). */
+  makeTask: () => Promise<void>;
 }
 
 let autosave: ReturnType<typeof setTimeout> | undefined;
@@ -83,6 +88,7 @@ const CLOSED = {
   task: null,
   conflict: null,
   replaced: null,
+  selection: "",
   error: null,
 };
 
@@ -181,7 +187,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       const { path, modes } = get();
       if (path === null) return;
       const mode = modes[path] === "read" ? "source" : "read";
-      set({ modes: { ...modes, [path]: mode } });
+      set({ modes: { ...modes, [path]: mode }, selection: "" });
     },
 
     apply: async (batch) => {
@@ -252,5 +258,19 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     },
 
     dismissReplaced: () => set({ replaced: null }),
+
+    setSelection: (selection) => set({ selection }),
+
+    makeTask: async () => {
+      const { repoRoot, path, selection } = get();
+      if (repoRoot === null || path === null || selection.trim() === "") return;
+      const result = await commands.makeTask(repoRoot, path, selection);
+      if (result.status === "error") {
+        set({ error: `Task not made: ${result.error}` });
+        return;
+      }
+      set({ selection: "" });
+      await get().open(repoRoot, result.data);
+    },
   };
 });

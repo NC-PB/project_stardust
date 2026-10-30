@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const files = new Map<string, string>();
 const writeText = vi.fn();
 const createText = vi.fn();
+const makeTask = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -20,6 +21,7 @@ vi.mock("@/bindings", () => ({
       return writeText(path, text);
     },
     createText: (...args: [string, string]) => createText(...args),
+    makeTask: (...args: [string, string, string]) => makeTask(...args),
     parseTaskText: async (fileName: string, text: string) => ({
       file_name: fileName,
       title: text.match(/title: (.*)/)?.[1] ?? "",
@@ -69,8 +71,10 @@ describe("useEditorStore", () => {
       modes: {},
       conflict: null,
       replaced: null,
+      selection: "",
       error: null,
     });
+    makeTask.mockReset();
   });
 
   afterEach(() => {
@@ -180,6 +184,34 @@ describe("useEditorStore", () => {
     useEditorStore.getState().toggleMode();
     await useEditorStore.getState().open("/repo", B);
     expect(useEditorStore.getState().modes).toEqual({ [A]: "read" });
+  });
+
+  it("makes a task from the selection and opens it", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    useEditorStore.getState().setSelection("  ");
+    await useEditorStore.getState().makeTask();
+    expect(makeTask).not.toHaveBeenCalled();
+
+    makeTask.mockImplementation(async () => {
+      files.set(B, "---\ntitle: idea\n---\n");
+      return { status: "ok", data: B };
+    });
+    useEditorStore.getState().setSelection("- idea");
+    await useEditorStore.getState().makeTask();
+    expect(makeTask).toHaveBeenCalledWith("/repo", A, "- idea");
+    expect(useEditorStore.getState().path).toBe(B);
+    expect(useEditorStore.getState().selection).toBe("");
+  });
+
+  it("keeps the file and the selection when no task can be made", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    makeTask.mockResolvedValue({ status: "error", error: "no columns" });
+    useEditorStore.getState().setSelection("idea");
+    await useEditorStore.getState().makeTask();
+    const state = useEditorStore.getState();
+    expect(state.path).toBe(A);
+    expect(state.selection).toBe("idea");
+    expect(state.error).toContain("no columns");
   });
 
   describe("changes on disk", () => {
