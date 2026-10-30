@@ -170,6 +170,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Regenerated on every config change. Under 60 lines. See `templates/AGENTS-block.md`.
     - With `claude_import: true` (default), the tool adds the line `@AGENTS.md` to `CLAUDE.md`, creating the file if needed, and only if the line is not already there.
     - With `claude_mirror: true`, the block is also written into `CLAUDE.md` between the same markers, for agents without imports.
+    - Without markers the block is appended; without the file it is created. Only files whose content changes are written; line endings are kept.
+    - A start or end marker alone, or the two out of order, is an error and nothing is written. Turning `claude_mirror` off does not remove an earlier mirrored block (`R-no-destroy`).
+    - Placeholders filled from the config: `{planning_root}`, `{spec_location}` (`spec/` or `spec.md` under the planning root, following `spec`).
+    - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. Regeneration on config change comes with the watcher (D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
   - [x] Adapters `S-adapters`
@@ -437,6 +441,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: the built in template is used and the problem is returned as an issue with the override path, like config issues (D-20261030-214550-gl67). The config template is embedded once and `config.rs` reads its defaults through `TemplateKind::Config`.
 - Rejected: failing the command (a broken file would block creating tasks).
 - Consequences: `S-templates` criteria.
+
+### D-20261030-220523-8397 · Planner block regeneration comes with the watcher
+- Context: `S-agents-block` says the block is regenerated on every config change, but the app has no watcher and no config editing yet, so nothing can notice a change.
+- Decision: the planner block task ships the writer and the command `write_planner_block`; regenerating on config change is a criterion of the file watcher task, which also has to watch `docs/planner.yml` outside the planning root. Accepted by the user on 2026-10-30.
+- Rejected: keeping the planner block task open until the watcher exists.
+- Consequences: `S-agents-block` criteria; task 20261030-220007-e420 implements `S-agents-block` too.
 
 ## Glossary
 

@@ -1,6 +1,7 @@
 //! Domain logic: plain Rust with no Tauri dependency, tested with `cargo test`.
 //! Planning modules (ids, task files, config, ...) live here as their tasks land.
 
+pub mod agents_block;
 pub mod config;
 pub mod ids;
 pub mod task;

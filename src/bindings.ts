@@ -26,11 +26,22 @@ export const commands = {
 	 *  `templates_dir` for `task.md` and `spec.md`, otherwise the one shipped in the app.
 	 */
 	loadTemplate: (repoRoot: string, kind: TemplateKind) => __TAURI_INVOKE<Template_Serialize>("load_template", { repoRoot, kind }),
+	/**
+	 *  Writes the planner block into the agents file of the repository at `repo_root`, and the
+	 *  import or mirror into `CLAUDE.md` as configured. Returns the files that changed.
+	 */
+	writePlannerBlock: (repoRoot: string) => typedError<BlockReport, string>(__TAURI_INVOKE("write_planner_block", { repoRoot })),
 };
 
 /* Types */
 /**  Agent command file generators (`S-adapters`). */
 export type Adapter = "claude-code";
+
+/**  What `write_planner_block` changed. Paths are relative to the repository root. */
+export type BlockReport = {
+	/**  Files that were created or changed; unchanged files are not written. */
+	written: string[],
+};
 
 /**  The contents of `docs/planner.yml`. Paths are relative to the repository root. */
 export type Config = {

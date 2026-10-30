@@ -17,6 +17,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         commands::set_task_field,
         commands::remove_task_field,
         commands::load_template,
+        commands::write_planner_block,
     ])
 }
 

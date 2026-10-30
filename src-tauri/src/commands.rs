@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use crate::domain;
-use crate::domain::{config, ids, task, templates};
+use crate::domain::{agents_block, config, ids, task, templates};
 
 #[tauri::command]
 #[specta::specta]
@@ -84,4 +84,14 @@ pub fn load_template(repo_root: String, kind: templates::TemplateKind) -> templa
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     templates::resolve(kind, repo_root, &config)
+}
+
+/// Writes the planner block into the agents file of the repository at `repo_root`, and the
+/// import or mirror into `CLAUDE.md` as configured. Returns the files that changed.
+#[tauri::command]
+#[specta::specta]
+pub fn write_planner_block(repo_root: String) -> Result<agents_block::BlockReport, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    agents_block::write_planner_block(repo_root, &config)
 }
