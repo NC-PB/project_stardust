@@ -6,7 +6,8 @@ This repository builds the planning tool and plans itself with it.
 ## Planning conventions
 
 Planning lives in `docs/planning/`. Columns: `inbox/` (new), `next/` (ready for you), `done/` (finished).
-One task per file, filename `<id>-<slug>.md`, id format `YYYYMMDD-HHMMSS-xxxx` (millisecond timestamp plus 4 random characters).
+One task per file, filename `<id>-<slug>.md`, id format `YYYYMMDD-HHMMSS-xxxx` (local time to the second plus 4 characters from `[a-z0-9]`).
+Frontmatter must be valid YAML: double-quote a text value that contains `: ` or ` #` or starts with a special character such as `[ { & * ! | > ' " % @ -`, e.g. `title: "Board: columns and cards"`.
 The spec (`docs/planning/spec.md`) is the source of truth: Constraints, Domain (areas, rules, workflows), Structure (nodes `S-...` with acceptance criteria), Questions, Decisions, Glossary. Tasks are changes that implement nodes.
 
 ### At session start

@@ -13,6 +13,7 @@ import { cn } from "cn";
 import {
   type ComponentProps,
   type KeyboardEvent,
+  type ReactNode,
   useEffect,
   useId,
   useState,
@@ -164,6 +165,7 @@ export function Editor() {
           {error}
         </p>
       )}
+      <ConflictBar />
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
         {task && frontmatterLineCount(text) > 0 && (
           <FrontmatterForm key={path} />
@@ -186,6 +188,75 @@ export function Editor() {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * What to do when unsaved edits meet a change on disk, and the way back after a reload
+ * replaced edits (`S-conflicts`).
+ */
+function ConflictBar() {
+  const {
+    conflict,
+    replaced,
+    reload,
+    keepMine,
+    restoreFile,
+    discard,
+    restoreReplaced,
+    dismissReplaced,
+  } = useEditorStore();
+  if (conflict?.kind === "changed")
+    return (
+      <Notice message="Changed on disk. Your edits are kept and not saved until you choose.">
+        <Button size="xs" onClick={() => void reload()}>
+          Reload
+        </Button>
+        <Button variant="outline" size="xs" onClick={() => void keepMine()}>
+          Keep mine
+        </Button>
+      </Notice>
+    );
+  if (conflict?.kind === "removed")
+    return (
+      <Notice message="Removed from disk. Your edits are only in the editor.">
+        <Button size="xs" onClick={() => void restoreFile()}>
+          Restore file
+        </Button>
+        <Button variant="outline" size="xs" onClick={discard}>
+          Discard edits
+        </Button>
+      </Notice>
+    );
+  if (replaced !== null)
+    return (
+      <Notice message="Reloaded from disk; your edits were replaced.">
+        <Button variant="outline" size="xs" onClick={restoreReplaced}>
+          Restore my edits
+        </Button>
+        <Button variant="ghost" size="xs" onClick={dismissReplaced}>
+          Dismiss
+        </Button>
+      </Notice>
+    );
+  return null;
+}
+
+function Notice({
+  message,
+  children,
+}: {
+  message: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs"
+    >
+      <span className="flex-1">{message}</span>
+      {children}
+    </div>
   );
 }
 

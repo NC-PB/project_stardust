@@ -167,3 +167,19 @@ function decodeURIComponentSafe(text: string): string {
     return text;
   }
 }
+
+/** Whether `batch` created, changed or moved a file to `path`, relative to `repoRoot`. */
+export function touchesFile(
+  path: string,
+  repoRoot: string,
+  batch: ChangeBatch,
+): boolean {
+  const root = repoRoot.replace(/[\\/]+$/, "");
+  if (!path.startsWith(`${root}/`)) return false;
+  const relative = path.slice(root.length + 1);
+  return batch.changes.some((change) =>
+    change.kind === "moved"
+      ? change.to === relative
+      : change.kind !== "removed" && change.path === relative,
+  );
+}

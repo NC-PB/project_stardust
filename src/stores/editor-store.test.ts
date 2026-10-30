@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const files = new Map<string, string>();
 const writeText = vi.fn();
+const createText = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -9,7 +10,16 @@ vi.mock("@/bindings", () => ({
       files.has(path)
         ? { status: "ok", data: files.get(path) }
         : { status: "error", error: "not found" },
-    writeText: (...args: [string, string]) => writeText(...args),
+    saveText: async (path: string, expected: string, text: string) => {
+      if (!files.has(path))
+        return { status: "error", error: "the file no longer exists" };
+      const disk = files.get(path);
+      if (disk === text) return { status: "ok", data: { kind: "saved" } };
+      if (disk !== expected)
+        return { status: "ok", data: { kind: "changed_on_disk", text: disk } };
+      return writeText(path, text);
+    },
+    createText: (...args: [string, string]) => createText(...args),
     parseTaskText: async (fileName: string, text: string) => ({
       file_name: fileName,
       title: text.match(/title: (.*)/)?.[1] ?? "",
@@ -43,6 +53,11 @@ describe("useEditorStore", () => {
       if (!files.has(path))
         return { status: "error", error: "the file no longer exists" };
       files.set(path, text);
+      return { status: "ok", data: { kind: "saved" } };
+    });
+    createText.mockReset();
+    createText.mockImplementation(async (path: string, text: string) => {
+      files.set(path, text);
       return { status: "ok", data: null };
     });
     useEditorStore.setState({
@@ -52,6 +67,8 @@ describe("useEditorStore", () => {
       saved: "",
       task: null,
       modes: {},
+      conflict: null,
+      replaced: null,
       error: null,
     });
   });
@@ -144,7 +161,7 @@ describe("useEditorStore", () => {
     useEditorStore.getState().edit("edited");
     await useEditorStore.getState().apply(removed);
     expect(useEditorStore.getState().path).toBe(A);
-    expect(useEditorStore.getState().error).toContain("removed");
+    expect(useEditorStore.getState().conflict).toEqual({ kind: "removed" });
   });
 
   it("writes form fields into the text, refusing invalid input", async () => {
@@ -163,5 +180,141 @@ describe("useEditorStore", () => {
     useEditorStore.getState().toggleMode();
     await useEditorStore.getState().open("/repo", B);
     expect(useEditorStore.getState().modes).toEqual({ [A]: "read" });
+  });
+
+  describe("changes on disk", () => {
+    const modified = {
+      config_changed: false,
+      changes: [{ kind: "modified" as const, path: "docs/planning/next/a.md" }],
+    };
+
+    it("reload a file without unsaved edits silently", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      files.set(A, "---\ntitle: Agent\n---\n");
+      await useEditorStore.getState().apply(modified);
+      const state = useEditorStore.getState();
+      expect(state.text).toBe("---\ntitle: Agent\n---\n");
+      expect(state.saved).toBe(state.text);
+      expect(state.conflict).toBeNull();
+      await vi.waitFor(() =>
+        expect(useEditorStore.getState().task?.title).toBe("Agent"),
+      );
+    });
+
+    it("ignore the echo of the editor's own save", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("mine");
+      await useEditorStore.getState().save();
+      useEditorStore.getState().edit("mine, more");
+      await useEditorStore.getState().apply(modified);
+      const state = useEditorStore.getState();
+      expect(state.text).toBe("mine, more");
+      expect(state.conflict).toBeNull();
+    });
+
+    it("keep unsaved edits and stop saving until the user chooses", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("mine");
+      files.set(A, "agent");
+      await useEditorStore.getState().apply(modified);
+      expect(useEditorStore.getState().conflict).toEqual({
+        kind: "changed",
+        disk: "agent",
+      });
+      expect(useEditorStore.getState().text).toBe("mine");
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_MS * 3);
+      await useEditorStore.getState().close();
+      expect(files.get(A)).toBe("agent");
+      expect(useEditorStore.getState().path).toBe(A);
+    });
+
+    it("find a change the watcher has not reported yet when saving", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      files.set(A, "agent");
+      useEditorStore.getState().edit("mine");
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+      expect(files.get(A)).toBe("agent");
+      expect(useEditorStore.getState().conflict?.kind).toBe("changed");
+    });
+
+    it("reload on request and keep the replaced edits until dismissed", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("mine");
+      files.set(A, "agent");
+      await useEditorStore.getState().apply(modified);
+      await useEditorStore.getState().reload();
+      let state = useEditorStore.getState();
+      expect(state.text).toBe("agent");
+      expect(state.conflict).toBeNull();
+      expect(state.replaced).toBe("mine");
+      state.restoreReplaced();
+      state = useEditorStore.getState();
+      expect(state.text).toBe("mine");
+      expect(state.replaced).toBeNull();
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+      expect(files.get(A)).toBe("mine");
+    });
+
+    it("save the edits over the disk when the user keeps them", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("mine");
+      files.set(A, "agent");
+      await useEditorStore.getState().apply(modified);
+      await useEditorStore.getState().keepMine();
+      expect(files.get(A)).toBe("mine");
+      expect(useEditorStore.getState().conflict).toBeNull();
+      expect(useEditorStore.getState().saved).toBe("mine");
+    });
+
+    it("count a disk change equal to the edits as saved", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("same");
+      files.set(A, "same");
+      await useEditorStore.getState().apply(modified);
+      expect(useEditorStore.getState().conflict).toBeNull();
+      expect(useEditorStore.getState().saved).toBe("same");
+    });
+
+    it("restore or discard a removed file with edits", async () => {
+      const removed = {
+        config_changed: false,
+        changes: [
+          { kind: "removed" as const, path: "docs/planning/next/a.md" },
+        ],
+      };
+      await useEditorStore.getState().open("/repo", A);
+      useEditorStore.getState().edit("mine");
+      files.delete(A);
+      await useEditorStore.getState().apply(removed);
+      await useEditorStore.getState().restoreFile();
+      expect(files.get(A)).toBe("mine");
+      expect(useEditorStore.getState().conflict).toBeNull();
+
+      useEditorStore.getState().edit("mine again");
+      files.delete(A);
+      await useEditorStore.getState().apply(removed);
+      useEditorStore.getState().discard();
+      expect(useEditorStore.getState().path).toBeNull();
+      expect(files.has(A)).toBe(false);
+    });
+
+    it("reload a moved file whose move changed it", async () => {
+      await useEditorStore.getState().open("/repo", A);
+      const done = "/repo/docs/planning/done/a.md";
+      files.set(done, "---\ntitle: A\ncompleted: 2026-10-30\n---\nbody\n");
+      files.delete(A);
+      await useEditorStore.getState().apply({
+        config_changed: false,
+        changes: [
+          {
+            kind: "moved",
+            id: "a",
+            from: "docs/planning/next/a.md",
+            to: "docs/planning/done/a.md",
+          },
+        ],
+      });
+      expect(useEditorStore.getState().text).toContain("completed");
+    });
   });
 });

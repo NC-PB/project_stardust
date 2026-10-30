@@ -31,10 +31,12 @@ export const commands = {
 	/**  The whole text of the file at `path`, as the editor opens it. */
 	readText: (path: string) => typedError<string, string>(__TAURI_INVOKE("read_text", { path })),
 	/**
-	 *  Replaces the text of the file at `path`. Fails instead of creating a file that was moved
-	 *  or removed.
+	 *  Writes `text` to the file at `path` unless it changed on disk since it held `expected`.
+	 *  Fails instead of creating a file that was moved or removed.
 	 */
-	writeText: (path: string, text: string) => typedError<null, string>(__TAURI_INVOKE("write_text", { path, text })),
+	saveText: (path: string, expected: string, text: string) => typedError<SaveOutcome, string>(__TAURI_INVOKE("save_text", { path, expected, text })),
+	/**  Creates the file at `path` with `text`; never overwrites one. */
+	createText: (path: string, text: string) => typedError<null, string>(__TAURI_INVOKE("create_text", { path, text })),
 	/**  The task in `text`, an unsaved version of the file `file_name`. */
 	parseTaskText: (fileName: string, text: string) => __TAURI_INVOKE<Task_Serialize>("parse_task_text", { fileName, text }),
 	/**  `text` with frontmatter field `key` set to `value`; only the lines of that field change. */
@@ -212,6 +214,13 @@ export type PlanningChanged_Serialize = {
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error: string | null,
 };
+
+/**  What happened to a save. */
+export type SaveOutcome = 
+/**  The file now holds the saved text. */
+{ kind: "saved" } | 
+/**  The file changed on disk since it was read; it was left as is and holds `text`. */
+{ kind: "changed_on_disk"; text: string };
 
 /**  A `## ` section of a task body. */
 export type Section = {

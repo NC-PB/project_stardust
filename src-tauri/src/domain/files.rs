@@ -1,9 +1,24 @@
-//! Reading and writing files opened in the editor (`S-editor-core`), and the images read mode
-//! shows (`S-editor-layout`).
+//! Reading and writing files opened in the editor (`S-editor-core`) without overwriting changes
+//! made on disk meanwhile (`S-conflicts`), and the images read mode shows (`S-editor-layout`).
 
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+const NO_LONGER_EXISTS: &str = "the file no longer exists";
+
+/// What happened to a save.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SaveOutcome {
+    /// The file now holds the saved text.
+    Saved,
+    /// The file changed on disk since it was read; it was left as is and holds `text`.
+    ChangedOnDisk { text: String },
+}
 
 /// Images larger than this are not shown in read mode.
 const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
@@ -21,7 +36,40 @@ pub fn write_existing(path: &Path, text: &str) -> Result<(), String> {
         .truncate(true)
         .open(path)
         .map_err(|err| match err.kind() {
-            ErrorKind::NotFound => "the file no longer exists".to_string(),
+            ErrorKind::NotFound => NO_LONGER_EXISTS.to_string(),
+            _ => err.to_string(),
+        })?;
+    file.write_all(text.as_bytes())
+        .map_err(|err| err.to_string())
+}
+
+/// Writes `text` to the file at `path` if the file still holds `expected`, the text last read
+/// from or written to it. A file that already holds `text` counts as saved. Never creates a
+/// file.
+pub fn save_text(path: &Path, expected: &str, text: &str) -> Result<SaveOutcome, String> {
+    let disk = std::fs::read_to_string(path).map_err(|err| match err.kind() {
+        ErrorKind::NotFound => NO_LONGER_EXISTS.to_string(),
+        _ => err.to_string(),
+    })?;
+    if disk == text {
+        return Ok(SaveOutcome::Saved);
+    }
+    if disk != expected {
+        return Ok(SaveOutcome::ChangedOnDisk { text: disk });
+    }
+    write_existing(path, text)?;
+    Ok(SaveOutcome::Saved)
+}
+
+/// Creates the file at `path` with `text`, for a file removed while it had unsaved edits.
+/// Never overwrites a file.
+pub fn create_text(path: &Path, text: &str) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|err| match err.kind() {
+            ErrorKind::AlreadyExists => "a file with this name exists again".to_string(),
             _ => err.to_string(),
         })?;
     file.write_all(text.as_bytes())
@@ -165,6 +213,41 @@ mod tests {
         std::fs::write(&file, "old text that is longer").unwrap();
         write_existing(&file, "new").unwrap();
         assert_eq!(read_text(&file).unwrap(), "new");
+        std::fs::remove_dir_all(repo).unwrap();
+    }
+
+    #[test]
+    fn saves_only_over_the_expected_text() {
+        let repo = temp_repo("save");
+        let file = repo.join("docs/planning/next/a.md");
+        assert_eq!(save_text(&file, "", "x"), Err(NO_LONGER_EXISTS.to_string()));
+        std::fs::write(&file, "old").unwrap();
+        assert_eq!(save_text(&file, "old", "mine"), Ok(SaveOutcome::Saved));
+        assert_eq!(read_text(&file).unwrap(), "mine");
+        std::fs::write(&file, "agent").unwrap();
+        assert_eq!(
+            save_text(&file, "mine", "mine 2"),
+            Ok(SaveOutcome::ChangedOnDisk {
+                text: "agent".to_string()
+            })
+        );
+        assert_eq!(read_text(&file).unwrap(), "agent");
+        assert_eq!(save_text(&file, "mine", "agent"), Ok(SaveOutcome::Saved));
+        std::fs::remove_dir_all(repo).unwrap();
+    }
+
+    #[test]
+    fn creates_only_files_that_do_not_exist() {
+        let repo = temp_repo("create");
+        let file = repo.join("docs/planning/next/a.md");
+        create_text(&file, "restored").unwrap();
+        assert_eq!(read_text(&file).unwrap(), "restored");
+        assert!(
+            create_text(&file, "again")
+                .unwrap_err()
+                .contains("exists again")
+        );
+        assert_eq!(read_text(&file).unwrap(), "restored");
         std::fs::remove_dir_all(repo).unwrap();
     }
 

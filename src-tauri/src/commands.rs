@@ -106,12 +106,23 @@ pub fn read_text(path: String) -> Result<String, String> {
     files::read_text(Path::new(&path))
 }
 
-/// Replaces the text of the file at `path`. Fails instead of creating a file that was moved
-/// or removed.
+/// Writes `text` to the file at `path` unless it changed on disk since it held `expected`.
+/// Fails instead of creating a file that was moved or removed.
 #[tauri::command]
 #[specta::specta]
-pub fn write_text(path: String, text: String) -> Result<(), String> {
-    files::write_existing(Path::new(&path), &text)
+pub fn save_text(
+    path: String,
+    expected: String,
+    text: String,
+) -> Result<files::SaveOutcome, String> {
+    files::save_text(Path::new(&path), &expected, &text)
+}
+
+/// Creates the file at `path` with `text`; never overwrites one.
+#[tauri::command]
+#[specta::specta]
+pub fn create_text(path: String, text: String) -> Result<(), String> {
+    files::create_text(Path::new(&path), &text)
 }
 
 /// The task in `text`, an unsaved version of the file `file_name`.

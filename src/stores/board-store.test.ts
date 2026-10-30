@@ -19,6 +19,7 @@ vi.mock("./settings", () => ({
 }));
 
 import { useBoardStore } from "./board-store";
+import { useEditorStore } from "./editor-store";
 
 const config = {
   planning_root: "docs/planning",
@@ -145,6 +146,29 @@ describe("useBoardStore", () => {
       "inbox.md",
     ]);
     expect(moveError).toBeNull();
+  });
+
+  it("saves the moved file first when it is open in the editor", async () => {
+    await useBoardStore.getState().load("/repo", config, []);
+    const order: string[] = [];
+    const save = vi.fn(async () => {
+      order.push("save");
+    });
+    moveTask.mockImplementation(async () => {
+      order.push("move");
+      return { status: "ok", data: null };
+    });
+    useEditorStore.setState({
+      path: "/repo/docs/planning/inbox/inbox.md",
+      save,
+    });
+    await useBoardStore.getState().moveTask("inbox.md", "inbox", "done");
+    expect(order).toEqual(["save", "move"]);
+
+    useEditorStore.setState({ path: "/repo/docs/planning/next/other.md" });
+    await useBoardStore.getState().moveTask("done.md", "done", "next");
+    expect(save).toHaveBeenCalledTimes(1);
+    useEditorStore.setState({ path: null });
   });
 
   it("puts the card back and keeps the error when the move fails", async () => {

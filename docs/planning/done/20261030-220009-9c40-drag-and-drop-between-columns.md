@@ -32,4 +32,4 @@ Cards can be dragged between columns with the mouse or the keyboard. A drop rena
 - A moved card goes to the end of its column; ordering is `S-board-sort` (phase 4).
 
 ### Next session
-- `next/` is empty. The remaining phase 1 board work is done; the [editor](20261030-220011-a93f-markdown-editor-with-source-and-read-mode.md) and [conflict handling](../next/20261030-220012-ff26-reload-and-conflict-handling.md) tasks are in the inbox.
+- `next/` is empty. The remaining phase 1 board work is done; the [editor](20261030-220011-a93f-markdown-editor-with-source-and-read-mode.md) and [conflict handling](20261030-220012-ff26-reload-and-conflict-handling.md) tasks are in the inbox.

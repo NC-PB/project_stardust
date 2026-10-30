@@ -1,6 +1,6 @@
 ---
 id: 20261030-220000-0822
-title: Project scaffold: Tauri, React, TypeScript
+title: "Project scaffold: Tauri, React, TypeScript"
 tags: [platform]
 created: 2026-10-30
 implements: [S-tauri, S-frontend]

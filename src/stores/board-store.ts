@@ -6,6 +6,7 @@ import {
   moveCard,
   touchedColumns,
 } from "@/lib/board";
+import { useEditorStore } from "./editor-store";
 import { readSetting, writeSetting } from "./settings";
 
 /** Last visit per repository root, in milliseconds since the epoch. */
@@ -124,6 +125,14 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
       columns: moveCard(state.columns, fileName, from, to),
       moveError: null,
     }));
+    // Pending edits of the moved file are written first, so they cannot meet the `completed`
+    // change on disk (`S-conflicts`).
+    const editor = useEditorStore.getState();
+    if (
+      editor.path ===
+      `${columnDir(repoRoot, config.planning_root, from)}/${fileName}`
+    )
+      await editor.save();
     const result = await commands.moveTask(repoRoot, fileName, from, to);
     if (result.status === "ok" || get().repoRoot !== repoRoot) return;
     // A failed move leaves the file where it was; the next batch re-reads anything else.

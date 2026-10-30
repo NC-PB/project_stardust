@@ -7,7 +7,15 @@ import {
   fieldValueOf,
   fileNameOf,
   followFile,
+  touchesFile,
 } from "@/lib/editor";
+
+/** Why the open file and the disk disagree while there are unsaved edits (`S-conflicts`). */
+export type Conflict =
+  /** Another program changed the file; `disk` is its text now. */
+  | { kind: "changed"; disk: string }
+  /** The file is gone from disk. */
+  | { kind: "removed" };
 
 interface EditorState {
   repoRoot: string | null;
@@ -21,33 +29,64 @@ interface EditorState {
   task: Task_Serialize | null;
   /** Source or read mode of each file opened this session (`S-editor-layout`). */
   modes: Record<string, EditorMode>;
+  /** Set while unsaved edits meet a change on disk; nothing is saved until it is resolved. */
+  conflict: Conflict | null;
+  /** The edits a reload replaced, kept so they can be brought back until dismissed. */
+  replaced: string | null;
   /** Why the file could not be read or saved; cleared by the next successful save. */
   error: string | null;
   /** Opens the file at `path` of the repository at `repoRoot`, saving the open file first. */
   open: (repoRoot: string, path: string) => Promise<void>;
-  /** Saves and closes the open file. */
+  /** Saves and closes the open file; stays open when the edits cannot be saved. */
   close: () => Promise<void>;
   /** Replaces the text; it is saved once typing stops for `AUTOSAVE_MS`. */
   edit: (text: string) => void;
   /** Sets a frontmatter field from what was typed into the form; returns why it cannot. */
   setField: (field: FormField, input: string) => Promise<string | null>;
-  /** Writes unsaved edits now. */
+  /** Writes unsaved edits now, unless the file changed on disk meanwhile. */
   save: () => Promise<void>;
   toggleMode: () => void;
-  /** Follows the open file when a batch of changes on disk moved or removed it. */
+  /** Follows, reloads or flags the open file after a batch of changes on disk. */
   apply: (batch: ChangeBatch) => Promise<void>;
+  /** Takes the text on disk; the edits it replaces stay in `replaced`. */
+  reload: () => Promise<void>;
+  /** Saves the edits over the change on disk. */
+  keepMine: () => Promise<void>;
+  /** Writes the edits of a removed file back to its place. */
+  restoreFile: () => Promise<void>;
+  /** Closes a removed file without its edits. */
+  discard: () => void;
+  /** Brings back the edits the last reload replaced. */
+  restoreReplaced: () => void;
+  dismissReplaced: () => void;
 }
 
 let autosave: ReturnType<typeof setTimeout> | undefined;
-/** The save in progress; saves run one after another so an older text never wins. */
-let saving: Promise<void> = Promise.resolve();
+/** Disk work in progress; saves and checks run one after another so an older text never wins. */
+let queue: Promise<void> = Promise.resolve();
 
 function cancelAutosave() {
   clearTimeout(autosave);
   autosave = undefined;
 }
 
-/** The file open in the editor (`S-editor-core`, `S-editor-layout`). */
+function enqueue(work: () => Promise<void>): Promise<void> {
+  queue = queue.then(work, work);
+  return queue;
+}
+
+const CLOSED = {
+  repoRoot: null,
+  path: null,
+  text: "",
+  saved: "",
+  task: null,
+  conflict: null,
+  replaced: null,
+  error: null,
+};
+
+/** The file open in the editor (`S-editor-core`, `S-editor-layout`, `S-conflicts`). */
 export const useEditorStore = create<EditorState>()((set, get) => {
   /** Parses `text` for the form, unless the text changed again meanwhile. */
   const parse = async (path: string, text: string) => {
@@ -55,24 +94,44 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     if (get().path === path && get().text === text) set({ task });
   };
 
+  /** Shows `text`, read from disk, as the saved state of the open file. */
+  const load = (path: string, text: string) => {
+    set({ text, saved: text, conflict: null });
+    void parse(path, text);
+  };
+
   const writeNow = async () => {
     cancelAutosave();
-    const { path, text, saved } = get();
-    if (path === null || text === saved) return;
-    const result = await commands.writeText(path, text);
+    const { path, text, saved, conflict } = get();
+    if (path === null || text === saved || conflict !== null) return;
+    const result = await commands.saveText(path, saved, text);
     if (get().path !== path) return;
-    if (result.status === "ok") set({ saved: text, error: null });
-    else set({ error: `Not saved: ${result.error}` });
+    if (result.status === "error") {
+      set({ error: `Not saved: ${result.error}` });
+    } else if (result.data.kind === "saved") {
+      set({ saved: text, error: null });
+    } else {
+      set({ conflict: { kind: "changed", disk: result.data.text } });
+    }
+  };
+
+  /** Compares the open file with the disk: reloads it silently, or flags a conflict. */
+  const checkNow = async () => {
+    const { path } = get();
+    if (path === null) return;
+    const result = await commands.readText(path);
+    if (get().path !== path || result.status === "error") return;
+    const disk = result.data;
+    const { text, saved } = get();
+    if (disk === saved) return;
+    if (text === saved) load(path, disk);
+    else if (disk === text) set({ saved: disk, conflict: null });
+    else set({ conflict: { kind: "changed", disk } });
   };
 
   return {
-    repoRoot: null,
-    path: null,
-    text: "",
-    saved: "",
-    task: null,
+    ...CLOSED,
     modes: {},
-    error: null,
 
     open: async (repoRoot, path) => {
       if (get().path === path) return;
@@ -83,21 +142,14 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         set({ error: `Cannot open ${fileNameOf(path)}: ${result.error}` });
         return;
       }
-      set({
-        repoRoot,
-        path,
-        text: result.data,
-        saved: result.data,
-        task: null,
-        error: null,
-      });
+      set({ ...CLOSED, repoRoot, path, text: result.data, saved: result.data });
       await parse(path, result.data);
     },
 
     close: async () => {
       await get().save();
       if (get().text !== get().saved) return;
-      set({ repoRoot: null, path: null, text: "", saved: "", task: null });
+      set(CLOSED);
     },
 
     edit: (text) => {
@@ -123,10 +175,7 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       return null;
     },
 
-    save: () => {
-      saving = saving.then(writeNow);
-      return saving;
-    },
+    save: () => enqueue(writeNow),
 
     toggleMode: () => {
       const { path, modes } = get();
@@ -139,18 +188,69 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       const { path, repoRoot, text, saved } = get();
       if (path === null || repoRoot === null) return;
       const next = followFile(path, repoRoot, batch);
-      if (next === undefined) return;
       if (next === null) {
-        // Unsaved edits stay open so they can be copied; there is nothing left to save to.
-        if (text === saved) await get().close();
-        else
-          set({ error: "The file was removed from disk; edits are not saved" });
+        cancelAutosave();
+        if (text === saved) set(CLOSED);
+        else set({ conflict: { kind: "removed" } });
         return;
       }
-      const modes = { ...get().modes, [next]: get().modes[path] ?? "source" };
-      set({ path: next, modes, error: null });
-      // An edit that failed to save while the file was moving is written to its new place.
-      if (text !== saved) await get().save();
+      if (next !== undefined) {
+        const modes = { ...get().modes, [next]: get().modes[path] ?? "source" };
+        set({ path: next, modes, error: null });
+      }
+      const current = next ?? path;
+      if (next === undefined && !touchesFile(current, repoRoot, batch)) return;
+      await enqueue(checkNow);
+      // Edits that could not be saved while the file was moving are written to its new place.
+      if (get().text !== get().saved) await get().save();
     },
+
+    reload: async () => {
+      const { path, conflict, text, saved } = get();
+      if (path === null) return;
+      cancelAutosave();
+      let disk = conflict?.kind === "changed" ? conflict.disk : null;
+      if (disk === null) {
+        const result = await commands.readText(path);
+        if (result.status === "error") {
+          set({ error: `Cannot reload: ${result.error}` });
+          return;
+        }
+        disk = result.data;
+      }
+      set({ replaced: text !== saved ? text : get().replaced });
+      load(path, disk);
+    },
+
+    keepMine: async () => {
+      const { conflict } = get();
+      if (conflict?.kind !== "changed") return;
+      // The disk text becomes the expected one, so the save goes through unless it changes again.
+      set({ saved: conflict.disk, conflict: null });
+      await get().save();
+    },
+
+    restoreFile: async () => {
+      const { path, text, conflict } = get();
+      if (path === null || conflict?.kind !== "removed") return;
+      const result = await commands.createText(path, text);
+      if (get().path !== path) return;
+      if (result.status === "error")
+        set({ error: `Not restored: ${result.error}` });
+      else set({ saved: text, conflict: null, error: null });
+    },
+
+    discard: () => {
+      if (get().conflict?.kind === "removed") set(CLOSED);
+    },
+
+    restoreReplaced: () => {
+      const { replaced } = get();
+      if (replaced === null) return;
+      set({ replaced: null });
+      get().edit(replaced);
+    },
+
+    dismissReplaced: () => set({ replaced: null }),
   };
 });

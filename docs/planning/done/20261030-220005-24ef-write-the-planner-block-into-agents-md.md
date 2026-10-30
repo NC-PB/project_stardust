@@ -34,9 +34,9 @@ Implements `S-agents-block` in the [spec](../spec.md).
 - Text outside the markers is kept byte for byte; without markers the block is appended, without the file it is created. Only changed files are written.
 - `claude_import` adds `@<agents_file>` to `CLAUDE.md` when the line is missing; `claude_mirror` writes the block there too. Neither removes anything from `CLAUDE.md`.
 - One marker alone or markers out of order: error, nothing written.
-- `this_repository_block_is_current` fails when `AGENTS.md` and the template drift apart; the [wording task](../inbox/20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md) has to change both together.
+- `this_repository_block_is_current` fails when `AGENTS.md` and the template drift apart; the [wording task](20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md) has to change both together.
 - Regeneration on config change moved to the [file watcher task](20261030-220007-e420-file-watcher-with-move-detection.md).
 
 ### Next session
 - `next/` is empty. Phase 1 candidates: [project init](20261030-220006-6602-project-init.md) (all dependencies done now) and the [file watcher](20261030-220007-e420-file-watcher-with-move-detection.md).
-- Waiting for wording approval: [frontmatter and id wording](../inbox/20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), [column names in the block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md).
+- Waiting for wording approval: [frontmatter and id wording](20261030-215109-0my7-valid-frontmatter-and-id-wording-in-agent-instructions.md), [column names in the block](../inbox/20261030-215737-w828-column-names-in-the-planner-block-from-the-config.md).

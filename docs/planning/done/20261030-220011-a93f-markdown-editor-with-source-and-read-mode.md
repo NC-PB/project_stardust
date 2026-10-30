@@ -31,8 +31,8 @@ Clicking a card title opens the task file in a pane beside the board. Source mod
 
 - Not yet checked by hand in the running app.
 - Proposal actions in read mode (`S-editor-layout`) are left to `S-proposals`.
-- A removed file with unsaved edits stays open and cannot be closed; moving a card while its file has unsaved edits lets the next save overwrite the `completed` change. Both belong to [reload and conflict handling](../next/20261030-220012-ff26-reload-and-conflict-handling.md), which so far only gets `editor-store.apply` for moves and removals; changed files are not yet reloaded.
+- A removed file with unsaved edits stays open and cannot be closed; moving a card while its file has unsaved edits lets the next save overwrite the `completed` change. Both belong to [reload and conflict handling](20261030-220012-ff26-reload-and-conflict-handling.md), which so far only gets `editor-store.apply` for moves and removals; changed files are not yet reloaded.
 - `S-frontend` still lists CodeMirror and remark/rehype as "come with their tasks"; that node was outside this task.
 
 ### Next session
-- [Reload and conflict handling](../next/20261030-220012-ff26-reload-and-conflict-handling.md) is the remaining task in `next/`. The store already keeps `saved` (the text on disk) beside `text`; a `modified` change for the open path is where reloading starts.
+- [Reload and conflict handling](20261030-220012-ff26-reload-and-conflict-handling.md) is the remaining task in `next/`. The store already keeps `saved` (the text on disk) beside `text`; a `modified` change for the open path is where reloading starts.

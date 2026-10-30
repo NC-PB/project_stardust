@@ -201,7 +201,13 @@ mod tests {
         assert!(block.ends_with(END_MARKER));
         assert!(block.contains("Planning lives in `plan/`"));
         assert!(block.contains("The spec (`plan/spec/`)"));
-        assert!(!block.contains('{'), "unfilled placeholder in {block}");
+        // The block quotes YAML characters such as `{`, so only `{name}` counts as a placeholder.
+        let unfilled = block.split('{').skip(1).any(|rest| {
+            rest.split_once('}').is_some_and(|(name, _)| {
+                !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            })
+        });
+        assert!(!unfilled, "unfilled placeholder in {block}");
         assert!(block.lines().count() < 60);
     }
 

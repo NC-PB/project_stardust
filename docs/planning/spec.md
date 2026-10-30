@@ -194,6 +194,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Without markers the block is appended; without the file it is created. Only files whose content changes are written; line endings are kept.
     - A start or end marker alone, or the two out of order, is an error and nothing is written. Turning `claude_mirror` off does not remove an earlier mirrored block (`R-no-destroy`).
     - Placeholders filled from the config: `{planning_root}`, `{spec_location}` (`spec/` or `spec.md` under the planning root, following `spec`).
+    - The block gives the id format as local time to the second plus 4 characters from `[a-z0-9]` (D-20261030-213854-k3cv), and tells agents to double-quote frontmatter values that YAML would misread, such as a title containing `: ` (`R-plain-markdown`).
     - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. The watcher regenerates the block when `docs/planner.yml` changes (`S-watcher`, D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
@@ -222,6 +223,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Conflicts `S-conflicts`
     - An open file without unsaved edits reloads silently.
     - An open file with unsaved edits keeps the user's version and shows "changed on disk" with a reload button.
+    - The open file is compared with the disk after every watcher batch that changes, creates or moves it there, and again by every save: a save writes only when the disk still holds the text last read or saved (D-20261030-235513-a2um). The editor's own saves are not reported as changes.
+    - While "changed on disk" shows, nothing is saved. Reload takes the disk text; Keep mine saves the edits over it. Edits a reload replaced can be restored until dismissed or until another file opens.
+    - A disk change equal to the unsaved edits counts as saved.
+    - A removed file with unsaved edits stays open with Restore file (writes it back to its place, never over a file) and Discard edits.
+    - Moving a card saves its open file first, so the `completed` change of the move reloads silently.
+    - Implemented in `src/stores/editor-store.ts` (`conflict`, `replaced`, `reload`, `keepMine`, `restoreFile`, `discard`); commands `save_text`, `create_text` in `src-tauri/src/domain/files.rs`.
   - [x] Links `S-links`
     - Links are relative markdown links. Moving a file rewrites all links to it.
     - A broken link is resolved by the id in the filename and repaired, with a notice.
@@ -284,8 +291,8 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Clicking a card title opens its file in a pane beside the board; one file is open at a time.
     - The form shows `id` and edits `title`, `tags`, `created`, `completed`, `priority`, `implements`, `depends_on`, `parent`. A field is written into the editor text when it loses focus or on Enter, through the same line writer as `set_task_field`; input `read_task` would report (empty title, priority outside 1 to 5, a date not like 2026-10-30) is refused at the field. Empty lists stay `[]`, other empty fields are removed. Frontmatter issues of the text show under the form.
     - Edits are saved 1 s after typing stops, on Ctrl+S (⌘S on macOS), before another file opens and on close (D-20261030-233646-imm8). Saving never creates a file: a file moved or removed since it was opened is not written back to its old place.
-    - A watcher batch that moves the open file makes the editor follow it and save pending edits there; a removed file closes when it had no unsaved edits, otherwise it stays open with a notice.
-    - Implemented in `src/lib/editor.ts`, `src/stores/editor-store.ts`, `src/components/editor.tsx`; Rust `src-tauri/src/domain/files.rs`; commands `read_text`, `write_text`, `parse_task_text`, `set_field_in_text`, `remove_field_in_text`, `read_image`.
+    - A watcher batch that moves the open file makes the editor follow it and save pending edits there; a removed file closes when it had no unsaved edits, otherwise it stays open (`S-conflicts`).
+    - Implemented in `src/lib/editor.ts`, `src/stores/editor-store.ts`, `src/components/editor.tsx`; Rust `src-tauri/src/domain/files.rs`; commands `read_text`, `save_text`, `create_text`, `parse_task_text`, `set_field_in_text`, `remove_field_in_text`, `read_image`.
   - [x] Layout `S-editor-layout`
     - Two modes per file, toggled with one shortcut: styled source and rendered read.
     - Styled source: CodeMirror 6 with sized headings, highlighted task lists, links, inline code and frontmatter; markup stays visible.
@@ -527,6 +534,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: saving only on Ctrl/⌘+S (unsaved text is lost more easily); the editor replacing the board; the Tauri asset protocol (a Cargo feature, a runtime scope and a CSP entry for one feature).
 - Consequences: `S-editor-core` and `S-editor-layout` criteria; new dependencies `@uiw/react-codemirror`, `@codemirror/lang-markdown`, `@codemirror/language`, `@codemirror/view`, `@lezer/highlight`, `react-markdown`, `remark-gfm`, `mermaid`.
 
+### D-20261030-235513-a2um · Saves compare with the disk, reloaded edits stay restorable
+- Context: `S-conflicts` names a reload button but no way to keep one's own edits, and "no typed text is ever lost" conflicts with a reload that replaces edits. A watcher batch arrives at least 150 ms after a change, so an autosave in between would overwrite a change it has not heard of; moving a card writes `completed` while the editor may hold unsaved edits; a removed file cannot be saved.
+- Decision: every save sends the text last read or saved and Rust writes only when the disk still holds it; otherwise the editor shows the conflict and stops saving. Besides Reload there is Keep mine. Edits replaced by a reload are kept for Restore my edits until dismissed or another file opens. A removed file with edits offers Restore file and Discard edits. Moving a card saves its open file first.
+- Rejected: last write wins (overwrites agent changes silently); a three-way merge (out of proportion for phase 1); relying on the CodeMirror undo history to bring back replaced edits (invisible, lost when the editor remounts).
+- Consequences: `S-conflicts` and `S-editor-core` criteria; command `write_text` replaced by `save_text` and `create_text`.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -554,3 +567,4 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Visit: opening a project in the app; the last visit per project decides which cards are new.
 - Source mode: the editor showing the file text with styled markup.
 - Read mode: the editor showing the rendered body of the file.
+- Conflict: unsaved edits of the open file meeting a different text on disk, or a removed file.
