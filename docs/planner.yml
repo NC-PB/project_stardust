@@ -1,0 +1,38 @@
+# Planning tool configuration. Lives in the docs root (docs/planner.yml).
+# Paths are relative to the repository root.
+
+planning_root: docs/planning
+images_root: docs/images
+templates_dir: docs/templates   # optional overrides for task.md and spec.md
+
+# Board columns in display order. Every entry is a folder under planning_root.
+columns:
+  - inbox
+  - next
+  - done
+
+# The column that means "finished". Tasks moved here get a completed date.
+terminal: done
+
+# Folders that hold notes, not tasks. Never shown as columns.
+notes:
+  - notes
+
+# Spec location. "auto" uses spec/ if the folder exists, otherwise spec.md.
+spec: auto
+
+# Staleness thresholds in days.
+stale_after_days: 14      # tasks in next/ older than this are flagged
+review_after_days: 30     # spec files not reviewed for this long are flagged
+
+# Gate: when the spec is clear enough to generate tasks.
+gate:
+  no_open_blocking_questions: true
+  nodes_ticked_and_specified: true   # every node not tagged #later is ticked and has a criterion
+  rules_referenced: true             # every rule is referenced by at least one node
+
+# Agent instruction files. The block is written between the planner markers only.
+agents_file: AGENTS.md
+claude_import: true      # adds @AGENTS.md to CLAUDE.md
+claude_mirror: false     # also writes the block into CLAUDE.md, for agents without imports
+adapters: []              # e.g. [claude-code]
