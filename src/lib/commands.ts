@@ -8,8 +8,12 @@ import type { MainView } from "@/lib/spec-view";
  * availability can be tested without them.
  */
 export interface CommandContext {
-  /** A repository is open (`S-init`). */
+  /** A repository is open in the shown tab (`S-init`). */
   repository: boolean;
+  /** How many project tabs are open (`S-multi-project`). */
+  tabs: number;
+  /** A recent project has no open tab. */
+  closedRecent: boolean;
   /** The open repository has no `docs/planner.yml`. */
   needsInit: boolean;
   /** The project bar shows its buttons: the project is ready and no init report is shown. */
@@ -84,6 +88,26 @@ export const COMMANDS = [
     available: (context) => !context.palette,
   },
   { id: "project.open-repository", name: "Open repository", available: always },
+  {
+    id: "workspace.next-tab",
+    name: "Next project tab",
+    available: (context) => context.tabs > 1,
+  },
+  {
+    id: "workspace.previous-tab",
+    name: "Previous project tab",
+    available: (context) => context.tabs > 1,
+  },
+  {
+    id: "workspace.close-tab",
+    name: "Close project tab",
+    available: (context) => context.tabs > 0,
+  },
+  {
+    id: "workspace.reopen-recent",
+    name: "Open the most recent closed project",
+    available: (context) => context.closedRecent,
+  },
   {
     id: "project.initialize",
     name: "Initialize project",

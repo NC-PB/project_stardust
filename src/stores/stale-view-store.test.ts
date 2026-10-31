@@ -75,9 +75,9 @@ describe("useStaleViewStore", () => {
     const stop = useStaleViewStore.getState().follow("/repo");
     await settle();
     doctor.mockImplementation(async () => report(3));
-    emit("planning", {});
+    emit("planning", { repo_root: "/repo" });
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS / 2);
-    emit("planning", {});
+    emit("planning", { repo_root: "/repo" });
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS / 2);
     expect(doctor).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS);
@@ -90,11 +90,13 @@ describe("useStaleViewStore", () => {
     const stop = useStaleViewStore.getState().follow("/repo");
     await settle();
     emit("repository", {
+      repo_root: "/repo",
       change: { files_added_or_removed: true, markdown: false },
     });
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS * 2);
     expect(doctor).toHaveBeenCalledTimes(1);
     emit("repository", {
+      repo_root: "/repo",
       change: { files_added_or_removed: false, markdown: true },
     });
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS * 2);
@@ -102,10 +104,23 @@ describe("useStaleViewStore", () => {
     stop();
   });
 
+  it("ignores changes of another repository", async () => {
+    const stop = useStaleViewStore.getState().follow("/repo");
+    await settle();
+    emit("planning", { repo_root: "/other" });
+    emit("repository", {
+      repo_root: "/other",
+      change: { files_added_or_removed: false, markdown: true },
+    });
+    await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS * 2);
+    expect(doctor).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it("stops listening and drops a pending check when stopped", async () => {
     const stop = useStaleViewStore.getState().follow("/repo");
     await settle();
-    emit("planning", {});
+    emit("planning", { repo_root: "/repo" });
     stop();
     await vi.advanceTimersByTimeAsync(RECHECK_DELAY_MS * 2);
     expect(doctor).toHaveBeenCalledTimes(1);

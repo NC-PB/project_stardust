@@ -1,10 +1,7 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import {
   type ConfigReport_Serialize,
   commands,
-  events,
   type InitReport,
   type LinkRepair,
   type MoveLinks,
@@ -24,11 +21,8 @@ import { useEditorStore } from "./editor-store";
 import { useLinkStore } from "./link-store";
 import { useProposalStore } from "./proposal-store";
 import { useSearchStore } from "./search-store";
-import { readSetting, writeSetting } from "./settings";
 import { useSpecStore } from "./spec-store";
 import { useStalenessStore } from "./staleness-store";
-
-const REPO_ROOT_SETTING = "repoRoot";
 
 interface ProjectState {
   repoRoot: string | null;
@@ -66,22 +60,24 @@ interface ProjectState {
   opening: boolean;
   /** Dismisses the link notice: `links` and `repair`. */
   dismissLinks: () => void;
-  /** Subscribes to changes on disk; returns the function that unsubscribes. */
-  listen: () => Promise<UnlistenFn>;
+  /** Applies a burst of changes on disk of this project; the workspace routes it here. */
   receive: (change: PlanningChanged_Serialize) => Promise<void>;
   /** Passes a change outside the planning root to the views that read the disk for it. */
   receiveOutside: (change: OutsideChange) => Promise<void>;
-  /** Opens the repository remembered in the app settings, if any. */
-  restore: () => Promise<void>;
-  /** Lets the user pick a repository folder and opens it. */
-  choose: () => Promise<void>;
+  /**
+   * Loads the repository into the stores and watches it. The workspace store calls it for a
+   * tab shown for the first time; it does not remember the repository itself.
+   */
   openRepository: (repoRoot: string) => Promise<void>;
   initialize: () => Promise<void>;
   accept: (offer: Offer) => Promise<void>;
   dismiss: (offer: Offer) => void;
 }
 
-/** The repository the app works on (`S-init`), remembered in app settings. */
+/**
+ * The repository of the shown tab (`S-init`, `S-multi-project`). The workspace store keeps the
+ * open repositories in the app settings and swaps this store's state between tabs.
+ */
 export const useProjectStore = create<ProjectState>()((set, get) => {
   /** Counts calls of `watch_project`; only the latest may end `opening`. */
   let watches = 0;
@@ -146,18 +142,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     repositoryWatchError: null,
     opening: false,
 
-    listen: async () => {
-      const stops = await Promise.all([
-        events.planningChanged.listen((event) => get().receive(event.payload)),
-        events.repositoryChanged.listen((event) =>
-          get().receiveOutside(event.payload.change),
-        ),
-      ]);
-      return () => {
-        for (const stop of stops) stop();
-      };
-    },
-
     receiveOutside: async (change) => {
       await Promise.all([
         useStalenessStore.getState().applyOutside(change),
@@ -192,19 +176,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
 
     dismissLinks: () => set({ links: null, repair: null }),
 
-    restore: async () => {
-      const repoRoot = await readSetting<string>(REPO_ROOT_SETTING);
-      if (repoRoot) await get().openRepository(repoRoot);
-    },
-
-    choose: async () => {
-      const picked = await open({ directory: true, multiple: false });
-      if (typeof picked === "string") await get().openRepository(picked);
-    },
-
     openRepository: async (repoRoot) => {
       await useEditorStore.getState().close();
-      useSearchStore.getState().clear();
+      useSearchStore.getState().reset(repoRoot);
       set({
         repoRoot,
         config: null,
@@ -217,7 +191,6 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         repair: null,
         repositoryWatchError: null,
       });
-      await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);
     },
 

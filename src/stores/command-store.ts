@@ -15,6 +15,7 @@ import {
 import type { MainView } from "@/lib/spec-view";
 import { expandableKeys } from "@/lib/spec-view";
 import type { ThemeChoice } from "@/lib/theme";
+import { closedRecent } from "@/lib/workspace";
 import { useArchiveStore } from "./archive-store";
 import { useBoardStore } from "./board-store";
 import { useChangelogStore } from "./changelog-store";
@@ -30,6 +31,7 @@ import { useSplitStore } from "./split-store";
 import { useTerminalStore } from "./terminal-store";
 import { useThemeStore } from "./theme-store";
 import { useViewStore } from "./view-store";
+import { useWorkspaceStore } from "./workspace-store";
 
 /** The open file relative to the repository when it is a task, from the board's config. */
 function openTaskPath(): string | null {
@@ -55,8 +57,11 @@ export function commandContext(): CommandContext {
   const editor = useEditorStore.getState();
   const status = projectStatus(project.repoRoot, project.config);
   const boardReady = board.repoRoot !== null && board.config !== null;
+  const workspace = useWorkspaceStore.getState();
   return {
     repository: project.repoRoot !== null,
+    tabs: workspace.tabs.length,
+    closedRecent: closedRecent(workspace.recent, workspace.tabs).length > 0,
     needsInit: status === "needs-init",
     projectBar:
       status === "ready" &&
@@ -134,7 +139,12 @@ const chooseTheme = (choice: ThemeChoice) => () =>
  */
 const RUNS: Record<CommandId, () => void> = {
   "palette.open": () => useMenuStore.getState().setPalette(true),
-  "project.open-repository": () => void useProjectStore.getState().choose(),
+  "project.open-repository": () => void useWorkspaceStore.getState().choose(),
+  "workspace.next-tab": () => void useWorkspaceStore.getState().step(1),
+  "workspace.previous-tab": () => void useWorkspaceStore.getState().step(-1),
+  "workspace.close-tab": () => void useWorkspaceStore.getState().close(),
+  "workspace.reopen-recent": () =>
+    void useWorkspaceStore.getState().reopenRecent(),
   "project.initialize": () => void useProjectStore.getState().initialize(),
   "project.open-terminal": withRepository((repoRoot) =>
     useTerminalStore.getState().open(repoRoot),

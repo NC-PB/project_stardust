@@ -5,10 +5,11 @@
 //! collected until the disk is quiet, then the touched paths are compared with the files known
 //! before: a file that disappeared and one that appeared with the same task id are a move.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
@@ -109,6 +110,20 @@ impl Generations {
     /// Whether no later generation was started since `generation`.
     pub fn is_current(&self, generation: u64) -> bool {
         self.0.load(Ordering::SeqCst) == generation
+    }
+}
+
+/// The generations of every project the app has opened, by repository root (`S-multi-project`):
+/// opening or closing one project never supersedes an open of another.
+#[derive(Debug, Default)]
+pub struct ProjectGenerations(Mutex<HashMap<String, Arc<Generations>>>);
+
+impl ProjectGenerations {
+    /// The generations of the project at `repo_root`, created on first use. Kept after a
+    /// close, so an open the close superseded stays superseded.
+    pub fn of(&self, repo_root: &str) -> Arc<Generations> {
+        let mut projects = self.0.lock().unwrap_or_else(|err| err.into_inner());
+        Arc::clone(projects.entry(repo_root.to_string()).or_default())
     }
 }
 
@@ -325,6 +340,20 @@ mod tests {
         // A close is a generation of its own.
         opens.next();
         assert!(!opens.is_current(second));
+    }
+
+    #[test]
+    fn projects_count_their_generations_apart() {
+        let projects = ProjectGenerations::default();
+        let a = projects.of("/a").next();
+        let b = projects.of("/b").next();
+        // Opening /b does not supersede the open of /a.
+        assert!(projects.of("/a").is_current(a));
+        assert!(projects.of("/b").is_current(b));
+        // A close of /a supersedes only /a.
+        projects.of("/a").next();
+        assert!(!projects.of("/a").is_current(a));
+        assert!(projects.of("/b").is_current(b));
     }
 
     #[test]

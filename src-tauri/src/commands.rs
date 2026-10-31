@@ -2,6 +2,7 @@
 //! Every command is annotated with `#[specta::specta]` and registered in `lib.rs`,
 //! so the frontend calls it only through the generated `src/bindings.ts`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -482,38 +483,40 @@ pub fn add_images_to_gitignore(repo_root: String) -> Result<bool, String> {
     init::add_images_to_gitignore(repo_root, &config)
 }
 
-/// The search index of the open repository (`S-search-fulltext`), built by `watch_project`
-/// and updated by its batches.
+/// The search index of every watched repository by repository root (`S-search-fulltext`,
+/// `S-multi-project`), built by `watch_project` and updated by its batches.
 #[derive(Default)]
-pub struct SearchState(Arc<Mutex<Option<search::SearchIndex>>>);
+pub struct SearchState(Arc<Mutex<HashMap<String, search::SearchIndex>>>);
 
-/// Files under the planning root of the watched repository containing every word of `query`,
-/// best first, at most `limit`.
+/// Files under the planning root of the watched repository at `repo_root` containing every
+/// word of `query`, best first, at most `limit`. None when the repository is not watched.
 #[tauri::command]
 #[specta::specta]
 pub fn search(
     state: tauri::State<'_, SearchState>,
+    repo_root: String,
     query: String,
     limit: u32,
 ) -> Result<Vec<search::SearchHit>, String> {
-    let index = state.0.lock().map_err(|err| err.to_string())?;
-    Ok(index
-        .as_ref()
+    let indexes = state.0.lock().map_err(|err| err.to_string())?;
+    Ok(indexes
+        .get(&repo_root)
         .map(|index| index.search(&query, limit as usize))
         .unwrap_or_default())
 }
 
-/// The files under the planning root of the watched repository that a link can be made to,
-/// by path, with title and id (`S-links`). Taken from the search index, so they follow
-/// watcher batches.
+/// The files under the planning root of the watched repository at `repo_root` that a link can
+/// be made to, by path, with title and id (`S-links`). Taken from the search index, so they
+/// follow watcher batches.
 #[tauri::command]
 #[specta::specta]
 pub fn link_candidates(
     state: tauri::State<'_, SearchState>,
+    repo_root: String,
 ) -> Result<Vec<link_lookup::LinkCandidate>, String> {
-    let index = state.0.lock().map_err(|err| err.to_string())?;
-    Ok(index
-        .as_ref()
+    let indexes = state.0.lock().map_err(|err| err.to_string())?;
+    Ok(indexes
+        .get(&repo_root)
         .map(link_lookup::link_candidates)
         .unwrap_or_default())
 }
@@ -542,14 +545,16 @@ pub fn backlinks(repo_root: String, path: String) -> Vec<link_lookup::Backlink> 
     link_lookup::backlinks(repo_root, &config.planning_root, &relative)
 }
 
-/// The watcher of the open repository; replaced by every `watch_project` call. Locked only
-/// briefly, never during a walk of the repository, so `unwatch_project` does not wait for an
-/// open in progress.
+/// The watchers of every open project by repository root (`S-multi-project`); a project's
+/// entry is replaced by each `watch_project` call for it and removed by `unwatch_project`.
+/// Locked only briefly, never during a walk of a repository, so `unwatch_project` does not
+/// wait for an open in progress.
 #[derive(Default)]
 pub struct WatchState {
-    current: Arc<Mutex<Option<Watchers>>>,
-    /// Counts opens and closes; an open installs its watcher only while it is the latest.
-    opens: Arc<watch::Generations>,
+    current: Arc<Mutex<HashMap<String, Watchers>>>,
+    /// Counts opens and closes per project; an open installs its watcher only while it is the
+    /// latest of its project.
+    opens: Arc<watch::ProjectGenerations>,
 }
 
 /// The watchers of the open repository: the planning root and the config in detail, the rest
@@ -574,12 +579,16 @@ pub struct ProjectOpened {
 /// `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct RepositoryChanged {
+    /// The repository root as given to `watch_project` (`S-multi-project`).
+    pub repo_root: String,
     pub change: repo_watch::OutsideChange,
 }
 
 /// Sent once per burst of changes under the planning root or to the config.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct PlanningChanged {
+    /// The repository root as given to `watch_project` (`S-multi-project`).
+    pub repo_root: String,
     pub batch: watch::ChangeBatch,
     /// Files rewritten because the config changed and the planner block was regenerated.
     pub block_written: Vec<String>,
@@ -597,8 +606,9 @@ pub struct PlanningChanged {
 /// `PlanningChanged` events, and the rest of the repository coarsely, sending
 /// `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 /// watcher did not pair are repaired by id, and a config change regenerates the planner
-/// block, before the event is sent. Stops the previous watcher; call again after the planning
-/// root changed. First repairs broken links in the whole repository by id and returns what
+/// block, before the event is sent. Stops the previous watcher of this repository; watchers of
+/// other repositories keep running (`S-multi-project`). Call again after the planning root
+/// changed. First repairs broken links in the whole repository by id and returns what
 /// it did, with the reason the repository watcher could not start, if it could not.
 ///
 /// Async, and the walks run on a blocking thread, so a large repository does not freeze the
@@ -613,8 +623,8 @@ pub async fn watch_project(
     search_state: tauri::State<'_, SearchState>,
     repo_root: String,
 ) -> Result<ProjectOpened, String> {
-    let open = state.opens.next();
-    let opens = Arc::clone(&state.opens);
+    let opens = state.opens.of(&repo_root);
+    let open = opens.next();
     let current = Arc::clone(&state.current);
     let index = Arc::clone(&search_state.0);
     tauri::async_runtime::spawn_blocking(move || {
@@ -626,10 +636,10 @@ pub async fn watch_project(
 
 fn open_project(
     app: AppHandle,
-    current: &Mutex<Option<Watchers>>,
+    current: &Mutex<HashMap<String, Watchers>>,
     opens: &watch::Generations,
     open: u64,
-    index: &Arc<Mutex<Option<search::SearchIndex>>>,
+    index: &Arc<Mutex<HashMap<String, search::SearchIndex>>>,
     repo_root: String,
 ) -> Result<ProjectOpened, String> {
     {
@@ -638,8 +648,11 @@ fn open_project(
         if !opens.is_current(open) {
             return Ok(ProjectOpened::default());
         }
-        *current = None;
-        *index.lock().map_err(|err| err.to_string())? = None;
+        current.remove(&repo_root);
+        index
+            .lock()
+            .map_err(|err| err.to_string())?
+            .remove(&repo_root);
     }
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
@@ -655,12 +668,18 @@ fn open_project(
     }
     let batch_index = Arc::clone(index);
     let outside_app = app.clone();
+    let outside_root = repo_root.clone();
+    let batch_root = repo_root.clone();
     // Code files and markdown outside the planning root (`S-staleness`, `S-links`). Without it
     // the planning watcher still runs; those views then follow only planning batches, and the
     // app says why.
     let (repository, repository_watch_error) =
         match repo_watch::watch(&root, &planning_root, move |change| {
-            let _ = RepositoryChanged { change }.emit(&outside_app);
+            let _ = RepositoryChanged {
+                repo_root: outside_root.clone(),
+                change,
+            }
+            .emit(&outside_app);
         }) {
             Ok(watcher) => (Some(watcher), None),
             Err(err) => (None, Some(err)),
@@ -675,8 +694,8 @@ fn open_project(
             &link_repair::RepairScope::of_batch(&batch),
         );
         // The index is current before the app hears of the batch.
-        if let Ok(mut index) = batch_index.lock()
-            && let Some(index) = index.as_mut()
+        if let Ok(mut indexes) = batch_index.lock()
+            && let Some(index) = indexes.get_mut(&batch_root)
         {
             index.apply(&batch);
         }
@@ -690,6 +709,7 @@ fn open_project(
             (Vec::new(), None)
         };
         let _ = PlanningChanged {
+            repo_root: batch_root.clone(),
             batch,
             block_written,
             block_error,
@@ -701,11 +721,17 @@ fn open_project(
     let mut current = current.lock().map_err(|err| err.to_string())?;
     // Checked again under the lock: an unwatch or a later open may have come meanwhile.
     if opens.is_current(open) {
-        *index.lock().map_err(|err| err.to_string())? = Some(built);
-        *current = Some(Watchers {
-            _planning: watcher,
-            _repository: repository,
-        });
+        index
+            .lock()
+            .map_err(|err| err.to_string())?
+            .insert(repo_root.clone(), built);
+        current.insert(
+            repo_root,
+            Watchers {
+                _planning: watcher,
+                _repository: repository,
+            },
+        );
     }
     Ok(ProjectOpened {
         repair,
@@ -745,15 +771,25 @@ pub fn apply_doctor_fix(
     doctor::apply_fix(root, &config, &fix)
 }
 
-/// Stops watching and forgets the search index.
+/// Stops watching the repository at `repo_root` and forgets its search index, when its tab is
+/// closed (`S-multi-project`). Other repositories stay watched.
 #[tauri::command]
 #[specta::specta]
 pub fn unwatch_project(
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
+    repo_root: String,
 ) -> Result<(), String> {
-    state.opens.next();
-    *state.current.lock().map_err(|err| err.to_string())? = None;
-    *search_state.0.lock().map_err(|err| err.to_string())? = None;
+    state.opens.of(&repo_root).next();
+    state
+        .current
+        .lock()
+        .map_err(|err| err.to_string())?
+        .remove(&repo_root);
+    search_state
+        .0
+        .lock()
+        .map_err(|err| err.to_string())?
+        .remove(&repo_root);
     Ok(())
 }

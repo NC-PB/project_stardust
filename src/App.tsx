@@ -3,6 +3,7 @@ import { Board } from "@/components/board";
 import { CommandPalette, PaletteButton } from "@/components/command-palette";
 import { Editor } from "@/components/editor";
 import { ProjectPanel } from "@/components/project-panel";
+import { ProjectTabs, RecentProjects } from "@/components/project-tabs";
 import { PromptNotice } from "@/components/prompt-notice";
 import { ProposalList } from "@/components/proposal-list";
 import { SearchBox } from "@/components/search-box";
@@ -14,16 +15,16 @@ import { ViewSwitch } from "@/components/view-switch";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
 import { useCommitStore } from "@/stores/commit-store";
-import { useProjectStore } from "@/stores/project-store";
 import { useTerminalStore } from "@/stores/terminal-store";
 import { useThemeStore } from "@/stores/theme-store";
 import { useViewStore } from "@/stores/view-store";
+import { useWorkspaceStore } from "@/stores/workspace-store";
 
 function App() {
   const version = useAppStore((state) => state.version);
   const loadVersion = useAppStore((state) => state.loadVersion);
-  const restore = useProjectStore((state) => state.restore);
-  const listen = useProjectStore((state) => state.listen);
+  const restore = useWorkspaceStore((state) => state.restore);
+  const listen = useWorkspaceStore((state) => state.listen);
   const refreshCommitsOnFocus = useCommitStore((state) => state.refreshOnFocus);
   const startTheme = useThemeStore((state) => state.start);
   const loadTerminal = useTerminalStore((state) => state.load);
@@ -61,7 +62,9 @@ function App() {
           <SettingsMenu />
         </div>
       </header>
+      <ProjectTabs />
       <ProjectPanel />
+      <RecentProjects />
       <ViewSwitch />
       <SearchBox />
       <SessionPanel />
