@@ -211,6 +211,33 @@ describe("sessionBrief", () => {
     });
   });
 
+  it("falls back to the newest archived task when none is directly in the terminal column", () => {
+    const archived = [
+      { month: "2026-08", task: task("a1", { completed: "2026-08-20" }) },
+      {
+        month: "2026-09",
+        task: task("a2", {
+          completed: "2026-09-12",
+          sections: [{ heading: "Result", content: "Archived result." }],
+        }),
+      },
+    ];
+    const withoutDone = [column("next", []), column("done", [])];
+    expect(
+      sessionBrief("/repo", config, withoutDone, null, archived).lastCompleted,
+    ).toEqual({
+      id: "a2",
+      title: "a2",
+      completed: "2026-09-12",
+      result: "Archived result.",
+      path: "/repo/docs/planning/done/2026-09/a2-x.md",
+    });
+    // A task still directly in the column wins over the archive.
+    expect(
+      sessionBrief("/repo", config, columns, spec, archived).lastCompleted?.id,
+    ).toBe("d2");
+  });
+
   it("shows the last five decisions newest first, with their spec file", () => {
     const brief = sessionBrief("/repo", config, columns, spec);
     expect(brief.decisions).toHaveLength(SESSION_DECISIONS);

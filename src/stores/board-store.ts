@@ -25,8 +25,8 @@ interface BoardState {
   /** The columns listed in `columns`, in config order (`S-board-columns`). */
   columns: BoardColumn[];
   /**
-   * The tasks in the month folders of the terminal column (`S-archive`), for trace only; never
-   * shown as cards or counted (D-20261031-030552-k3qa). Empty when they cannot be read.
+   * The tasks in the month folders of the terminal column (`S-archive`), for trace and the session
+   * panel only; never shown as cards or counted (D-20261031-030552-k3qa). Empty when they cannot be read.
    */
   archived: ArchivedTask_Serialize[];
   /** The previous visit of this project; files changed after it are new. */

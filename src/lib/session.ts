@@ -1,4 +1,9 @@
-import type { Config, Spec, Task_Serialize } from "@/bindings";
+import type {
+  ArchivedTask_Serialize,
+  Config,
+  Spec,
+  Task_Serialize,
+} from "@/bindings";
 import { type BoardColumn, columnDir, sortTasks } from "@/lib/board";
 
 /** How many of the latest decisions the session brief shows. */
@@ -102,12 +107,42 @@ export function planningPath(
   return columnDir(repoRoot, planningRoot, file);
 }
 
-/** The session brief of the open project; without a spec the spec parts are empty. */
+/**
+ * The task finished last: from the files directly in the terminal column, or, when it holds none,
+ * from its archived tasks, opened at their month folder path (D-20261031-031857-6qqi).
+ */
+function lastFinished(
+  terminalTasks: Task_Serialize[],
+  archived: ArchivedTask_Serialize[],
+  pathOf: (folder: string, task: Task_Serialize) => string,
+): SessionResult | null {
+  let finished = lastCompletedTask(terminalTasks);
+  let folder = "";
+  if (finished === null) {
+    finished = lastCompletedTask(archived.map((entry) => entry.task));
+    const month = archived.find((entry) => entry.task === finished)?.month;
+    if (month !== undefined) folder = `${month}/`;
+  }
+  if (finished === null) return null;
+  return {
+    id: finished.id,
+    title: finished.title,
+    completed: finished.completed,
+    result: resultOf(finished),
+    path: pathOf(folder, finished),
+  };
+}
+
+/**
+ * The session brief of the open project; without a spec the spec parts are empty. The archived
+ * tasks of the terminal column (`S-archive`) are read only when no task is directly in it.
+ */
 export function sessionBrief(
   repoRoot: string,
   config: Config,
   columns: BoardColumn[],
   spec: Spec | null,
+  archived: ArchivedTask_Serialize[] = [],
 ): SessionBrief {
   const readyColumn = readyColumnOf(config.columns, config.terminal);
   const pathIn = (column: string, task: Task_Serialize) =>
@@ -123,17 +158,12 @@ export function sessionBrief(
     path: pathIn(readyColumn, task),
   }));
 
-  const finished = lastCompletedTask(tasksOf(config.terminal));
-  const lastCompleted =
-    finished === null
-      ? null
-      : {
-          id: finished.id,
-          title: finished.title,
-          completed: finished.completed,
-          result: resultOf(finished),
-          path: pathIn(config.terminal, finished),
-        };
+  const lastCompleted = lastFinished(
+    tasksOf(config.terminal),
+    archived,
+    (folder, task) =>
+      `${columnDir(repoRoot, config.planning_root, config.terminal)}/${folder}${task.file_name}`,
+  );
 
   const specPath = (file: string) =>
     planningPath(repoRoot, config.planning_root, file);
