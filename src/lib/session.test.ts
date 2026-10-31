@@ -6,11 +6,10 @@ import type {
   Spec_Serialize,
   Task_Serialize,
 } from "@/bindings";
-import type { BoardColumn } from "./board";
+import { type BoardColumn, sortTasks } from "./board";
 import {
   lastCompletedTask,
   readyColumnOf,
-  readyOrder,
   resultOf,
   SESSION_DECISIONS,
   sessionBrief,
@@ -93,23 +92,6 @@ describe("readyColumnOf", () => {
   it("falls back to the single open column, then the terminal one", () => {
     expect(readyColumnOf(["inbox", "done"], "done")).toBe("inbox");
     expect(readyColumnOf(["done"], "done")).toBe("done");
-  });
-});
-
-describe("readyOrder", () => {
-  it("puts priorities first, then orders by file name", () => {
-    const tasks = [
-      task("20261031-000003-cccc"),
-      task("20261031-000002-bbbb", { priority: 3 }),
-      task("20261031-000001-aaaa"),
-      task("20261031-000004-dddd", { priority: 1 }),
-    ];
-    expect(readyOrder(tasks).map((t) => t.id)).toEqual([
-      "20261031-000004-dddd",
-      "20261031-000002-bbbb",
-      "20261031-000001-aaaa",
-      "20261031-000003-cccc",
-    ]);
   });
 });
 
@@ -198,6 +180,25 @@ describe("sessionBrief", () => {
         path: "/repo/docs/planning/next/n2-x.md",
       },
     ]);
+  });
+
+  it("lists the ready tasks in board order", () => {
+    const next = [
+      task("a"),
+      task("b", { priority: 1, depends_on: ["c"] }),
+      task("c", { priority: 3 }),
+      task("d", { priority: 3, created: "2026-10-29" }),
+    ];
+    const brief = sessionBrief(
+      "/repo",
+      config,
+      [column("next", next), column("done", [])],
+      null,
+    );
+    expect(brief.ready.map((ready) => ready.id)).toEqual(
+      sortTasks(next).map((ready) => ready.id),
+    );
+    expect(brief.ready.map((ready) => ready.id)).toEqual(["d", "c", "b", "a"]);
   });
 
   it("gives the Result of the task finished last", () => {

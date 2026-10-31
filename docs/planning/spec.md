@@ -140,7 +140,8 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Per column: priority (1 first, none last), then `created` (none last), then id (none last), then file name.
     - Dependency order on top: a task comes after every task of the same column it depends on. Each place goes to the first task in that order whose dependencies in the column are all placed. Dependencies on tasks in other columns, on unknown ids or on the task itself are ignored. A cycle is broken at a task on it: following first unplaced dependencies from the first remaining task until one repeats; every task is still shown (D-20261031-021102-jyia).
     - A moved card takes its sorted place in the target column at once, before the watcher batch, and again when a failed move puts it back.
-    - Implemented in `src/lib/board.ts` (`sortTasks`, applied per column by `cardsOf`).
+    - The session panel lists the ready column in this order (`S-session-panel`).
+    - Implemented in `src/lib/board.ts` (`sortTasks`, applied per column by `cardsOf` and to the ready column by `sessionBrief`).
   - [x] Make task `S-make-task`
     - Selecting text in any file and choosing "Make task" creates a task file in `inbox/` with the selection as Description and a link back to the source file.
     - "Make task" is a button in the editor header, enabled while text is selected: the markdown in source mode, the rendered text in read mode. The task goes to the first column of `columns`; the new file opens in the editor.
@@ -281,12 +282,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/terminal.rs` (`launches`, `open_terminal`); command `open_terminal(repo_root, terminal)`; `src/stores/terminal-store.ts`, `src/components/settings-menu.tsx`.
   - [x] Session panel `S-session-panel`
     - Computed, nothing written: tasks in the ready column in order, last five decisions, open blocking questions, Result of the most recently completed task.
-    - The ready column is the "ready for you" column of the column roles (D-20261031-001850-0g9f), `next/` by default. Until `S-board-sort` exists its tasks are listed by priority (1 first, none last), then file name, which follows the id (D-20261031-011606-s3pn).
+    - The ready column is the "ready for you" column of the column roles (D-20261031-001850-0g9f), `next/` by default. Its tasks are listed in board order (`S-board-sort`), the same order as the column on the board (D-20261031-021155-7d0n).
     - The most recently completed task is the task in the terminal column with the latest `completed` date, then the latest change on disk; its Result section is shown as text, or "No Result written".
     - The last five decisions are the last five entries of the Decisions section, newest first; superseded ones are struck through. Blocking questions are unanswered questions with `(blocking)`.
     - Shown under the search box when a project opens; updates with every watcher batch. "Hide" hides it for that project for the session; "Show session" brings it back; another project shows it again. Nothing is kept in the settings or the repository.
     - Every entry opens its file in the editor: the task file, or the spec file holding the decision or question, at its line.
-    - Implemented in `src/lib/session.ts` (`sessionBrief`, `readyColumnOf`, `readyOrder`, `lastCompletedTask`, `resultOf`), `src/stores/session-store.ts` (`useSessionStore`), `src/components/session-panel.tsx`.
+    - Implemented in `src/lib/session.ts` (`sessionBrief`, `readyColumnOf`, `lastCompletedTask`, `resultOf`; the order from `sortTasks`), `src/stores/session-store.ts` (`useSessionStore`), `src/components/session-panel.tsx`.
 - Files `S-files`
   - [x] Ids `S-ids`
     - Tasks: local time to the second plus 4 random characters from `[a-z0-9]`, `YYYYMMDD-HHMMSS-xxxx` (D-20261030-213854-k3cv).
@@ -809,6 +810,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: the base order is priority 1 to 5 (none last), then `created` (none last), then id (none last), then file name. Dependency order is applied on top as a stable topological order within the column: each place goes to the first task in base order whose dependencies in the same column are all placed, so a dependent task moves down below its dependencies, not the dependency up. Dependencies on tasks in other columns, on ids found in no column and on the task itself are ignored. When no task is free there is a cycle: from the first remaining task in base order its first unplaced dependency is followed until a task repeats, and that task is placed next. The sort runs where cards are built (`cardsOf`), so an optimistic move and a move put back after a failure show at the sorted place without changing `moveCard`.
 - Rejected: pulling dependencies up above their dependents (a low priority dependency would jump over higher priority tasks); ordering across columns (a column only shows its own tasks); hiding or flagging tasks in a cycle (the order must not drop cards; cycles are a matter for `S-dependencies`); inserting at the sorted place in `moveCard` (the board would hold two orderings of the same tasks).
 - Consequences: `S-board-sort` criteria. The "lands at the end of the column" part of D-20261030-232042-h9dm no longer holds; `S-board-dnd` still says so. `BoardColumn.tasks` stays in the order read from disk; anything showing tasks in board order uses `sortTasks`.
+
+### D-20261031-021155-7d0n · Session panel lists ready tasks in board order
+- Context: D-20261031-011606-s3pn ordered the session panel's ready tasks by priority, then id, until `S-board-sort` existed. It now exists (D-20261031-021102-jyia).
+- Decision: supersedes the ordering part of D-20261031-011606-s3pn. `sessionBrief` orders the ready column with `sortTasks`, the function the board uses, and `readyOrder` is removed. The rest of D-20261031-011606-s3pn stands.
+- Rejected: reading the order from the board's cards (would tie the brief to the tag filter and to card fields it does not need).
+- Consequences: `S-session-panel` and `S-board-sort` criteria. The panel and the ready column on the board always show the same order. The panel now also orders by `created` and puts a task after the ready tasks it depends on.
 
 ## Glossary
 
