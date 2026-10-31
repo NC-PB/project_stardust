@@ -31,4 +31,4 @@ Implements `S-gitattributes` in the [spec](../spec.md).
 - No git command runs; `R-no-git-writes` holds.
 - Verified with `npm run check` (261 tests), `cargo test` (188 passed) and `cargo clippy --all-targets` (clean).
 - Not tried: the button and panel in the running app (`npm run tauri dev` was not started), and git's own reading of the written lines (`git check-attr`, an actual union merge, quoted paths with spaces) was not checked with git; the line format follows the gitattributes documentation. This repository's own `.gitattributes` was not written.
-- Discovered: after a split, a `spec.md` line goes stale and the folder files get no line until the action runs again (inbox task [20261031-022447-8qow](../inbox/20261031-022447-8qow-split-spec-updates-the-gitattributes-lines.md)).
+- Discovered: after a split, a `spec.md` line goes stale and the folder files get no line until the action runs again (inbox task [20261031-022447-8qow](20261031-022447-8qow-split-spec-updates-the-gitattributes-lines.md)).

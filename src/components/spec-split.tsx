@@ -72,6 +72,36 @@ export function SplitSpecPanel({ repoRoot }: { repoRoot: string }) {
               </ul>
             </div>
           )}
+          {plan.gitattributes && (
+            <div>
+              <p className="font-medium">.gitattributes</p>
+              {plan.gitattributes.new.length > 0 ? (
+                <ul className="pl-4 text-muted-foreground">
+                  <li className="font-mono break-all">
+                    {plan.gitattributes.line}: {plan.gitattributes.old} →
+                  </li>
+                  {plan.gitattributes.new.map((line) => (
+                    <li key={line} className="pl-4 font-mono break-all">
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="pl-4 text-muted-foreground">
+                  stays as it is: the folder files have their own merge settings
+                </p>
+              )}
+              {plan.gitattributes.kept.length > 0 && (
+                <ul className="pl-4 text-muted-foreground">
+                  {plan.gitattributes.kept.map((line) => (
+                    <li key={line} className="font-mono break-all">
+                      kept: {line}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {plan.blockers.length > 0 ? (
             <ul className="list-inside list-disc text-destructive">
               {plan.blockers.map((blocker) => (
@@ -111,6 +141,8 @@ export function SplitSpecPanel({ repoRoot }: { repoRoot: string }) {
                 `; links rewritten in ${report.rewritten.join(", ")}`}
               {report.block_written.length > 0 &&
                 `; planner block rewritten in ${report.block_written.join(", ")}`}
+              {report.gitattributes.length > 0 &&
+                `; .gitattributes now names ${report.gitattributes.length} spec files for union merge`}
               ; spec.md is in the trash.
               {report.block_error &&
                 ` The planner block could not be rewritten: ${report.block_error}`}

@@ -52,7 +52,7 @@ export const commands = {
 	 */
 	missingCodePaths: (repoRoot: string) => __TAURI_INVOKE<MissingCodePath[]>("missing_code_paths", { repoRoot }),
 	/**  What splitting `spec.md` into the `spec/` folder would do (`S-spec-split`). Writes nothing. */
-	planSpecSplit: (repoRoot: string) => __TAURI_INVOKE<SplitPlan>("plan_spec_split", { repoRoot }),
+	planSpecSplit: (repoRoot: string) => __TAURI_INVOKE<SplitPlan_Serialize>("plan_spec_split", { repoRoot }),
 	/**
 	 *  Splits `spec.md` into the `spec/` folder, rewrites the links into it and moves `spec.md` to
 	 *  the OS trash (`S-spec-split`). Refuses, changing nothing, when the plan has blockers.
@@ -1023,6 +1023,24 @@ export type Spec_Serialize = {
 	issues: SpecIssue_Serialize[],
 };
 
+/**  What a split of the spec does to `.gitattributes` (`S-spec-split`), shown in its preview. */
+export type SplitAttributes = {
+	/**  The line of `.gitattributes`, counted from 1, that gives `spec.md` `merge=union`. */
+	line: number,
+	/**  That line as written, trimmed. The split removes it when `new` is not empty. */
+	old: string,
+	/**
+	 *  The lines that take its place: one per folder file that has no merge setting of its own,
+	 *  the old line with the folder file's path. Empty when nothing changes.
+	 */
+	new: string[],
+	/**
+	 *  Existing lines that already set `merge` for a folder file. They stay as they are and
+	 *  that file gets no line: the setting is the user's.
+	 */
+	kept: string[],
+};
+
 /**  One file of the folder form the split creates. */
 export type SplitFile = {
 	/**  Relative to the planning root, `spec/<name>.md`. */
@@ -1034,7 +1052,10 @@ export type SplitFile = {
 };
 
 /**  What a split would do, shown before it runs. */
-export type SplitPlan = {
+export type SplitPlan = SplitPlan_Serialize | SplitPlan_Deserialize;
+
+/**  What a split would do, shown before it runs. */
+export type SplitPlan_Deserialize = {
 	/**  `spec.md`, relative to the repository root. */
 	location: string,
 	/**  Why the split cannot run. Empty when it can. */
@@ -1046,6 +1067,31 @@ export type SplitPlan = {
 	 *  new files.
 	 */
 	links: FileLinks[],
+	/**
+	 *  What happens to the `.gitattributes` line that gives `spec.md` `merge=union`. `None`
+	 *  when there is no such line; `.gitattributes` is not changed then.
+	 */
+	gitattributes?: SplitAttributes | null,
+};
+
+/**  What a split would do, shown before it runs. */
+export type SplitPlan_Serialize = {
+	/**  `spec.md`, relative to the repository root. */
+	location: string,
+	/**  Why the split cannot run. Empty when it can. */
+	blockers: string[],
+	/**  The files the split creates, in reading order. */
+	files: SplitFile[],
+	/**
+	 *  The links the split rewrites, by file. The moved text of the spec is listed under its
+	 *  new files.
+	 */
+	links: FileLinks[],
+	/**
+	 *  What happens to the `.gitattributes` line that gives `spec.md` `merge=union`. `None`
+	 *  when there is no such line; `.gitattributes` is not changed then.
+	 */
+	gitattributes: SplitAttributes | null,
 };
 
 /**  What a split did. */
@@ -1069,6 +1115,11 @@ export type SplitReport_Deserialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error?: string | null,
+	/**
+	 *  The lines that replaced the `spec.md` line in `.gitattributes`. Empty when it was not
+	 *  changed.
+	 */
+	gitattributes: string[],
 };
 
 /**  What a split did. */
@@ -1089,6 +1140,11 @@ export type SplitReport_Serialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error: string | null,
+	/**
+	 *  The lines that replaced the `spec.md` line in `.gitattributes`. Empty when it was not
+	 *  changed.
+	 */
+	gitattributes: string[],
 };
 
 /**  The tags the changelog can start from. */
