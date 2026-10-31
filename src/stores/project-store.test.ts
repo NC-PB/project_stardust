@@ -26,6 +26,15 @@ vi.mock("@/bindings", () => ({
   },
   events: { planningChanged: { listen: vi.fn() } },
 }));
+vi.mock("./spec-store", () => ({
+  useSpecStore: {
+    getState: () => ({
+      load: async () => {},
+      apply: async () => {},
+      clear: () => {},
+    }),
+  },
+}));
 vi.mock("./board-store", () => ({
   useBoardStore: {
     getState: () => ({ load: loadBoard, apply: applyBatch, clear: clearBoard }),

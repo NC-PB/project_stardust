@@ -14,6 +14,39 @@ export const commands = {
 	taskFilename: (id: string, title: string) => __TAURI_INVOKE<string>("task_filename", { id, title }),
 	/**  The config of the repository at `repo_root`, with every problem found in it. */
 	loadConfig: (repoRoot: string) => __TAURI_INVOKE<ConfigReport_Serialize>("load_config", { repoRoot }),
+	/**
+	 *  The spec of the repository at `repo_root`: `spec.md` or the `spec/` folder, as `spec` in the
+	 *  config chooses (`S-spec-file`). Never fails; problems are issues with file and line.
+	 */
+	readSpec: (repoRoot: string) => __TAURI_INVOKE<Spec_Serialize>("read_spec", { repoRoot }),
+	/**
+	 *  The spec in `text`, an unsaved version of the spec file `file` (relative to the planning
+	 *  root, `spec.md` or `spec/<name>.md`).
+	 */
+	parseSpecText: (file: string, text: string) => __TAURI_INVOKE<Spec_Serialize>("parse_spec_text", { file, text }),
+	/**
+	 *  The gate of the spec of the repository at `repo_root`, with the checks the `gate` keys of
+	 *  its config turn on (`S-gate`).
+	 */
+	gateStatus: (repoRoot: string) => __TAURI_INVOKE<GateStatus_Serialize>("gate_status", { repoRoot }),
+	/**
+	 *  The questions and decisions that saving `text` over `saved` (the text last read or saved) in
+	 *  the file at `path` would change or remove (`S-decisions`, `R-append-only`). Empty when the edit only appends or marks entries,
+	 *  and for every file that is not `spec.md` or a file of the `spec/` folder.
+	 */
+	checkAppendOnly: (repoRoot: string, path: string, saved: string, text: string) => __TAURI_INVOKE<AppendOnlyViolation_Serialize[]>("check_append_only", { repoRoot, path, saved, text }),
+	/**
+	 *  Every open proposal in the planning files of the repository at `repo_root`
+	 *  (`S-proposals`), by path and line.
+	 */
+	listProposals: (repoRoot: string) => __TAURI_INVOKE<ProposalRef[]>("list_proposals", { repoRoot }),
+	/**  What splitting `spec.md` into the `spec/` folder would do (`S-spec-split`). Writes nothing. */
+	planSpecSplit: (repoRoot: string) => __TAURI_INVOKE<SplitPlan>("plan_spec_split", { repoRoot }),
+	/**
+	 *  Splits `spec.md` into the `spec/` folder, rewrites the links into it and moves `spec.md` to
+	 *  the OS trash (`S-spec-split`). Refuses, changing nothing, when the plan has blockers.
+	 */
+	splitSpec: (repoRoot: string) => typedError<SplitReport_Serialize, string>(__TAURI_INVOKE("split_spec", { repoRoot })),
 	/**  Every task file directly in the column folder `dir`, broken ones included. */
 	readColumn: (dir: string) => typedError<Task_Serialize[], string>(__TAURI_INVOKE("read_column", { dir })),
 	/**  One task file. */
@@ -113,6 +146,55 @@ export const events = {
 /**  Agent command file generators (`S-adapters`). */
 export type Adapter = "claude-code";
 
+/**  An existing question or decision that an edit changed or removed. */
+export type AppendOnlyViolation = AppendOnlyViolation_Serialize | AppendOnlyViolation_Deserialize;
+
+/**  An existing question or decision that an edit changed or removed. */
+export type AppendOnlyViolation_Deserialize = {
+	/**  The `Q-` or `D-` id; `None` for an entry without one. */
+	id?: string | null,
+	/**  Where the entry was before the edit. */
+	at: SourceLine,
+	/**  The first line of the entry after the edit; `None` when it was removed. */
+	now?: number | null,
+	/**  What happened to the entry and what is allowed instead. */
+	message: string,
+};
+
+/**  An existing question or decision that an edit changed or removed. */
+export type AppendOnlyViolation_Serialize = {
+	/**  The `Q-` or `D-` id; `None` for an entry without one. */
+	id: string | null,
+	/**  Where the entry was before the edit. */
+	at: SourceLine,
+	/**  The first line of the entry after the edit; `None` when it was removed. */
+	now: number | null,
+	/**  What happened to the entry and what is allowed instead. */
+	message: string,
+};
+
+/**  A domain area: `- Name (kind): description`. */
+export type Area = Area_Serialize | Area_Deserialize;
+
+/**  How carefully an area is built. */
+export type AreaKind = "core" | "supporting" | "generic";
+
+/**  A domain area: `- Name (kind): description`. */
+export type Area_Deserialize = {
+	name: string,
+	kind?: AreaKind | null,
+	description: string,
+	at: SourceLine,
+};
+
+/**  A domain area: `- Name (kind): description`. */
+export type Area_Serialize = {
+	name: string,
+	kind: AreaKind | null,
+	description: string,
+	at: SourceLine,
+};
+
 /**  What `write_planner_block` changed. Paths are relative to the repository root. */
 export type BlockReport = {
 	/**  Files that were created or changed; unchanged files are not written. */
@@ -187,6 +269,74 @@ export type ConfigReport_Serialize = {
 	missing_columns: string[],
 };
 
+/**  An acceptance criterion: a sub-bullet of a node that is not a node itself. */
+export type Criterion = {
+	text: string,
+	at: SourceLine,
+};
+
+/**  A decision: `### D-id · Title` with `- Label: text` lines. */
+export type Decision = Decision_Serialize | Decision_Deserialize;
+
+/**  A `- Label: text` line of a decision. Text outside such a line has an empty label. */
+export type DecisionField = {
+	label: string,
+	text: string,
+	at: SourceLine,
+};
+
+/**  A decision: `### D-id · Title` with `- Label: text` lines. */
+export type Decision_Deserialize = {
+	id?: string | null,
+	title: string,
+	fields: DecisionField[],
+	/**  `D-` ids in "Superseded by" fields. */
+	superseded_by: string[],
+	/**  The heading line. */
+	at: SourceLine,
+	/**  The last non-blank line of the entry. */
+	end_line: number,
+};
+
+/**  A decision: `### D-id · Title` with `- Label: text` lines. */
+export type Decision_Serialize = {
+	id: string | null,
+	title: string,
+	fields: DecisionField[],
+	/**  `D-` ids in "Superseded by" fields. */
+	superseded_by: string[],
+	/**  The heading line. */
+	at: SourceLine,
+	/**  The last non-blank line of the entry. */
+	end_line: number,
+};
+
+/**  The Domain section. */
+export type Domain = Domain_Serialize | Domain_Deserialize;
+
+/**  The Domain section. */
+export type Domain_Deserialize = {
+	areas: Area_Deserialize[],
+	entities: Entity[],
+	rules: Rule_Deserialize[],
+	workflows: Workflow_Deserialize[],
+};
+
+/**  The Domain section. */
+export type Domain_Serialize = {
+	areas: Area_Serialize[],
+	entities: Entity[],
+	rules: Rule_Serialize[],
+	workflows: Workflow_Serialize[],
+};
+
+/**  An entity: `- Name: description`. */
+export type Entity = {
+	name: string,
+	description: string,
+	at: SourceLine,
+};
+
 /**  A value to write into a frontmatter field. */
 export type FieldValue = ({ Text: string }) & { List?: never; Number?: never } | ({ List: string[] }) & { Number?: never; Text?: never } | ({ Number: number }) & { List?: never; Text?: never };
 
@@ -195,11 +345,80 @@ export type FileChange = { kind: "created"; path: string } | { kind: "modified";
 /**  A task file that changed folder or name, recognised by the id in its filename. */
 { kind: "moved"; id: string; from: string; to: string };
 
+/**  The links rewritten in one file. */
+export type FileLinks = {
+	/**  Relative to the planning root. */
+	file: string,
+	changes: LinkChange[],
+};
+
 /**  Which checks the gate applies (`S-gate`). */
 export type GateConfig = {
 	no_open_blocking_questions: boolean,
 	nodes_ticked_and_specified: boolean,
 	rules_referenced: boolean,
+};
+
+/**  One item that keeps the gate closed. */
+export type GateFailure = GateFailure_Serialize | GateFailure_Deserialize;
+
+/**  The check an item fails. */
+export type GateFailureKind = 
+/**  An open question that blocks (`gate.no_open_blocking_questions`). */
+"open_blocking_question" | 
+/**  A node that is not ticked (`gate.nodes_ticked_and_specified`). */
+"node_not_ticked" | 
+/**  A node without criteria (`gate.nodes_ticked_and_specified`). */
+"node_without_criteria" | 
+/**  A rule no node references (`gate.rules_referenced`). */
+"rule_not_referenced";
+
+/**  One item that keeps the gate closed. */
+export type GateFailure_Deserialize = {
+	kind: GateFailureKind,
+	/**  The `Q-`, `S-` or `R-` id of the item, when it has one. */
+	id?: string | null,
+	/**  What fails, for the user. */
+	message: string,
+	/**  Where the item is: the question, node or rule line. */
+	at: SourceLine,
+};
+
+/**  One item that keeps the gate closed. */
+export type GateFailure_Serialize = {
+	kind: GateFailureKind,
+	/**  The `Q-`, `S-` or `R-` id of the item, when it has one. */
+	id: string | null,
+	/**  What fails, for the user. */
+	message: string,
+	/**  Where the item is: the question, node or rule line. */
+	at: SourceLine,
+};
+
+/**  The gate of a spec. */
+export type GateStatus = GateStatus_Serialize | GateStatus_Deserialize;
+
+/**  The gate of a spec. */
+export type GateStatus_Deserialize = {
+	/**  The spec exists and no enabled check fails. */
+	met: boolean,
+	/**  Every failing item of the enabled checks, in spec order per check. */
+	failures: GateFailure_Deserialize[],
+};
+
+/**  The gate of a spec. */
+export type GateStatus_Serialize = {
+	/**  The spec exists and no enabled check fails. */
+	met: boolean,
+	/**  Every failing item of the enabled checks, in spec order per check. */
+	failures: GateFailure_Serialize[],
+};
+
+/**  A glossary entry: `- Term: definition`. */
+export type GlossaryTerm = {
+	term: string,
+	definition: string,
+	at: SourceLine,
 };
 
 /**  What an id is for; decides the prefix. */
@@ -217,6 +436,59 @@ export type InitReport = {
 	offer_gitignore: boolean,
 	/**  Whether the agents file does not yet hold the current planner block. */
 	offer_planner_block: boolean,
+};
+
+/**  One rewritten link target. */
+export type LinkChange = {
+	/**  1-based line in the file. */
+	line: number,
+	old: string,
+	new: string,
+};
+
+/**  A node of the Structure. */
+export type Node = Node_Serialize | Node_Deserialize;
+
+/**  A node of the Structure. */
+export type Node_Deserialize = {
+	/**  The `S-` id; `None` when the item has none (reported). */
+	id?: string | null,
+	/**  The text before the id. */
+	title: string,
+	/**  `Some(true)` for `[x]`, `Some(false)` for `[ ]`, `None` without a checkbox (domain areas). */
+	ticked?: boolean | null,
+	/**  Tagged `#later`. */
+	later: boolean,
+	/**  The `Q-` id linked after the node id: the question that blocks the node. */
+	blocking_question?: string | null,
+	criteria: Criterion[],
+	/**  `R-` ids in inline code in the criteria, each once, in order. */
+	rules: string[],
+	children: Node_Deserialize[],
+	at: SourceLine,
+	/**  The last line of the node with its criteria and children. */
+	end_line: number,
+};
+
+/**  A node of the Structure. */
+export type Node_Serialize = {
+	/**  The `S-` id; `None` when the item has none (reported). */
+	id: string | null,
+	/**  The text before the id. */
+	title: string,
+	/**  `Some(true)` for `[x]`, `Some(false)` for `[ ]`, `None` without a checkbox (domain areas). */
+	ticked: boolean | null,
+	/**  Tagged `#later`. */
+	later: boolean,
+	/**  The `Q-` id linked after the node id: the question that blocks the node. */
+	blocking_question: string | null,
+	criteria: Criterion[],
+	/**  `R-` ids in inline code in the criteria, each once, in order. */
+	rules: string[],
+	children: Node_Serialize[],
+	at: SourceLine,
+	/**  The last line of the node with its criteria and children. */
+	end_line: number,
 };
 
 /**  Sent once per burst of changes under the planning root or to the config. */
@@ -262,12 +534,100 @@ export type PromptInput_Serialize = {
 	node_id: string | null,
 };
 
+/**  One open proposal in a planning file. */
+export type ProposalRef = {
+	/**  Relative to the repository root, with `/`. */
+	path: string,
+	/**  1-based line of the proposal's first line. */
+	line: number,
+	/**  The first line of the proposal's text, without the label. */
+	text: string,
+};
+
+/**  A question: `- [ ] Q-id · Question? Answer. (date) → targets`. */
+export type Question = Question_Serialize | Question_Deserialize;
+
+/**  A question: `- [ ] Q-id · Question? Answer. (date) → targets`. */
+export type Question_Deserialize = {
+	id?: string | null,
+	/**  Everything between the id and the `→`, date included. */
+	text: string,
+	/**  The text up to and including the first `?`. */
+	question: string,
+	/**  The text after the first `?`, without the date. */
+	answer?: string | null,
+	/**  From the checkbox; under `### Answered` when there is none. */
+	answered: boolean,
+	/**  The date in parentheses at the end of the text. */
+	answered_on?: string | null,
+	/**  `(blocking)` after the `→`. */
+	blocking: boolean,
+	/**  `S-` ids after the `→`. */
+	nodes: string[],
+	/**  The `D-` id after the `→`. */
+	decision?: string | null,
+	at: SourceLine,
+	end_line: number,
+};
+
+/**  A question: `- [ ] Q-id · Question? Answer. (date) → targets`. */
+export type Question_Serialize = {
+	id: string | null,
+	/**  Everything between the id and the `→`, date included. */
+	text: string,
+	/**  The text up to and including the first `?`. */
+	question: string,
+	/**  The text after the first `?`, without the date. */
+	answer: string | null,
+	/**  From the checkbox; under `### Answered` when there is none. */
+	answered: boolean,
+	/**  The date in parentheses at the end of the text. */
+	answered_on: string | null,
+	/**  `(blocking)` after the `→`. */
+	blocking: boolean,
+	/**  `S-` ids after the `→`. */
+	nodes: string[],
+	/**  The `D-` id after the `→`. */
+	decision: string | null,
+	at: SourceLine,
+	end_line: number,
+};
+
+/**  A rule: ``- `R-slug` · text``. */
+export type Rule = Rule_Serialize | Rule_Deserialize;
+
+/**  A rule: ``- `R-slug` · text``. */
+export type Rule_Deserialize = {
+	/**  `None` when the item has no `R-` id in inline code. */
+	id?: string | null,
+	text: string,
+	at: SourceLine,
+};
+
+/**  A rule: ``- `R-slug` · text``. */
+export type Rule_Serialize = {
+	/**  `None` when the item has no `R-` id in inline code. */
+	id: string | null,
+	text: string,
+	at: SourceLine,
+};
+
 /**  What happened to a save. */
 export type SaveOutcome = 
 /**  The file now holds the saved text. */
 { kind: "saved" } | 
 /**  The file changed on disk since it was read; it was left as is and holds `text`. */
 { kind: "changed_on_disk"; text: string };
+
+/**  The Scope section. */
+export type Scope = {
+	/**  `### In`. */
+	in_scope: TextItem[],
+	/**  `### Out`. */
+	out_of_scope: TextItem[],
+	/**  `### Later`. */
+	later: TextItem[],
+};
 
 /**  One file found by a search. */
 export type SearchHit = {
@@ -286,6 +646,9 @@ export type Section = {
 	/**  The text up to the next `## ` heading, without surrounding blank lines. */
 	content: string,
 };
+
+/**  The sections of a spec. `Other` is a section with an unknown heading. */
+export type SectionKind = "vision" | "scope" | "constraints" | "domain" | "structure" | "questions" | "decisions" | "glossary" | "other";
 
 /**
  *  The files besides tasks that text is usually selected in, as absolute paths; `None` when the
@@ -311,6 +674,70 @@ export type SourceFiles_Serialize = {
 	spec: string | null,
 };
 
+/**  Where a part of the spec starts. */
+export type SourceLine = {
+	/**  Relative to the planning root: `spec.md`, or `spec/<name>.md` in the folder form. */
+	file: string,
+	/**  1-based line in that file. */
+	line: number,
+};
+
+/**  The whole spec. */
+export type Spec = Spec_Serialize | Spec_Deserialize;
+
+/**  One file of the spec and the frontmatter fields the tool uses. */
+export type SpecFile = SpecFile_Serialize | SpecFile_Deserialize;
+
+/**  One file of the spec and the frontmatter fields the tool uses. */
+export type SpecFile_Deserialize = {
+	/**  Relative to the planning root. */
+	file: string,
+	id?: string | null,
+	title?: string | null,
+	status?: string | null,
+	/**  Date of the last review, `YYYY-MM-DD` (`S-staleness`). */
+	reviewed?: string | null,
+};
+
+/**  One file of the spec and the frontmatter fields the tool uses. */
+export type SpecFile_Serialize = {
+	/**  Relative to the planning root. */
+	file: string,
+	id: string | null,
+	title: string | null,
+	status: string | null,
+	/**  Date of the last review, `YYYY-MM-DD` (`S-staleness`). */
+	reviewed: string | null,
+};
+
+/**  Which form the spec was read from. */
+export type SpecForm = 
+/**  `spec.md`. */
+"file" | 
+/**  The `spec/` folder. */
+"folder";
+
+/**  A problem in the spec. The part it concerns is still in the model where it could be read. */
+export type SpecIssue = SpecIssue_Serialize | SpecIssue_Deserialize;
+
+/**  A problem in the spec. The part it concerns is still in the model where it could be read. */
+export type SpecIssue_Deserialize = {
+	/**  Relative to the planning root. */
+	file: string,
+	/**  `None` for problems with a whole file or the whole spec. */
+	line?: number | null,
+	message: string,
+};
+
+/**  A problem in the spec. The part it concerns is still in the model where it could be read. */
+export type SpecIssue_Serialize = {
+	/**  Relative to the planning root. */
+	file: string,
+	/**  `None` for problems with a whole file or the whole spec. */
+	line: number | null,
+	message: string,
+};
+
 /**  Which form of the spec to use. */
 export type SpecLocation = 
 /**  `spec/` if the folder exists, otherwise `spec.md`. */
@@ -319,6 +746,130 @@ export type SpecLocation =
 "file" | 
 /**  Always the `spec/` folder. */
 "folder";
+
+/**  A `## ` section. */
+export type SpecSection = {
+	kind: SectionKind,
+	heading: string,
+	/**  The heading line. */
+	at: SourceLine,
+	/**  The last non-blank line of the section, in the same file. */
+	end_line: number,
+};
+
+/**  The whole spec. */
+export type Spec_Deserialize = {
+	form: SpecForm,
+	/**  `<planning_root>/spec.md` or `<planning_root>/spec/`, relative to the repository root. */
+	location: string,
+	/**  Whether the file or folder exists. Without it the model is empty and an issue says so. */
+	found: boolean,
+	/**  Every file read, in reading order, with its frontmatter. */
+	files: SpecFile_Deserialize[],
+	/**  The `# ` heading. */
+	title?: string | null,
+	/**  Every `## ` section in reading order, unknown ones included. */
+	sections: SpecSection[],
+	/**  The text of Vision, lines joined with `\n`. */
+	vision: string,
+	scope: Scope,
+	constraints: TextItem[],
+	domain: Domain_Deserialize,
+	/**  The top-level nodes of the Structure: the domain areas. */
+	structure: Node_Deserialize[],
+	/**  Open and answered questions in file order. */
+	questions: Question_Deserialize[],
+	decisions: Decision_Deserialize[],
+	glossary: GlossaryTerm[],
+	issues: SpecIssue_Deserialize[],
+};
+
+/**  The whole spec. */
+export type Spec_Serialize = {
+	form: SpecForm,
+	/**  `<planning_root>/spec.md` or `<planning_root>/spec/`, relative to the repository root. */
+	location: string,
+	/**  Whether the file or folder exists. Without it the model is empty and an issue says so. */
+	found: boolean,
+	/**  Every file read, in reading order, with its frontmatter. */
+	files: SpecFile_Serialize[],
+	/**  The `# ` heading. */
+	title: string | null,
+	/**  Every `## ` section in reading order, unknown ones included. */
+	sections: SpecSection[],
+	/**  The text of Vision, lines joined with `\n`. */
+	vision: string,
+	scope: Scope,
+	constraints: TextItem[],
+	domain: Domain_Serialize,
+	/**  The top-level nodes of the Structure: the domain areas. */
+	structure: Node_Serialize[],
+	/**  Open and answered questions in file order. */
+	questions: Question_Serialize[],
+	decisions: Decision_Serialize[],
+	glossary: GlossaryTerm[],
+	issues: SpecIssue_Serialize[],
+};
+
+/**  One file of the folder form the split creates. */
+export type SplitFile = {
+	/**  Relative to the planning root, `spec/<name>.md`. */
+	file: string,
+	lines: number,
+	bytes: number,
+	/**  The first non-blank line after the frontmatter: the section heading or the title. */
+	first_line: string,
+};
+
+/**  What a split would do, shown before it runs. */
+export type SplitPlan = {
+	/**  `spec.md`, relative to the repository root. */
+	location: string,
+	/**  Why the split cannot run. Empty when it can. */
+	blockers: string[],
+	/**  The files the split creates, in reading order. */
+	files: SplitFile[],
+	/**
+	 *  The links the split rewrites, by file. The moved text of the spec is listed under its
+	 *  new files.
+	 */
+	links: FileLinks[],
+};
+
+/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+export type SplitReport = SplitReport_Serialize | SplitReport_Deserialize;
+
+/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+export type SplitReport_Deserialize = {
+	created: string[],
+	/**  Files whose links were rewritten, the new spec files not included. */
+	rewritten: string[],
+	/**  `spec.md`, now in the OS trash. */
+	trashed: string,
+	/**
+	 *  Files rewritten because the planner block now points to `spec/`, relative to the
+	 *  repository root.
+	 */
+	block_written: string[],
+	/**  Why the planner block could not be regenerated, if it could not. */
+	block_error?: string | null,
+};
+
+/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+export type SplitReport_Serialize = {
+	created: string[],
+	/**  Files whose links were rewritten, the new spec files not included. */
+	rewritten: string[],
+	/**  `spec.md`, now in the OS trash. */
+	trashed: string,
+	/**
+	 *  Files rewritten because the planner block now points to `spec/`, relative to the
+	 *  repository root.
+	 */
+	block_written: string[],
+	/**  Why the planner block could not be regenerated, if it could not. */
+	block_error: string | null,
+};
 
 /**  One task file as read from disk. */
 export type Task = Task_Serialize | Task_Deserialize;
@@ -427,6 +978,30 @@ export type Template_Serialize = {
 	override_path: string | null,
 	/**  Why an existing override file was not used, if one was found but could not be read. */
 	issue: string | null,
+};
+
+/**  A plain list item. */
+export type TextItem = {
+	/**  The item text; continuation lines and sub-items follow on their own lines. */
+	text: string,
+	at: SourceLine,
+};
+
+/**  A workflow: `- Name: step → step → step`; the name is optional. */
+export type Workflow = Workflow_Serialize | Workflow_Deserialize;
+
+/**  A workflow: `- Name: step → step → step`; the name is optional. */
+export type Workflow_Deserialize = {
+	name?: string | null,
+	steps: string[],
+	at: SourceLine,
+};
+
+/**  A workflow: `- Name: step → step → step`; the name is optional. */
+export type Workflow_Serialize = {
+	name: string | null,
+	steps: string[],
+	at: SourceLine,
 };
 
 /* Tauri Specta runtime */

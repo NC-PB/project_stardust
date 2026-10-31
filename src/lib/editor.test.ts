@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Task_Serialize } from "@/bindings";
 import {
   bodyOf,
+  clampLine,
   FORM_FIELDS,
   type FormField,
   fieldValueOf,
@@ -154,5 +155,14 @@ describe("resolveLink", () => {
   it("names files by their last path part", () => {
     expect(fileNameOf("C:\\repo\\a.md")).toBe("a.md");
     expect(fileNameOf("/repo/b.md")).toBe("b.md");
+  });
+});
+
+describe("clampLine", () => {
+  it("keeps a line inside the text", () => {
+    expect(clampLine(3, 10)).toBe(3);
+    expect(clampLine(0, 10)).toBe(1);
+    expect(clampLine(12, 10)).toBe(10);
+    expect(clampLine(5, 0)).toBe(1);
   });
 });

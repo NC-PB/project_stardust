@@ -1,3 +1,4 @@
+import { SplitSpecButton, SplitSpecPanel } from "@/components/spec-split";
 import { Button } from "@/components/ui/button";
 import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
 import { useEditorStore } from "@/stores/editor-store";
@@ -86,8 +87,14 @@ export function ProjectPanel() {
                 onOpen={openSource}
               />
             )}
+            {sources?.spec && repoRoot !== null && (
+              <SplitSpecButton repoRoot={repoRoot} />
+            )}
           </div>
         </div>
+      )}
+      {status === "ready" && repoRoot !== null && (
+        <SplitSpecPanel repoRoot={repoRoot} />
       )}
 
       {initReport && (

@@ -183,3 +183,8 @@ export function touchesFile(
       : change.kind !== "removed" && change.path === relative,
   );
 }
+
+/** `line` (1-based) moved into a text of `lines` lines, for jumps to a line that moved away. */
+export function clampLine(line: number, lines: number): number {
+  return Math.min(Math.max(1, Math.trunc(line)), Math.max(1, lines));
+}

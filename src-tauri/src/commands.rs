@@ -12,8 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, board, config, files, ids, init, make_task, prompts, search, task, templates,
-    terminal, watch,
+    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts, search,
+    spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -48,6 +48,82 @@ pub fn task_filename(id: String, title: String) -> String {
 #[specta::specta]
 pub fn load_config(repo_root: String) -> config::ConfigReport {
     config::load_config(Path::new(&repo_root))
+}
+
+/// The spec of the repository at `repo_root`: `spec.md` or the `spec/` folder, as `spec` in the
+/// config chooses (`S-spec-file`). Never fails; problems are issues with file and line.
+#[tauri::command]
+#[specta::specta]
+pub fn read_spec(repo_root: String) -> spec::Spec {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    spec::read_spec(repo_root, &config)
+}
+
+/// Every open proposal in the planning files of the repository at `repo_root`
+/// (`S-proposals`), by path and line.
+#[tauri::command]
+#[specta::specta]
+pub fn list_proposals(repo_root: String) -> Vec<domain::proposals::ProposalRef> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    domain::proposals::list_proposals(repo_root, &config.planning_root)
+}
+
+/// The spec in `text`, an unsaved version of the spec file `file` (relative to the planning
+/// root, `spec.md` or `spec/<name>.md`).
+#[tauri::command]
+#[specta::specta]
+pub fn parse_spec_text(file: String, text: String) -> spec::Spec {
+    spec::parse_spec_text(&file, &text)
+}
+
+/// The gate of the spec of the repository at `repo_root`, with the checks the `gate` keys of
+/// its config turn on (`S-gate`).
+#[tauri::command]
+#[specta::specta]
+pub fn gate_status(repo_root: String) -> gate::GateStatus {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    gate::gate_status(&spec::read_spec(repo_root, &config), &config.gate)
+}
+
+/// The questions and decisions that saving `text` over `saved` (the text last read or saved) in
+/// the file at `path` would change or remove (`S-decisions`, `R-append-only`). Empty when the edit only appends or marks entries,
+/// and for every file that is not `spec.md` or a file of the `spec/` folder.
+#[tauri::command]
+#[specta::specta]
+pub fn check_append_only(
+    repo_root: String,
+    path: String,
+    saved: String,
+    text: String,
+) -> Vec<append_only::AppendOnlyViolation> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    match append_only::spec_file_of(repo_root, &config, Path::new(&path)) {
+        Some(file) => append_only::append_only_violations(&file, &saved, &text),
+        None => Vec::new(),
+    }
+}
+
+/// What splitting `spec.md` into the `spec/` folder would do (`S-spec-split`). Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn plan_spec_split(repo_root: String) -> spec_split::SplitPlan {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    spec_split::plan_split(repo_root, &config)
+}
+
+/// Splits `spec.md` into the `spec/` folder, rewrites the links into it and moves `spec.md` to
+/// the OS trash (`S-spec-split`). Refuses, changing nothing, when the plan has blockers.
+#[tauri::command]
+#[specta::specta]
+pub fn split_spec(repo_root: String) -> Result<spec_split::SplitReport, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    spec_split::split_spec(repo_root, &config)
 }
 
 /// Every task file directly in the column folder `dir`, broken ones included.

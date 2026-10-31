@@ -10,7 +10,8 @@ use serde::Serialize;
 use specta::Type;
 
 use super::columns::fill_columns;
-use super::config::{Config, SpecLocation};
+use super::config::Config;
+use super::spec::{SpecForm, spec_form};
 use super::templates::TemplateKind;
 
 pub const START_MARKER: &str = "<!-- planner:start -->";
@@ -33,12 +34,7 @@ pub fn render_block(config: &Config, repo_root: &Path) -> String {
 /// The spec path agents are pointed to, relative to the repository root.
 pub fn spec_location(config: &Config, repo_root: &Path) -> String {
     let root = &config.planning_root;
-    let folder = match config.spec {
-        SpecLocation::File => false,
-        SpecLocation::Folder => true,
-        SpecLocation::Auto => repo_root.join(root).join("spec").is_dir(),
-    };
-    if folder {
+    if spec_form(config, repo_root) == SpecForm::Folder {
         format!("{root}/spec/")
     } else {
         format!("{root}/spec.md")
@@ -178,6 +174,7 @@ fn write_if_changed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::config::SpecLocation;
     use std::path::PathBuf;
 
     const BLOCK: &str = "<!-- planner:start -->\nnew\n<!-- planner:end -->";

@@ -2,15 +2,20 @@
 //! Planning modules (ids, task files, config, ...) live here as their tasks land.
 
 pub mod agents_block;
+pub mod append_only;
 pub mod board;
 pub mod columns;
 pub mod config;
 pub mod files;
+pub mod gate;
 pub mod ids;
 pub mod init;
 pub mod make_task;
 pub mod prompts;
+pub mod proposals;
 pub mod search;
+pub mod spec;
+pub mod spec_split;
 pub mod task;
 pub mod templates;
 pub mod terminal;

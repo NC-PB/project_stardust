@@ -23,7 +23,7 @@ Implements `S-watcher` in the [spec](../spec.md).
 ## Implementation notes
 - Done: `src-tauri/src/domain/watch.rs` (`diff`, `scan`, `watch`), commands `watch_project` and `unwatch_project` with `WatchState`, typed event `PlanningChanged` (tauri-specta `derive` feature), store and panel in the frontend. Dependency `notify` 8.
 - "Appear in the app": there is no board yet; the project panel shows the last batch, and `useProjectStore.revision` is what the board and editor will react to.
-- Checks: `cargo test` (79 passed; the real watcher test passed five runs in a row on macOS, about 4.7 s), `cargo clippy --all-targets`, `npm run check` (21 tests). `npm run tauri dev` starts; a warning about the IPC custom protocol went to the [inbox](../inbox/20261030-225823-gccd-ipc-custom-protocol-warning-in-dev.md).
+- Checks: `cargo test` (79 passed; the real watcher test passed five runs in a row on macOS, about 4.7 s), `cargo clippy --all-targets`, `npm run check` (21 tests). `npm run tauri dev` starts; a warning about the IPC custom protocol went to the [inbox](20261030-225823-gccd-ipc-custom-protocol-warning-in-dev.md).
 - Not tested on Windows or Linux.
 
 ## Result

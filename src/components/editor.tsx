@@ -20,10 +20,13 @@ import {
 } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { commands } from "@/bindings";
+import { commands, type GlossaryTerm } from "@/bindings";
+import { ProposalQuote, ProposalUndo } from "@/components/proposal-quote";
 import { Button } from "@/components/ui/button";
+import { APPEND_ONLY_EXPLANATION, violationText } from "@/lib/append-only";
 import {
   bodyOf,
+  clampLine,
   FORM_FIELDS,
   type FormField,
   fileNameOf,
@@ -32,10 +35,12 @@ import {
   isShortcut,
   resolveLink,
 } from "@/lib/editor";
+import { remarkGlossary } from "@/lib/glossary";
 import { PROMPT_LABELS, TASK_PROMPTS, taskPathOf } from "@/lib/prompts";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePromptStore } from "@/stores/prompt-store";
+import { useSpecStore } from "@/stores/spec-store";
 import { useThemeStore } from "@/stores/theme-store";
 
 /** Markup stays visible; headings are sized, the rest is coloured (`S-editor-layout`). */
@@ -142,8 +147,11 @@ export function Editor() {
     setSelection,
     makeTask,
     trash,
+    reveal,
+    revealed,
   } = useEditorStore();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [view, setView] = useState<EditorView | null>(null);
   const isTask = useIsTask(path);
   const theme = useThemeStore((state) => state.theme);
 
@@ -160,6 +168,14 @@ export function Editor() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [save, toggleMode]);
+
+  // A line asked for by `open` (the spec view, for example) is shown once the source view has
+  // the text; CodeMirror takes a new value in its own effect, which runs before this one.
+  useEffect(() => {
+    if (reveal === null || view === null || !view.dom.isConnected) return;
+    revealLine(view, reveal);
+    revealed();
+  }, [reveal, view, revealed]);
 
   if (path === null) return null;
   const mode = modes[path] ?? "source";
@@ -238,6 +254,8 @@ export function Editor() {
         </p>
       )}
       <ConflictBar />
+      <AppendOnlyBar />
+      <ProposalUndo />
       <PromptBar path={path} />
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
         {task && frontmatterLineCount(text) > 0 && (
@@ -247,6 +265,7 @@ export function Editor() {
           <CodeMirror
             value={text}
             onChange={edit}
+            onCreateEditor={setView}
             theme={sourceThemes[theme]}
             onUpdate={(update) => {
               if (update.selectionSet) setSelection(selectedText(update));
@@ -319,6 +338,34 @@ function ConflictBar() {
   return null;
 }
 
+/**
+ * Why edits of a question or decision are not saved, entry by entry (`S-decisions`,
+ * `R-append-only`). Undoing them keeps them restorable, as a reload does.
+ */
+function AppendOnlyBar() {
+  const { violations, conflict, reload } = useEditorStore();
+  if (violations.length === 0 || conflict !== null) return null;
+  return (
+    <Notice message={APPEND_ONLY_EXPLANATION}>
+      <Button
+        variant="outline"
+        size="xs"
+        onClick={() => void reload()}
+        title="Back to the saved text; Restore my edits brings them back"
+      >
+        Undo my edits
+      </Button>
+      <ul className="w-full list-disc pl-4">
+        {violations.map((violation) => (
+          <li key={`${violation.at.line}:${violation.message}`}>
+            {violationText(violation)}
+          </li>
+        ))}
+      </ul>
+    </Notice>
+  );
+}
+
 function Notice({
   message,
   children,
@@ -371,6 +418,17 @@ function PromptBar({ path }: { path: string }) {
       ))}
     </div>
   );
+}
+
+/** Puts the cursor at the start of `line` (1-based) and scrolls it to the top. */
+function revealLine(view: EditorView, line: number) {
+  const { doc } = view.state;
+  const at = doc.line(clampLine(line, doc.lines)).from;
+  view.dispatch({
+    selection: { anchor: at },
+    effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 16 }),
+  });
+  view.focus();
 }
 
 /** The text of every selected range, one per line. */
@@ -458,9 +516,12 @@ function FieldInput({ field, value }: { field: FormField; value: string }) {
   );
 }
 
-/** The body rendered with GFM, local images and Mermaid diagrams. */
+const NO_TERMS: GlossaryTerm[] = [];
+
+/** The body rendered with GFM, glossary hovers, local images and Mermaid diagrams. */
 function ReadView({ text }: { text: string }) {
   const setSelection = useEditorStore((state) => state.setSelection);
+  const glossary = useSpecStore((state) => state.spec?.glossary ?? NO_TERMS);
   // The rendered text of the selection, read when the mouse or a key is released.
   const readSelection = () =>
     setSelection(window.getSelection()?.toString() ?? "");
@@ -471,8 +532,13 @@ function ReadView({ text }: { text: string }) {
       onKeyUp={readSelection}
     >
       <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{ img: LocalImage, a: Link, pre: CodeBlock }}
+        remarkPlugins={[remarkGfm, [remarkGlossary, { terms: glossary }]]}
+        components={{
+          img: LocalImage,
+          a: Link,
+          pre: CodeBlock,
+          blockquote: ProposalQuote,
+        }}
       >
         {bodyOf(text)}
       </Markdown>

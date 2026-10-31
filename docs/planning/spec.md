@@ -168,28 +168,73 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Writes `CHANGELOG.md` entries from the terminal column since a date or tag, grouped by tag, after preview.
 - Ideation `S-ideation`
   - [x] Spec file `S-spec-file`
-    - Sections: Vision, Scope, Constraints, Domain, Structure, Questions, Decisions, Glossary. See `templates/spec.md`.
-    - Single file `spec.md` by default; the `spec/` folder form when it exists. Both handled by the same code.
+    - Sections: Vision, Scope (`### In`, `### Out`, `### Later`), Constraints, Domain (`### Areas`, `### Entities`, `### Rules`, `### Workflows`), Structure, Questions (`### Open`, `### Answered`), Decisions, Glossary. See `templates/spec.md`.
+    - Single file `spec.md` by default; the `spec/` folder form when it exists. Both handled by the same code. `spec` in the config: `auto` takes `spec/` when the folder exists, `file` always `spec.md`, `folder` always `spec/`.
+    - Folder form: the text of `spec.md` cut at its `## ` headings. `spec/README.md` holds the frontmatter, the `# ` title and the intro; each section is its own file starting with its `## ` heading: `vision.md`, `scope.md`, `constraints.md`, `domain.md`, `structure.md`, `questions.md`, `decisions.md`, `glossary.md`. Files are read in this order, other `*.md` files in the folder after them by name. Every file may have its own frontmatter (`id`, `title`, `status`, `reviewed`). Both forms give the same model; only file and line differ (D-20261031-010617-ryfp).
+    - Entries: areas `- Name (core|supporting|generic): description`; entities `- Name: description`; rules ``- `R-id` · text``; workflows `- Name: step → step`, the name optional; questions `- [ ] Q-id · Question? Answer. (date) → targets`, where the checkbox means answered, `S-` ids after `→` are the linked nodes, a `D-` id the decision and `(blocking)` the blocking flag; decisions `### D-id · Title` with `- Label: text` fields, the `D-` ids of `Superseded by` fields collected; glossary `- Term: meaning`. Continuation lines and sub-items belong to their entry. Empty items (`- ` in the template) and `- (none)` (an empty list) are skipped; prose outside lists is not read, except Vision.
+    - Every section, node, criterion, rule, question, decision, decision field and glossary term carries its file (relative to the planning root) and line; sections, nodes, questions and decisions also their last line.
+    - Reading never fails and never drops a part: missing, unknown and repeated sections, list items outside the expected `### ` parts, entries without id or in the wrong shape, a ticked question under Open or an unticked one under Answered, a section in the wrong folder file, top-level nodes that are no domain area and ids used twice are issues with file and line; whatever could be read stays in the model. Headings inside code fences are ignored.
+    - Read only. Implemented in `src-tauri/src/domain/spec.rs` (`Spec`, `read_spec`, `parse_spec_text`, `spec_form`, `FOLDER_FILES`); commands `read_spec(repo_root)` and `parse_spec_text(file, text)` for unsaved editor text.
+    - The spec view, switched with Board | Spec under the project bar, shows the title, the location and the form. It has one button per `## ` section, opening that section's file in the editor in source mode, scrolled to the heading. It lists the read issues, each opening at its line. It follows changes on disk without a reload. The fog meter and the gate status sit under its header; a Mind map button swaps the Structure tree for the mind map (D-20261031-011800-v3sk).
+    - Implemented in `src/components/spec-view.tsx` (`SpecView`), `src/components/view-switch.tsx`, `src/stores/view-store.ts` (`useViewStore`), `src/stores/spec-store.ts` (`useSpecStore`, read on project open and after batches that touch the spec), `src/lib/spec-view.ts`, `src/lib/spec.ts` (`specTouched`). The editor opens a file at a line with `open(repoRoot, path, line)` (`src/stores/editor-store.ts`).
   - [x] Split spec `S-spec-split`
-    - "Split spec" moves each section into its own file under `spec/`, after preview, rewriting links.
+    - "Split spec" in the project bar, shown while the spec is a single file, previews the split: the files it creates under `spec/` with line count and first line, every link it rewrites (file, line, old → new target), and what blocks it. "Split" confirms in an inline bar; Cancel drops it.
+    - The text of `spec.md` is cut at its `## ` headings (outside code fences) into the folder form of `S-spec-file`: the part before the first section to `spec/README.md`, each section to its file. Text is kept byte for byte apart from rewritten links.
+    - Blocked, changing nothing: `spec: file` in the config, an existing `spec/`, an unreadable `spec.md` or planning file, a section with no file of its own, a second section of a kind, sections out of the reading order, or a folder form that would not give the same model (positions and link targets aside).
+    - Links rewritten: inline links, images and reference definitions outside code spans, code fences and frontmatter. In every markdown file under the planning root, a relative link to `spec.md` points to the file that now holds the heading of its anchor (GitHub anchors, renumbered per file), `spec/README.md` without an anchor or with an unknown one. In the moved text, anchor links follow their heading and other relative links get `../`.
+    - Order: the folder is created and its files written (never over a file), read back and compared with the model of `spec.md`, then the links are rewritten (only over the text read); `spec.md` goes to the OS trash last and only if unchanged (`R-no-destroy`). A failed step undoes the earlier ones (links written back, new files to the trash) and `spec.md` stays. A failed trash leaves both forms and says so (D-20261031-012140-ol0p).
+    - A planner block already in the agents file is regenerated afterwards, so it names `spec/`.
+    - The open file is saved first; the split is refused while it has a conflict. The project bar's sources are read again afterwards.
+    - Implemented in `src-tauri/src/domain/spec_split.rs` (`plan_split`, `split_spec`); commands `plan_spec_split(repo_root)`, `split_spec(repo_root)`; `src/stores/split-store.ts`; `src/components/spec-split.tsx`.
   - [x] Structure nodes `S-nodes`
     - Nested list. Each node has an id in inline code, an optional checkbox, criteria as sub-bullets, an optional link to the blocking question, an optional `#later`.
-    - Domain areas are the top level.
+    - Domain areas are the top level. Top-level items are always nodes, usually without checkbox; one whose title is not an area of the Domain is reported.
     - A tick marks a node as clarified; implementation is shown through `S-trace` (`R-tick-means-clear`).
+    - A sub-item is a node when it has a checkbox, or when its first line ends with the `S-` id in inline code, followed only by a `Q-` link (plain or as a markdown link) and `#` tags. Every other sub-item is a criterion; its own sub-items become lines of its text.
+    - The title is the text before the id. After the id, `#later` sets the later flag and the first `Q-` id is the blocking question. A node without id is kept and reported.
+    - Each node lists the `R-` ids in inline code in its criteria, each once (`S-gate`).
+    - The spec view shows the Structure as a collapsible tree: areas expanded, nodes collapsed by default, with expand all and collapse all. Each node shows a read-only tick labelled clarified or not clarified (`R-tick-means-clear`), its id (or a "no id" marker), `#later`, the blocking question (open, answered, or not found), and for areas how many nodes below them are clarified. Expanded, a node shows its criteria and child nodes. Every node, criterion and question opens in the editor at its line. Expand state is kept per node id for the session. Implemented in `src/components/spec-view.tsx` and `src/lib/spec-view.ts`.
   - [x] Questions form `S-questions`
     - Shows open questions with an answer field. Saving appends the answer and moves the entry to Answered (`R-append-only`).
   - [x] Decisions log `S-decisions`
     - The editor allows appending entries and adding "Superseded by" lines only (`R-append-only`).
+    - Applies to Questions and Decisions in `spec.md` and in every file of `spec/`, whichever form the config chooses. Entries of the saved and the edited text are read with the spec parser and matched by id; an entry without an id by its text or title.
+    - Allowed on an existing question: ticking it, moving it between Open and Answered, appending text after its question (the answer and date) while open, adding links after the `→`. An answered question cannot be reopened and its text cannot change. Allowed on an existing decision: added `- Superseded by:` lines. Rewrapping lines is not a change. New entries and text outside entries are free.
+    - A save that would change or remove an existing entry is refused; the text stays in the editor and a notice explains the rule and lists each entry with its message and line. "Undo my edits" goes back to the saved text and keeps the edits for Restore my edits (D-20261031-011923-a7q2).
+    - Implemented in `src-tauri/src/domain/append_only.rs` (`append_only_violations`, `spec_file_of`); command `check_append_only(repo_root, path, saved, text)`; checked in `src/stores/editor-store.ts` before every save, shown by `AppendOnlyBar` in `src/components/editor.tsx`, text in `src/lib/append-only.ts`.
   - [x] Fog meter `S-fog-meter`
-    - Shows ticked versus unticked nodes and answered versus open questions.
+    - Shows ticked versus unticked nodes and answered versus open questions. Domain areas (nodes without a checkbox) are not counted.
+    - Nodes tagged `#later` are counted separately, ticked or not (D-20261031-011542-f7mq).
+    - Clicking a count lists the nodes or questions behind it in file order; clicking an entry opens the spec in the editor at its line.
+    - Shown in the spec view under its header. Implemented in `src/lib/fog.ts` and `src/components/fog-meter.tsx`.
   - [x] Gate `S-gate`
     - Met when: no open blocking questions; every node not tagged `#later` is ticked and has at least one criterion; every rule is referenced by at least one node.
+    - Each check applies only while its `gate` key in the config is on (`no_open_blocking_questions`, `nodes_ticked_and_specified`, `rules_referenced`). With every key off the gate is met. A missing spec never meets the gate.
+    - A question is blocking when it says `(blocking)` or a node links it as its blocking question; an answered question never blocks.
+    - A top-level node without checkbox is a domain area and is not checked itself, its children are. A node tagged `#later` is skipped with its whole subtree. A rule without id is not checked (the spec reports it) (D-20261031-011731-g8te).
+    - The status shows met or not met and the enabled checks. When not met, it lists each failing item (open blocking question, node not ticked, node without criteria, rule not referenced) with its message; clicking one opens the spec at its file and line. The status follows every reload of the spec, including after a config change.
+    - Implemented in `src-tauri/src/domain/gate.rs` (`gate_status`, `GateStatus`, `GateFailure`); command `gate_status(repo_root)`. Frontend: `src/lib/gate.ts` (`gateChecks`), `src/stores/gate-store.ts` (`useGateStore`, following `useSpecStore`), `src/components/gate-status.tsx` (`GateStatus`, shown in the spec view).
   - [x] Mind map `S-mindmap`
-    - Renders the Structure with Markmap, unticked nodes greyed out. Mermaid blocks render in the preview.
+    - Renders the Structure with Markmap: one root named after the Structure section, the domain areas below it, each label the node title and its `S-` id. Only the Structure (D-20261031-010817-m4pq).
+    - Unticked nodes are greyed out, label and branch; below the top level a node without a checkbox counts as unticked. `#later` nodes are italic with a `#later` tag. Colours and font follow the theme.
+    - The Mind map button in the spec view header swaps the Structure tree for the mind map, for the session. Clicking a label opens the spec at the node's line; clicking a circle folds or unfolds the node.
+    - Redrawn whenever the spec is read again, so watcher batches touching the spec update it. Folds reset on a redraw.
+    - Markmap (`markmap-view` only) is loaded on first use and loads nothing from the network (D-20261031-011815-mk7v).
+    - Mermaid blocks render in the preview.
+    - Implemented in `src/lib/mind-map.ts` (`mindMapTree`, `nodeState`, `mindMapStyle`, `sourceLineOf`) and `src/components/mind-map.tsx` (`MindMap`).
   - [x] Proposals `S-proposals`
-    - Blockquotes starting with `**Proposal:**` get Accept (unwrap) and Reject (delete) actions.
+    - Blockquotes starting with `**Proposal:**` get Accept (unwrap) and Reject (delete) actions in read mode.
+    - A proposal is the run of consecutive lines starting with `>` (after any indentation) whose first line starts with `**Proposal:**` after the marker. The frontmatter and code fences are skipped, and lazy continuation lines without `>` are not part of it. A quote that only contains a proposal later, or a nested `> >` one, is not a proposal.
+    - Accept removes one `>` marker and the space after it from each line, keeping the indentation. It drops the label and the spaces after it. A label alone on its line is removed, along with blank lines that would then open the text.
+    - Reject removes the block and the blank line after it, or the one before it when there is none after it.
+    - Both are one edit of the editor text, saved like typing (`S-editor-core`), and nothing outside these lines changes. An Undo bar and Ctrl/⌘+Z in read mode restore the text before, as long as it has not been edited since (D-20261031-012029-p7rq).
+    - A Proposals button in the header lists every proposal in the markdown files under the planning root (hidden files skipped), by path and line, with its first line of text. The list is read when it opens, and an entry opens its file in read mode.
+    - Implemented in `src/lib/proposals.ts`, `src/stores/editor-store.ts` (`resolveProposal`, `undoProposal`), `src/stores/proposal-store.ts`, `src/components/proposal-quote.tsx`, `src/components/proposal-list.tsx`; Rust `src-tauri/src/domain/proposals.rs`; command `list_proposals(repo_root)`.
   - [x] Glossary `S-glossary`
-    - Glossary terms show their definition on hover in the preview.
+    - In read mode, glossary terms show their definition on hover: the term is rendered as an `<abbr>` with a dotted underline whose title gives the term and its definition.
+    - Matching is case insensitive on whole words; multi-word terms match across any whitespace. Within each paragraph or table cell, the first occurrence of each term is marked.
+    - Longer terms win over shorter ones they contain ("Terminal column" over "Column"). Headings, code blocks, inline code and link text are not marked. Plurals and terms split by markup are not matched (D-20261031-011535-qgmp).
+    - The terms come from the spec's Glossary and follow it when the spec changes on disk. Implemented in `src/lib/glossary.ts` (`remarkGlossary`), used by the read view in `src/components/editor.tsx`.
 - Agent interface `S-agents`
   - [x] Planner block `S-agents-block`
     - Written into `AGENTS.md` between `<!-- planner:start -->` and `<!-- planner:end -->`; content outside is never touched.
@@ -217,7 +262,13 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - The terminal is set in the Settings menu of the header and kept in the app settings (`settings.json`, key `terminal`); empty means the default (D-20261031-003519-cfn5).
     - Implemented in `src-tauri/src/domain/terminal.rs` (`launches`, `open_terminal`); command `open_terminal(repo_root, terminal)`; `src/stores/terminal-store.ts`, `src/components/settings-menu.tsx`.
   - [x] Session panel `S-session-panel`
-    - Computed, nothing written: tasks in `next/` in order, last five decisions, open blocking questions, Result of the most recently completed task.
+    - Computed, nothing written: tasks in the ready column in order, last five decisions, open blocking questions, Result of the most recently completed task.
+    - The ready column is the "ready for you" column of the column roles (D-20261031-001850-0g9f), `next/` by default. Until `S-board-sort` exists its tasks are listed by priority (1 first, none last), then file name, which follows the id (D-20261031-011606-s3pn).
+    - The most recently completed task is the task in the terminal column with the latest `completed` date, then the latest change on disk; its Result section is shown as text, or "No Result written".
+    - The last five decisions are the last five entries of the Decisions section, newest first; superseded ones are struck through. Blocking questions are unanswered questions with `(blocking)`.
+    - Shown under the search box when a project opens; updates with every watcher batch. "Hide" hides it for that project for the session; "Show session" brings it back; another project shows it again. Nothing is kept in the settings or the repository.
+    - Every entry opens its file in the editor: the task file, or the spec file holding the decision or question, at its line.
+    - Implemented in `src/lib/session.ts` (`sessionBrief`, `readyColumnOf`, `readyOrder`, `lastCompletedTask`, `resultOf`), `src/stores/session-store.ts` (`useSessionStore`), `src/components/session-panel.tsx`.
 - Files `S-files`
   - [x] Ids `S-ids`
     - Tasks: local time to the second plus 4 random characters from `[a-z0-9]`, `YYYYMMDD-HHMMSS-xxxx` (D-20261030-213854-k3cv).
@@ -287,6 +338,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Tauri 2 app, signed builds for Windows, macOS, Linux.
     - `npm run tauri dev` opens one window titled "stardust" rendering the React page. Bundle identifier `dev.stardust.planner`.
     - The webview has a Content Security Policy that allows only the app itself and Tauri IPC; no remote sources.
+    - The CSP applies to the built assets served through `tauri://`; in `tauri dev` the webview loads the dev server URL without one. A clean dev start sends every IPC call over the custom protocol (`ipc://localhost` on macOS) without a warning. "IPC custom protocol failed … Load failed" appears only when the page reloads while calls are in flight, and is harmless: the postMessage fallback lasts for that one page (D-20261031-010818-k2vn).
     - Tauri plugins: `tauri-plugin-dialog` (folder picker) and `tauri-plugin-store` (app settings). Capabilities grant `core:default`, `dialog:allow-open` and `store:default`.
   - [x] Frontend `S-frontend`
     - React with TypeScript (`strict: true`), Vite.
@@ -297,7 +349,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Tests: `cargo test` for Rust, Vitest for TypeScript. Lint and format: Biome.
     - Bindings are generated into `src/bindings.ts` on every debug start and by `cargo test`; the frontend calls Rust only through them. tauri-specta and specta are pinned to exact release candidates (D-20261030-211738-9tc3).
     - `npm run check` runs `tsc`, Biome and Vitest. Folder layout (Rust `domain/` and `commands.rs`; TypeScript `lib/`, `stores/`, `components/`) is described in `ARCHITECTURE.md`.
-    - Installed so far: shadcn/ui (Button), Tailwind 4, Zustand, `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-store`. dnd-kit, CodeMirror and remark/rehype come with their tasks.
+    - Installed so far: shadcn/ui (Button), Tailwind 4, Zustand, `@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-store`, `@dnd-kit/core`, CodeMirror 6 (`@uiw/react-codemirror`, `@codemirror/lang-markdown`, `@codemirror/language`, `@codemirror/view`, `@lezer/highlight`), `react-markdown` with `remark-gfm`, `mermaid`, `markmap-view`; dev dependency `@types/mdast` for the remark plugin types.
   - [x] Templates `S-templates`
     - Templates for spec, task, config, planner block and prompts ship inside the app.
     - If `templates_dir` (default `docs/templates/`) contains `task.md` or `spec.md`, the tool uses those instead of the built in ones.
@@ -323,7 +375,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Read mode renders the body without the frontmatter with `react-markdown` and `remark-gfm`: GFM task lists and tables, images, and `mermaid` fenced blocks drawn by Mermaid (`securityLevel: "strict"`, loaded on first use).
     - Images are read through Rust as `data:` URLs (D-20261030-233646-imm8): relative to the file, or to the repository root with a leading `/`, never outside the repository; remote images and other sources show a notice instead, since the app makes no network calls.
     - Links never navigate the window; a relative link to a `.md` file opens it in the editor.
-    - Proposal actions come with `S-proposals` and are not built yet.
+    - A proposal blockquote in read mode shows Accept and Reject; an Undo bar follows an Accept or Reject (`S-proposals`). Glossary terms show their definition on hover (`S-glossary`).
   - [ ] Live preview `S-editor-live-preview` #later
     - Markup hidden until the cursor enters the line, in one pane.
 - Search `S-search`
@@ -344,6 +396,7 @@ Append-only. Ids: `Q-YYYYMMDD-HHMMSS-xxxx`.
 - (none)
 
 ### Answered
+- [x] Q-20261031-005412-wtkk · Mind map: (a) Structure only, (b) any outline read only, or (c) b plus an editable mind map as a later node? (a) Structure only. (2026-10-31) → D-20261031-010817-m4pq
 - [x] Q-20260920-110500-9b2f · Editor: live preview in place, or split view? Styled source mode plus rendered read mode; live preview later. (2026-10-30) → D-20261030-213000-2c8a
 - [x] Q-20260920-111500-c2e0 · `CLAUDE.md`: copy of the block, or a one-line import? Import `@AGENTS.md`; mirror as fallback. (2026-10-30) → D-20261030-213100-91f4
 - [x] Q-20260920-112000-8a4b · Is a combined view across projects needed at all? Deferred; decide after phase 4 exit. (2026-10-30) → D-20261030-213200-e05b
@@ -607,6 +660,78 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: own code per platform (AppleScript, Windows shell FFI, freedesktop by hand); a delete control on every card (easy to hit while dragging); Finder as the macOS method (permission prompt, entitlement).
 - Consequences: Constraints, `S-trash` criteria. Files trashed on macOS have no "Put Back" in Finder; they can be dragged back.
 
+### D-20261031-010617-ryfp · Spec folder holds one file per section, the spec is read line by line
+- Context: `S-spec-file` allows `spec.md` or a `spec/` folder but does not say how the folder is laid out; `S-nodes` makes the checkbox optional, so it does not say how a sub-bullet that is a node differs from a criterion. The phase 2 tasks need file and line for every part of the spec.
+- Decision: the folder form is `spec.md` cut at its `## ` headings: `spec/README.md` (frontmatter, title, intro), then `vision.md`, `scope.md`, `constraints.md`, `domain.md`, `structure.md`, `questions.md`, `decisions.md`, `glossary.md`, each starting with its own `## ` heading, read in that order; other `*.md` files follow by name. A sub-item is a node when it has a checkbox or its first line ends with the `S-` id, with only a `Q-` link and tags after it; otherwise it is a criterion. A question's answered state is its checkbox; Open or Answered is checked against it. The spec is read by a line reader in Rust without a markdown library; reading never fails and reports what does not fit with file and line.
+- Rejected: a markdown library such as `pulldown-cmark` (a dependency outside the Constraints that still needs the same conventions on top); `index.md` for the intro (GitHub shows `README.md` for a folder); sub-items as nodes only with a checkbox (against the optional checkbox of `S-nodes`).
+- Consequences: `S-spec-file` and `S-nodes` criteria; `S-spec-split` writes exactly this layout. A criterion whose first line ends with a node id in inline code reads as a child node; such a criterion needs text after the id, such as a period.
+
+### D-20261031-010817-m4pq · The mind map shows the Structure only
+- Context: the original idea was a mind map for brainstorming, while `S-mindmap` renders only the Structure (Q-20261031-005412-wtkk).
+- Decision: (a) Structure only, as specified. Decided by the user on 2026-10-31.
+- Rejected: (b) any outline (braindump, notes, Structure) read only; (c) b plus an editable mind map that writes list edits back.
+- Consequences: task 20261031-005409-sqhn builds `S-mindmap` as written.
+
+### D-20261031-010818-k2vn · The IPC fallback warning in dev is harmless, the CSP stays
+- Context: `npm run tauri dev` on macOS logged "IPC custom protocol failed, Tauri will now use the postMessage interface instead TypeError: Load failed" for every startup call. Suspected: the CSP, the dev server origin, or a Tauri default.
+- Decision: keep the CSP and the config. In tauri 2.12.5 the warning comes from `scripts/ipc-protocol.js` when an `ipc://` fetch is rejected; WebKit rejects in-flight fetches with "Load failed" when the page reloads or navigates, for example on a Vite full reload. The fallback flag lives in the page, so the reloaded page uses the custom protocol again. Clean starts showed no warning; a reload 75 ms after load reproduced it exactly. In desktop dev no CSP applies at all (`protocol/tauri.rs` adds it only to `tauri://` assets).
+- Rejected: adding `connect-src ipc: http://ipc.localhost` (no effect: dev has no CSP, and in builds `default-src` already covers `connect-src`); a separate `devCsp` (not the cause, weakens parity with builds); hiding the warning in the frontend (would hide real IPC or CSP failures).
+- Consequences: `S-tauri` criteria. A warning after a dev reload needs no action; one on a clean start or in a release build points to a real problem.
+
+### D-20261031-011535-qgmp · Glossary terms marked per paragraph as native abbr tooltips
+- Context: `S-glossary` needs definitions on hover in read mode. It had to be decided which text counts and how the hover is shown.
+- Decision: a remark plugin marks the first whole-word occurrence of each term per paragraph or table cell, preferring longer terms. It skips headings, code and links. Terms render as `<abbr title="Term: definition">` and use the native tooltip.
+- Rejected: a custom React tooltip component (more code, and positioning inside the scrolling editor pane); marking every occurrence (noisy); marking headings and link text (a hover target inside a link conflicts with its click, and headings get crowded); stemming or plurals (needs a model of English).
+- Consequences: `S-glossary` criteria. No new dependency; `@types/mdast` added as a direct dev dependency for the plugin's types. Tooltips appear after the browser's hover delay and not on keyboard focus. Plural forms are not marked.
+
+### D-20261031-011542-f7mq · Fog meter counts #later nodes only under Later
+- Context: `S-fog-meter` counts `#later` nodes separately, but a `#later` node can also be ticked or unticked.
+- Decision: a node tagged `#later` counts only under Later, whether ticked or not. Only the node's own tag counts; children of a `#later` node are counted by their own tick.
+- Rejected: counting `#later` nodes under ticked or unticked as well (counted twice); passing `#later` down to the children.
+- Consequences: `S-fog-meter` criteria. Ticked plus unticked plus Later equals all nodes with a checkbox. The gate skips whole `#later` subtrees (D-20261031-011731-g8te), so the two can differ for children of a `#later` node.
+
+### D-20261031-011606-s3pn · Session panel lists ready tasks by priority, then id
+- Context: `S-session-panel` lists the ready tasks "in order", but `S-board-sort` is not built; the board shows tasks by file name. The ready column is configurable, and the Result has to come from somewhere without a stored brief (D-20260920-093000-6f8e).
+- Decision: ready tasks are ordered by priority 1 to 5, tasks without priority last, then by file name (the id, so creation time). The ready column follows the column roles, mirrored in TypeScript from `column_roles`. The most recently completed task is the latest `completed` date, then the latest file time, read from the board's tasks, whose sections already carry the Result. Hiding is per project and for the session only.
+- Rejected: board order alone (ignores priority); a Rust command for the column roles (one more IPC call for three lines of logic); hiding remembered in the app settings (the panel is meant to show at every project open).
+- Consequences: `S-session-panel` criteria. When `S-board-sort` is built, the panel should use its order. `readyColumnOf` must stay in step with `column_roles` in `src-tauri/src/domain/columns.rs`.
+
+### D-20261031-011731-g8te · Gate checks in Rust; areas and #later subtrees are not checked
+- Context: `S-gate` says every node not tagged `#later` is ticked and has a criterion, but domain areas have no checkbox and no criteria, and it does not say whether `#later` covers children or what makes a question blocking.
+- Decision: the gate is a Rust function over the spec model and the `gate` config, with a command `gate_status(repo_root)`. A top-level node without checkbox is an area and is skipped itself, its children are checked. `#later` skips the node and its whole subtree. A question blocks when it is marked `(blocking)` or a node links it as its blocking question. A missing spec never meets the gate. Failing items carry file and line.
+- Rejected: a pure TypeScript module over the `Spec` binding (no reuse by the Doctor or agent checks later); counting areas as unticked nodes (the gate could never be met); checking children of `#later` nodes (deferred work would hold the gate closed).
+- Consequences: `S-gate` criteria. The spec is read twice per reload, once by the spec store and once by `gate_status`; a sub-node without checkbox is reported as not ticked.
+
+### D-20261031-011800-v3sk · Board and spec view share the main area, the editor opens at a line
+- Context: the spec view needs room beside the editor, which already shares the window with the board. Section and node navigation needs the editor to jump to a line, but it could only open a file.
+- Decision: a Board | Spec switch under the project bar swaps the main area. The choice, the tree's expand state and the mind map toggle are kept for the session only, in `useViewStore`. `useEditorStore.open` takes an optional 1-based line; it switches the file to source mode and scrolls CodeMirror there, also when the file is already open. The fog meter and gate status sit under the spec view's header.
+- Rejected: board and spec side by side (too narrow next to the editor); keeping the view in app settings (not needed yet); revealing the line in read mode (the rendered view has no line positions).
+- Consequences: `S-spec-file`, `S-nodes` criteria. The fog meter, gate status, mind map and session panel use `open(…, line)`. Clicking a node while its file is in read mode switches that file to source mode.
+
+### D-20261031-011815-mk7v · Mind map built from the spec model with markmap-view only
+- Context: Markmap usually takes markdown through markmap-lib, which pulls in markdown-it, KaTeX, prism and highlight.js, and its plugins load assets from a CDN; the app makes no network calls. The spec model already holds the Structure with file and line.
+- Decision: build the Markmap tree from `spec.structure` in a pure module and render it with `markmap-view` alone, loaded on first use. Labels are escaped HTML carrying file and line; state is shown through CSS classes scoped to the Markmap id and the theme variables. Below the top level a node without a checkbox counts as unticked, because only a tick means clarified (`R-tick-means-clear`).
+- Rejected: markmap-lib transforming the Structure text (a second parser beside the spec reader, heavy dependencies, CDN plugins); markmap-autoloader (loads from a CDN).
+- Consequences: `S-mindmap` criteria; dependency `markmap-view` (with its peer `markmap-common`). Fold state is not kept across reloads of the spec.
+
+### D-20261031-011923-a7q2 · The append-only guard refuses the save, not the keystroke
+- Context: `S-decisions` and `R-append-only` let the editor only append entries and mark existing ones, but do not say how an edit is blocked or how much counts as one edit. Answering a question means typing into its line and moving it from Open to Answered, a cut and a paste; a check per keystroke would refuse these steps halfway through.
+- Decision: the guard compares whole entries of the saved and the edited text before every save, using the spec parser in Rust and matching by id. A save that changes or removes an existing entry is not written; the edits stay in the editor and a notice lists each entry with the reason. "Undo my edits" reloads the saved text and keeps the edits restorable. The check is one Rust function (`append_only_violations`) and one command, used by the editor and available to the Questions form.
+- Rejected: a CodeMirror transaction filter on protected line ranges (must decide synchronously, which means duplicating the spec parser in TypeScript, and blocks the intermediate steps of allowed changes); a pure TypeScript comparison (a second parser that could drift from Rust).
+- Consequences: `S-decisions` criteria. Typing in a protected entry is possible but not saved until it is fixed or undone; the notice appears with the autosave about 1 s later. Agents writing to disk are not checked by the app. Accepting a proposal inside an existing decision will be refused as a change.
+
+### D-20261031-012029-p7rq · Proposal blocks are found by lines, Accept and Reject are text edits with their own undo
+- Context: `S-proposals` says unwrap and delete but not what the block is, what exactly Accept removes, how much blank space Reject takes, or how an edit made in read mode is undone when CodeMirror is not mounted.
+- Decision: a proposal is the run of consecutive `>` lines (any indentation, outside the frontmatter and fences) whose first line starts with `**Proposal:**`. Accept drops one `>` marker plus one space per line and the label; a label-only line goes with any blank lines that would then open the text. Reject removes the block plus the following blank line, or the preceding one when there is none after it. Both are computed in `src/lib/proposals.ts` and applied as one `edit()` of the editor store. Undo is a one-step store undo (bar plus Ctrl/⌘+Z in read mode), valid while the text is unchanged since. The list comes from a Rust scan with the same rules.
+- Rejected: a remark plugin or the mdast tree to find blocks (not available to the Rust scan, and positions only cover the body); keeping CodeMirror mounted in read mode for its history (too invasive for one action); including lazy continuation lines (CommonMark rules too complex for a line reader).
+- Consequences: `S-proposals` and `S-editor-layout` criteria. A proposal written with lazy continuation lines only has its `>` lines unwrapped or removed. Accepting a proposal inside an existing decision is refused by the append-only guard (D-20261031-011923-a7q2).
+
+### D-20261031-012140-ol0p · Split spec checks the model, undoes failed steps, and stays inside the planning root
+- Context: `S-spec-split` moves sections and rewrites links but does not say how a failure halfway is handled, which links count, what `spec: file` means for a split, or that links in the moved text break one folder deeper. General link rewriting is `S-links` in phase 3.
+- Decision: the split is planned in full and checked in memory, then written in the order folder → read back and compared → links → trash `spec.md`, each step undone when a later one fails. Only markdown files under the planning root and the moved text itself are rewritten. Anchors are mapped by GitHub's heading slugs. Sections must be known, single and in the folder's reading order. `spec: file` blocks the split. A planner block already present is regenerated.
+- Rejected: cutting unknown sections into extra files (they would read after the known ones and change the order); rewriting links repo-wide (that is `S-links`); writing `spec: auto` into the config on a `file` setting (the config is the user's); leaving the planner block naming `spec.md` (agents would read a trashed file).
+- Consequences: `S-spec-split` criteria. Links to `spec.md` from outside the planning root, such as `ARCHITECTURE.md`, break after a split.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -636,3 +761,9 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Read mode: the editor showing the rendered body of the file.
 - Conflict: unsaved edits of the open file meeting a different text on disk, or a removed file.
 - Source file: the file text was selected in for Make task; the new task links back to it.
+- Criterion: a sub-bullet of a node that describes current behaviour; not a node itself.
+- Folder form: the spec split into one file per section under `spec/`, as opposed to the single `spec.md`.
+- Spec view: the main area view showing the spec's sections, the fog meter, the gate status and the Structure as a tree or mind map; the alternative to the board.
+- Session brief: what the session panel shows at the start of a session, computed from the board and the spec; never written to a file.
+- Violation: an existing question or decision that an unsaved edit changes or removes against `R-append-only`; such an edit is not saved.
+- Split: moving `spec.md` into the folder form, after a preview; the spec stays the same model.

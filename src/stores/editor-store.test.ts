@@ -4,6 +4,7 @@ const files = new Map<string, string>();
 const writeText = vi.fn();
 const createText = vi.fn();
 const makeTask = vi.fn();
+const checkAppendOnly = vi.fn();
 const trashed: string[] = [];
 
 vi.mock("@/bindings", () => ({
@@ -23,6 +24,8 @@ vi.mock("@/bindings", () => ({
     },
     createText: (...args: [string, string]) => createText(...args),
     makeTask: (...args: [string, string, string]) => makeTask(...args),
+    checkAppendOnly: (...args: [string, string, string, string]) =>
+      checkAppendOnly(...args),
     trashFile: async (_repoRoot: string, path: string) => {
       if (!files.has(path))
         return { status: "error", error: "the file no longer exists" };
@@ -81,13 +84,42 @@ describe("useEditorStore", () => {
       replaced: null,
       selection: "",
       error: null,
+      reveal: null,
+      violations: [],
     });
+    checkAppendOnly.mockReset();
+    checkAppendOnly.mockResolvedValue([]);
     makeTask.mockReset();
     trashed.length = 0;
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("opens a file at a line in source mode, also when it is open already", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    useEditorStore.getState().toggleMode();
+    expect(useEditorStore.getState().modes[A]).toBe("read");
+    await useEditorStore.getState().open("/repo", A, 4);
+    expect(useEditorStore.getState().reveal).toBe(4);
+    expect(useEditorStore.getState().modes[A]).toBe("source");
+    useEditorStore.getState().revealed();
+    expect(useEditorStore.getState().reveal).toBeNull();
+    await useEditorStore.getState().open("/repo", B, 2);
+    expect(useEditorStore.getState().path).toBe(B);
+    expect(useEditorStore.getState().reveal).toBe(2);
+  });
+
+  it("does not reveal a line of a file it could not open", async () => {
+    await useEditorStore.getState().open("/repo", "/repo/missing.md", 3);
+    expect(useEditorStore.getState().path).toBeNull();
+    expect(useEditorStore.getState().reveal).toBeNull();
+  });
+
+  it("opens a file without a line and nothing to reveal", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    expect(useEditorStore.getState().reveal).toBeNull();
   });
 
   it("opens a file and parses it for the form", async () => {
@@ -107,6 +139,51 @@ describe("useEditorStore", () => {
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(files.get(A)).toBe("xy");
     expect(useEditorStore.getState().saved).toBe("xy");
+  });
+
+  it("refuses to save edits that change a question or decision, keeping them", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    const violation = {
+      id: "D-20261030-100000-cccc",
+      at: { file: "spec.md", line: 5 },
+      now: 5,
+      message: "D-20261030-100000-cccc: a line was changed or added",
+    };
+    checkAppendOnly.mockResolvedValue([violation]);
+    useEditorStore.getState().edit("edited");
+    await useEditorStore.getState().close();
+    let state = useEditorStore.getState();
+    expect(checkAppendOnly).toHaveBeenCalledWith(
+      "/repo",
+      A,
+      "---\ntitle: A\n---\nbody\n",
+      "edited",
+    );
+    expect(writeText).not.toHaveBeenCalled();
+    expect(state.path).toBe(A);
+    expect(state.text).toBe("edited");
+    expect(state.violations).toEqual([violation]);
+    // Fixed by hand: saved, and the explanation goes away.
+    checkAppendOnly.mockResolvedValue([]);
+    state.edit("edited again");
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+    state = useEditorStore.getState();
+    expect(files.get(A)).toBe("edited again");
+    expect(state.violations).toEqual([]);
+  });
+
+  it("brings refused edits back after they were undone by a reload", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    checkAppendOnly.mockResolvedValue([
+      { id: null, at: { file: "spec.md", line: 1 }, now: null, message: "x" },
+    ]);
+    useEditorStore.getState().edit("edited");
+    await useEditorStore.getState().save();
+    await useEditorStore.getState().reload();
+    const state = useEditorStore.getState();
+    expect(state.text).toBe(files.get(A));
+    expect(state.violations).toEqual([]);
+    expect(state.replaced).toBe("edited");
   });
 
   it("saves the open file before opening another or closing", async () => {
@@ -384,6 +461,44 @@ describe("useEditorStore", () => {
         ],
       });
       expect(useEditorStore.getState().text).toContain("completed");
+    });
+  });
+
+  describe("proposals", () => {
+    const text = "---\ntitle: A\n---\nIntro.\n\n> **Proposal:** New.\n\nEnd.\n";
+
+    it("accepts as one edit that is saved like typing and can be undone", async () => {
+      files.set(A, text);
+      await useEditorStore.getState().open("/repo", A);
+      expect(useEditorStore.getState().resolveProposal(6, "accept")).toBe(true);
+      const accepted = "---\ntitle: A\n---\nIntro.\n\nNew.\n\nEnd.\n";
+      expect(useEditorStore.getState().text).toBe(accepted);
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+      expect(files.get(A)).toBe(accepted);
+      useEditorStore.getState().undoProposal();
+      expect(useEditorStore.getState().text).toBe(text);
+      expect(useEditorStore.getState().proposalUndo).toBeNull();
+    });
+
+    it("rejects; undo is dropped once the text was edited again", async () => {
+      files.set(A, text);
+      await useEditorStore.getState().open("/repo", A);
+      expect(useEditorStore.getState().resolveProposal(6, "reject")).toBe(true);
+      expect(useEditorStore.getState().text).toBe(
+        "---\ntitle: A\n---\nIntro.\n\nEnd.\n",
+      );
+      useEditorStore.getState().edit("typed");
+      useEditorStore.getState().undoProposal();
+      expect(useEditorStore.getState().text).toBe("typed");
+    });
+
+    it("does nothing where no proposal starts", async () => {
+      files.set(A, text);
+      await useEditorStore.getState().open("/repo", A);
+      expect(useEditorStore.getState().resolveProposal(4, "reject")).toBe(
+        false,
+      );
+      expect(useEditorStore.getState().text).toBe(text);
     });
   });
 });

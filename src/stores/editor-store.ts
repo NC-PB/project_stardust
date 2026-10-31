@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { type ChangeBatch, commands, type Task_Serialize } from "@/bindings";
+import {
+  type AppendOnlyViolation_Serialize,
+  type ChangeBatch,
+  commands,
+  type Task_Serialize,
+} from "@/bindings";
 import {
   AUTOSAVE_MS,
   type EditorMode,
@@ -9,6 +14,7 @@ import {
   followFile,
   touchesFile,
 } from "@/lib/editor";
+import { type ProposalAction, resolveProposal } from "@/lib/proposals";
 
 /** Why the open file and the disk disagree while there are unsaved edits (`S-conflicts`). */
 export type Conflict =
@@ -37,8 +43,23 @@ interface EditorState {
   selection: string;
   /** Why the file could not be read or saved; cleared by the next successful save. */
   error: string | null;
-  /** Opens the file at `path` of the repository at `repoRoot`, saving the open file first. */
-  open: (repoRoot: string, path: string) => Promise<void>;
+  /**
+   * A line the source view should scroll to and put the cursor on, 1-based; set by `open` with
+   * a line, cleared by the editor once shown with `revealed`.
+   */
+  reveal: number | null;
+  /**
+   * Opens the file at `path` of the repository at `repoRoot`, saving the open file first. With
+   * `line`, the file shows in source mode scrolled to that line, also when it is open already.
+   */
+  open: (repoRoot: string, path: string, line?: number) => Promise<void>;
+  /** Called by the editor once it has shown `reveal`. */
+  revealed: () => void;
+  /**
+   * The questions and decisions the unsaved edits change or remove (`S-decisions`,
+   * `R-append-only`). While there are any, nothing is saved; the edits stay in the editor.
+   */
+  violations: AppendOnlyViolation_Serialize[];
   /** Saves and closes the open file; stays open when the edits cannot be saved. */
   close: () => Promise<void>;
   /** Replaces the text; it is saved once typing stops for `AUTOSAVE_MS`. */
@@ -69,6 +90,15 @@ interface EditorState {
   trash: () => Promise<void>;
   /** Creates a task in the first column from the selection and opens it (`S-make-task`). */
   makeTask: () => Promise<void>;
+  /** The text before and after the last Accept or Reject, so it can be undone (`S-proposals`). */
+  proposalUndo: { before: string; after: string } | null;
+  /**
+   * Accepts or rejects the proposal starting at 1-based line `start` of the text as one edit,
+   * saved like typing; returns whether a proposal was there.
+   */
+  resolveProposal: (start: number, action: ProposalAction) => boolean;
+  /** Restores the text before the last Accept or Reject, unless it was edited since. */
+  undoProposal: () => void;
 }
 
 let autosave: ReturnType<typeof setTimeout> | undefined;
@@ -95,6 +125,9 @@ const CLOSED = {
   replaced: null,
   selection: "",
   error: null,
+  reveal: null,
+  violations: [] as AppendOnlyViolation_Serialize[],
+  proposalUndo: null,
 };
 
 /** The file open in the editor (`S-editor-core`, `S-editor-layout`, `S-conflicts`). */
@@ -107,14 +140,26 @@ export const useEditorStore = create<EditorState>()((set, get) => {
 
   /** Shows `text`, read from disk, as the saved state of the open file. */
   const load = (path: string, text: string) => {
-    set({ text, saved: text, conflict: null });
+    set({ text, saved: text, conflict: null, violations: [] });
     void parse(path, text);
   };
 
   const writeNow = async () => {
     cancelAutosave();
-    const { path, text, saved, conflict } = get();
+    const { repoRoot, path, text, saved, conflict } = get();
     if (path === null || text === saved || conflict !== null) return;
+    // Questions and Decisions only grow; an edit that changes an entry is not written.
+    if (repoRoot !== null) {
+      const violations = await commands.checkAppendOnly(
+        repoRoot,
+        path,
+        saved,
+        text,
+      );
+      if (get().path !== path) return;
+      set({ violations });
+      if (violations.length > 0) return;
+    }
     const result = await commands.saveText(path, saved, text);
     if (get().path !== path) return;
     if (result.status === "error") {
@@ -144,18 +189,33 @@ export const useEditorStore = create<EditorState>()((set, get) => {
     ...CLOSED,
     modes: {},
 
-    open: async (repoRoot, path) => {
-      if (get().path === path) return;
-      await get().save();
-      if (get().text !== get().saved) return;
-      const result = await commands.readText(path);
-      if (result.status === "error") {
-        set({ error: `Cannot open ${fileNameOf(path)}: ${result.error}` });
-        return;
+    open: async (repoRoot, path, line) => {
+      if (get().path !== path) {
+        await get().save();
+        if (get().text !== get().saved) return;
+        const result = await commands.readText(path);
+        if (result.status === "error") {
+          set({ error: `Cannot open ${fileNameOf(path)}: ${result.error}` });
+          return;
+        }
+        set({
+          ...CLOSED,
+          repoRoot,
+          path,
+          text: result.data,
+          saved: result.data,
+        });
+        await parse(path, result.data);
       }
-      set({ ...CLOSED, repoRoot, path, text: result.data, saved: result.data });
-      await parse(path, result.data);
+      if (line !== undefined)
+        set({
+          reveal: line,
+          modes: { ...get().modes, [path]: "source" },
+          selection: "",
+        });
     },
+
+    revealed: () => set({ reveal: null }),
 
     close: async () => {
       await get().save();
@@ -292,6 +352,23 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       }
       set({ selection: "" });
       await get().open(repoRoot, result.data);
+    },
+
+    resolveProposal: (start, action) => {
+      const { path, text } = get();
+      if (path === null) return false;
+      const after = resolveProposal(text, start, action);
+      if (after === null) return false;
+      get().edit(after);
+      set({ proposalUndo: { before: text, after } });
+      return true;
+    },
+
+    undoProposal: () => {
+      const { proposalUndo, text } = get();
+      set({ proposalUndo: null });
+      if (proposalUndo !== null && proposalUndo.after === text)
+        get().edit(proposalUndo.before);
     },
   };
 });

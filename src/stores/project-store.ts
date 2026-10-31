@@ -14,6 +14,7 @@ import { useBoardStore } from "./board-store";
 import { useEditorStore } from "./editor-store";
 import { useSearchStore } from "./search-store";
 import { readSetting, writeSetting } from "./settings";
+import { useSpecStore } from "./spec-store";
 
 const REPO_ROOT_SETTING = "repoRoot";
 
@@ -53,14 +54,18 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     if (!config.found) {
       set({ sources: null });
       useBoardStore.getState().clear();
+      useSpecStore.getState().clear();
       return;
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
     const watched = await commands.watchProject(repoRoot);
     if (watched.status === "error") set({ error: watched.error });
-    await useBoardStore
-      .getState()
-      .load(repoRoot, config.config, config.missing_columns);
+    await Promise.all([
+      useBoardStore
+        .getState()
+        .load(repoRoot, config.config, config.missing_columns),
+      useSpecStore.getState().load(repoRoot, config.config),
+    ]);
   };
   const without = (offer: Offer) =>
     get().offers.filter((pending) => pending !== offer);
@@ -91,7 +96,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       void useSearchStore.getState().refresh();
       if (change.batch.config_changed && repoRoot !== null)
         await load(repoRoot);
-      else await useBoardStore.getState().apply(change.batch);
+      else
+        await Promise.all([
+          useBoardStore.getState().apply(change.batch),
+          useSpecStore.getState().apply(change.batch),
+        ]);
     },
 
     restore: async () => {

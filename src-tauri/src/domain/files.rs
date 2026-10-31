@@ -153,7 +153,7 @@ pub fn image_data_url(repo_root: &Path, file: &Path, src: &str) -> Result<String
 
 /// Whether `src` starts with a URL scheme such as `https:` or `data:`. A Windows drive letter
 /// counts as a scheme too, so absolute paths are refused.
-fn has_scheme(src: &str) -> bool {
+pub(crate) fn has_scheme(src: &str) -> bool {
     src.split_once(':').is_some_and(|(scheme, _)| {
         !scheme.is_empty()
             && scheme
@@ -177,7 +177,7 @@ fn image_mime(path: &Path) -> Option<&'static str> {
 }
 
 /// Decodes `%XX` escapes as markdown links write them for spaces and other characters.
-fn percent_decode(text: &str) -> String {
+pub(crate) fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
