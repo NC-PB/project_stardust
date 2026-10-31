@@ -2,13 +2,14 @@
 //!
 //! The block is rendered from `templates/AGENTS-block.md` with placeholders filled from the
 //! config and written between `<!-- planner:start -->` and `<!-- planner:end -->`. Text
-//! outside the markers is never touched.
+//! outside the markers is never touched. The adapter command files are written with it.
 
 use std::path::Path;
 
 use serde::Serialize;
 use specta::Type;
 
+use super::adapters;
 use super::columns::fill_columns;
 use super::config::Config;
 use super::spec::{SpecForm, spec_form};
@@ -101,7 +102,8 @@ pub struct BlockReport {
 }
 
 /// Writes the block into the agents file and, as configured, the import or mirror into
-/// `CLAUDE.md`. Files whose content would not change are left alone.
+/// `CLAUDE.md` and the command files of the `adapters` (`S-adapters`). Files whose content
+/// would not change are left alone.
 pub fn write_planner_block(repo_root: &Path, config: &Config) -> Result<BlockReport, String> {
     let block = render_block(config, repo_root);
     let mut written = Vec::new();
@@ -140,10 +142,11 @@ pub fn write_planner_block(repo_root: &Path, config: &Config) -> Result<BlockRep
             )?;
         }
     }
+    adapters::write_adapters(repo_root, config, &mut written)?;
     Ok(BlockReport { written })
 }
 
-fn read_optional(repo_root: &Path, relative: &str) -> Result<Option<String>, String> {
+pub(super) fn read_optional(repo_root: &Path, relative: &str) -> Result<Option<String>, String> {
     match std::fs::read_to_string(repo_root.join(relative)) {
         Ok(text) => Ok(Some(text)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -151,7 +154,7 @@ fn read_optional(repo_root: &Path, relative: &str) -> Result<Option<String>, Str
     }
 }
 
-fn write_if_changed(
+pub(super) fn write_if_changed(
     repo_root: &Path,
     relative: &str,
     old: Option<&str>,
