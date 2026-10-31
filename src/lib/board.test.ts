@@ -270,6 +270,16 @@ describe("cardsOf", () => {
     expect(card("b")?.blockedBy).toEqual([]);
   });
 
+  it("does not block a task on itself", () => {
+    const columns = [
+      column("next", [task("a", { depends_on: ["a", "b"] }), task("b")]),
+    ];
+    const [card] = (
+      cardsOf(columns, "done", null, NOW).get("next") ?? []
+    ).filter((candidate) => candidate.id === "a");
+    expect(card.blockedBy).toEqual(["b"]);
+  });
+
   it("fills title, tags, age and the new marker", () => {
     const columns = [
       column("inbox", [

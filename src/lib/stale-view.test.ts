@@ -352,6 +352,7 @@ describe("phase 4 exit: on a project at least two months old, every entry is act
     lastTouched(t) > projectConfig.stale_after_days;
   const actuallyBlocked = (t: Task_Serialize) =>
     t.depends_on.some((dep) => {
+      if (dep === t.id) return false;
       const where = columnOf.get(dep);
       return where !== undefined && where !== "done";
     });

@@ -21,7 +21,7 @@ export interface Card {
   age: string | null;
   /** Tasks whose `parent` is this task (`S-subtasks`). */
   subtasks: number;
-  /** Dependencies outside the terminal column (`S-dependencies`). */
+  /** Dependencies outside the terminal column, other than the task itself (`S-dependencies`). */
   blockedBy: string[];
   /** Changed since the previous visit of the project. */
   isNew: boolean;
@@ -146,7 +146,7 @@ export function sortTasks(tasks: Task_Serialize[]): Task_Serialize[] {
 
 /**
  * The cards of every column, each column in board order (`sortTasks`). A dependency blocks while its task is in a column other than
- * `terminal`; an id found in no column (archived or deleted) does not block.
+ * `terminal`; an id found in no column (archived or deleted) or the task's own id does not block.
  */
 export function cardsOf(
   columns: BoardColumn[],
@@ -178,7 +178,7 @@ export function cardsOf(
         tags: task.tags,
         age: ageLabel(task.modified, now),
         subtasks: task.id === null ? 0 : (subtasks.get(task.id) ?? 0),
-        blockedBy: task.depends_on.filter(blocks),
+        blockedBy: task.depends_on.filter((id) => id !== task.id && blocks(id)),
         isNew: isNewSince(task.modified, since),
       })),
     ]),
