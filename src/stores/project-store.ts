@@ -85,7 +85,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       return;
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
+    // Runs off the main thread and can take a while on a large repository (`S-watcher`).
     const watched = await commands.watchProject(repoRoot);
+    // Another repository was opened meanwhile; its own load fills the stores.
+    if (get().repoRoot !== repoRoot) return;
     if (watched.status === "error") set({ error: watched.error });
     else if (hasRepairNotice(watched.data)) set({ repair: watched.data });
     await Promise.all([

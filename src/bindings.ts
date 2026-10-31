@@ -203,6 +203,11 @@ export const commands = {
 	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
 	 *  root changed. First repairs broken links in the whole repository by id and returns what
 	 *  it did.
+	 * 
+	 *  Async, and the walks run on a blocking thread, so a large repository does not freeze the
+	 *  window (`S-watcher`). The repair and the search index are done before the watcher starts,
+	 *  so they come before its first batch. An open superseded by a later `watch_project` or by
+	 *  `unwatch_project` while it walks installs nothing.
 	 */
 	watchProject: (repoRoot: string) => typedError<LinkRepair, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
 	/**  Stops watching and forgets the search index. */

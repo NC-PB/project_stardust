@@ -524,9 +524,15 @@ pub fn backlinks(repo_root: String, path: String) -> Vec<link_lookup::Backlink> 
     link_lookup::backlinks(repo_root, &config.planning_root, &relative)
 }
 
-/// The watcher of the open repository; replaced by every `watch_project` call.
+/// The watcher of the open repository; replaced by every `watch_project` call. Locked only
+/// briefly, never during a walk of the repository, so `unwatch_project` does not wait for an
+/// open in progress.
 #[derive(Default)]
-pub struct WatchState(Mutex<Option<watch::PlanningWatcher>>);
+pub struct WatchState {
+    current: Arc<Mutex<Option<watch::PlanningWatcher>>>,
+    /// Counts opens and closes; an open installs its watcher only while it is the latest.
+    opens: Arc<watch::Generations>,
+}
 
 /// Sent once per burst of changes under the planning root or to the config.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -550,24 +556,57 @@ pub struct PlanningChanged {
 /// block, before the event is sent. Stops the previous watcher; call again after the planning
 /// root changed. First repairs broken links in the whole repository by id and returns what
 /// it did.
+///
+/// Async, and the walks run on a blocking thread, so a large repository does not freeze the
+/// window (`S-watcher`). The repair and the search index are done before the watcher starts,
+/// so they come before its first batch. An open superseded by a later `watch_project` or by
+/// `unwatch_project` while it walks installs nothing.
 #[tauri::command]
 #[specta::specta]
-pub fn watch_project(
+pub async fn watch_project(
     app: AppHandle,
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
     repo_root: String,
 ) -> Result<link_repair::LinkRepair, String> {
-    let mut current = state.0.lock().map_err(|err| err.to_string())?;
-    *current = None;
+    let open = state.opens.next();
+    let opens = Arc::clone(&state.opens);
+    let current = Arc::clone(&state.current);
+    let index = Arc::clone(&search_state.0);
+    tauri::async_runtime::spawn_blocking(move || {
+        open_project(app, &current, &opens, open, &index, repo_root)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn open_project(
+    app: AppHandle,
+    current: &Mutex<Option<watch::PlanningWatcher>>,
+    opens: &watch::Generations,
+    open: u64,
+    index: &Arc<Mutex<Option<search::SearchIndex>>>,
+    repo_root: String,
+) -> Result<link_repair::LinkRepair, String> {
+    {
+        // The previous watcher stops first, so it does not report the repairs below.
+        let mut current = current.lock().map_err(|err| err.to_string())?;
+        if !opens.is_current(open) {
+            return Ok(link_repair::LinkRepair::default());
+        }
+        *current = None;
+        *index.lock().map_err(|err| err.to_string())? = None;
+    }
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
     let planning_root = config.planning_root.clone();
     // Moves made while the app was closed are found by id before anything else reads files.
     let repair = link_repair::repair_links(&root, &planning_root, &link_repair::RepairScope::All);
-    let index = Arc::clone(&search_state.0);
-    *index.lock().map_err(|err| err.to_string())? =
-        Some(search::SearchIndex::build(&root, &config.planning_root));
+    let built = search::SearchIndex::build(&root, &config.planning_root);
+    if !opens.is_current(open) {
+        return Ok(repair);
+    }
+    let batch_index = Arc::clone(index);
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
         // Every move is seen here once, whether the board or an agent made it.
         let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
@@ -578,7 +617,7 @@ pub fn watch_project(
             &link_repair::RepairScope::of_batch(&batch),
         );
         // The index is current before the app hears of the batch.
-        if let Ok(mut index) = index.lock()
+        if let Ok(mut index) = batch_index.lock()
             && let Some(index) = index.as_mut()
         {
             index.apply(&batch);
@@ -601,7 +640,12 @@ pub fn watch_project(
         }
         .emit(&app);
     })?;
-    *current = Some(watcher);
+    let mut current = current.lock().map_err(|err| err.to_string())?;
+    // Checked again under the lock: an unwatch or a later open may have come meanwhile.
+    if opens.is_current(open) {
+        *index.lock().map_err(|err| err.to_string())? = Some(built);
+        *current = Some(watcher);
+    }
     Ok(repair)
 }
 
@@ -622,7 +666,8 @@ pub fn unwatch_project(
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
-    *state.0.lock().map_err(|err| err.to_string())? = None;
+    state.opens.next();
+    *state.current.lock().map_err(|err| err.to_string())? = None;
     *search_state.0.lock().map_err(|err| err.to_string())? = None;
     Ok(())
 }

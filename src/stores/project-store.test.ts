@@ -220,6 +220,29 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().sources).toBeNull();
   });
 
+  it("drops an open that another open overtook while it was watched", async () => {
+    loadConfig.mockResolvedValue({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    let finishFirst: (value: unknown) => void = () => {};
+    watchProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    const first = useProjectStore.getState().openRepository("/slow");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledWith("/slow"));
+    await useProjectStore.getState().openRepository("/repo");
+    loadBoard.mockClear();
+    finishFirst({ status: "error", error: "superseded" });
+    await first;
+    expect(useProjectStore.getState().repoRoot).toBe("/repo");
+    expect(useProjectStore.getState().error).toBeNull();
+    expect(loadBoard).not.toHaveBeenCalled();
+  });
+
   it("starts watching after init", async () => {
     await useProjectStore.getState().openRepository("/repo");
     initProject.mockResolvedValue({ status: "ok", data: initReport });

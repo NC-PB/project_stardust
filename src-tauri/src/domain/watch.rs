@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -91,6 +92,23 @@ impl ChangeBatch {
             }
         }
         moves
+    }
+}
+
+/// Counts the opens and closes of a project, so work started for an open that a later open or
+/// a close superseded can be dropped (`S-watcher`).
+#[derive(Debug, Default)]
+pub struct Generations(AtomicU64);
+
+impl Generations {
+    /// Starts a new generation and returns it; every earlier one is no longer current.
+    pub fn next(&self) -> u64 {
+        self.0.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Whether no later generation was started since `generation`.
+    pub fn is_current(&self, generation: u64) -> bool {
+        self.0.load(Ordering::SeqCst) == generation
     }
 }
 
@@ -294,6 +312,19 @@ mod tests {
 
     fn set(paths: &[&str]) -> Known {
         paths.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn only_the_latest_generation_is_current() {
+        let opens = Generations::default();
+        let first = opens.next();
+        assert!(opens.is_current(first));
+        let second = opens.next();
+        assert!(!opens.is_current(first));
+        assert!(opens.is_current(second));
+        // A close is a generation of its own.
+        opens.next();
+        assert!(!opens.is_current(second));
     }
 
     #[test]
