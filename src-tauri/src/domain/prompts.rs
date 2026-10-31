@@ -78,10 +78,7 @@ pub fn fill_prompt(
     config: &Config,
     input: &PromptInput,
 ) -> Result<String, String> {
-    let text = prompt_text(prompt)?
-        .replace("{planning_root}", &config.planning_root)
-        .replace("{spec_location}", &spec_location(config, repo_root));
-    let mut text = fill_columns(&text, config);
+    let mut text = fill_from_config(&prompt_text(prompt)?, repo_root, config);
     for (placeholder, value, what) in [
         ("{task_path}", &input.task_path, "a task"),
         ("{node_id}", &input.node_id, "a node"),
@@ -96,6 +93,15 @@ pub fn fill_prompt(
         text = text.replace(placeholder, value);
     }
     Ok(text)
+}
+
+/// `text` with the placeholders that come from the config filled: `{planning_root}`,
+/// `{spec_location}` and the column names. `{task_path}` and `{node_id}` stay.
+pub fn fill_from_config(text: &str, repo_root: &Path, config: &Config) -> String {
+    let text = text
+        .replace("{planning_root}", &config.planning_root)
+        .replace("{spec_location}", &spec_location(config, repo_root));
+    fill_columns(&text, config)
 }
 
 /// The fenced block under `## heading` in `markdown`, without the fences.

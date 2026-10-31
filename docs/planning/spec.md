@@ -264,6 +264,11 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/prompts.rs` (`Prompt`, `fill_prompt`); command `fill_prompt(repo_root, prompt, input)`; `src/stores/prompt-store.ts`; `src/lib/prompts.ts` (`editorPromptsOf`, `TASK_PROMPTS`, `BRAINDUMP_PROMPTS`, `SPEC_PROMPTS`); `src/components/spec-prompts.tsx`, `src/components/verify-area-button.tsx`.
   - [x] Adapters `S-adapters`
     - On request, generates agent command files that wrap the prompts, starting with Claude Code (`.claude/commands/`). Never required.
+    - With `adapters: [claude-code]` in the config, every write of the planner block also writes one Claude Code command file per prompt of `S-prompts` to `.claude/commands/<name>.md`, the name being the prompt heading in kebab case (`work-on-task`, `verify-area`, ...). The watcher, the init offer and Split spec all write it this way (`S-agents-block`).
+    - A command file has frontmatter `description`, `argument-hint` (`"<task path>"` or `"<node id>"`, only when the prompt needs one) and `planner: generated`, then the prompt text filled from the config like the prompt buttons, with `{task_path}` and `{node_id}` replaced by `$ARGUMENTS`: `/work-on-task docs/planning/next/<task>.md`, `/verify-area S-board`.
+    - The tool recognises its own files by the frontmatter line `planner: generated`, which Claude Code ignores. A file at the same path without it is never touched; deleting the line keeps the user's edits. Generated files are written only when their content changes and keep their line endings. Removing an adapter leaves its files (`R-no-destroy`) (D-20261031-020200-i22i).
+    - Without adapters (`adapters: []`, the default) nothing under `.claude/` is read or written.
+    - Implemented in `src-tauri/src/domain/adapters.rs` (`write_adapters`, `render_claude_command`, `is_generated`), called by `agents_block::write_planner_block`.
   - [x] Open terminal `S-terminal`
     - Opens the user's terminal in the repository root. Nothing else.
     - An "Open terminal" button in the project bar. Only the terminal program starts, with the repository root as its folder; no command is passed to it, and the app does not wait for it.
@@ -782,6 +787,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: titles and criteria are plain text. A small ↗ ghost button opens the row at its line: after the title of a node, before the text of a criterion. Its title and accessible name come from `openLabel` in `src/lib/spec-view.ts`, such as `Open S-nodes at spec.md:191` or `Open criterion at spec.md:200`. Relative `.md` links stay real links beside it. A web or anchor link is text with the address on hover, and clicking it does nothing, superseding that part of D-20261031-013555-1ofs.
 - Rejected: a click handler on the row text as well (a second, mouse-only target on a non-interactive element, flagged by the linter's accessibility rules); turning the id chip into the open control (criteria and nodes without id have none); a `role="button"` wrapper (still nests interactive content).
 - Consequences: `S-nodes` criterion. Clicking a title no longer opens the editor; the ↗ button does. Each row gets one more tab stop.
+
+### D-20261031-020200-i22i · Claude Code adapter: one command per prompt, marked in the frontmatter, written with the planner block
+- Context: `S-adapters` asks for Claude Code command files that wrap the prompts, but not their names, how arguments arrive, when they are written, or how the tool tells its own files from the user's. Claude Code's docs (checked 2026-10-31) read `.claude/commands/<name>.md` as `/<name>`, take `description` and `argument-hint` in the frontmatter, put everything typed after the command into `$ARGUMENTS`, and ignore unknown frontmatter fields.
+- Decision: one file per prompt, named after the prompt heading in kebab case, filled from the config like the prompt buttons, with `{task_path}` and `{node_id}` replaced by `$ARGUMENTS`. The tool's own files carry the frontmatter line `planner: generated` (with a YAML comment saying how to keep edits); only those are rewritten, any other file at the path is skipped. The files are written inside `write_planner_block`, so every regeneration of the block writes them too. Removing an adapter leaves the files.
+- Rejected: an HTML comment marker in the body (Claude Code would send it to the agent with the prompt); short names like `/work` (less clear next to the headings and the button labels); a `.claude/commands/planner/` subfolder (commands would become `/planner:work-on-task`); Claude Code skills (`.claude/skills/`), which the docs recommend for new work but which need one folder per command; deleting files when the adapter is removed (`R-no-destroy`).
+- Consequences: `S-adapters` criteria. Skipped user files are not reported. If Claude Code drops `.claude/commands/`, the adapter moves to skills.
 
 ## Glossary
 
