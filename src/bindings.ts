@@ -143,6 +143,17 @@ export const commands = {
 	 */
 	search: (query: string, limit: number) => typedError<SearchHit[], string>(__TAURI_INVOKE("search", { query, limit })),
 	/**
+	 *  The files under the planning root of the watched repository that a link can be made to,
+	 *  by path, with title and id (`S-links`). Taken from the search index, so they follow
+	 *  watcher batches.
+	 */
+	linkCandidates: () => typedError<LinkCandidate_Serialize[], string>(__TAURI_INVOKE("link_candidates")),
+	/**
+	 *  The markdown files of the repository at `repo_root` that link to the file at `path`
+	 *  (absolute), by path relative to the repository root, with their lines (`S-links`).
+	 */
+	backlinks: (repoRoot: string, path: string) => __TAURI_INVOKE<Backlink[]>("backlinks", { repoRoot, path }),
+	/**
 	 *  Starts the user's terminal in `repo_root` and nothing else (`S-terminal`). `terminal` is the
 	 *  app setting: an application name on macOS, a program elsewhere; empty for the default.
 	 *  Returns the program that started.
@@ -243,6 +254,15 @@ export type Area_Serialize = {
 	kind: AreaKind | null,
 	description: string,
 	at: SourceLine,
+};
+
+/**  A file that links to another one. */
+export type Backlink = {
+	/**  Relative to the repository root, with `/`. */
+	file: string,
+	title: string,
+	/**  The 1-based lines holding a link to the file, in order. */
+	lines: number[],
 };
 
 /**  What `write_planner_block` changed. Paths are relative to the repository root. */
@@ -613,6 +633,27 @@ export type InitReport = {
 	offer_gitignore: boolean,
 	/**  Whether the agents file does not yet hold the current planner block. */
 	offer_planner_block: boolean,
+};
+
+/**  A file that can be linked to from the editor. */
+export type LinkCandidate = LinkCandidate_Serialize | LinkCandidate_Deserialize;
+
+/**  A file that can be linked to from the editor. */
+export type LinkCandidate_Deserialize = {
+	/**  Relative to the repository root, with `/`. */
+	path: string,
+	title: string,
+	/**  The id in the filename, for task files. */
+	id?: string | null,
+};
+
+/**  A file that can be linked to from the editor. */
+export type LinkCandidate_Serialize = {
+	/**  Relative to the repository root, with `/`. */
+	path: string,
+	title: string,
+	/**  The id in the filename, for task files. */
+	id: string | null,
 };
 
 /**  One rewritten link target. */

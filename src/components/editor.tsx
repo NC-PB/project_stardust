@@ -1,3 +1,4 @@
+import { autocompletion } from "@codemirror/autocomplete";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import {
@@ -25,6 +26,7 @@ import {
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { commands, type GlossaryTerm } from "@/bindings";
+import { Backlinks } from "@/components/backlinks";
 import { ProposalQuote, ProposalUndo } from "@/components/proposal-quote";
 import { StaleBadges, useStaleFlagsOf } from "@/components/stale-flags";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ import {
 } from "@/lib/editor";
 import { remarkGlossary } from "@/lib/glossary";
 import { dropPoint, imageBadge } from "@/lib/images";
+import { linkCompletion, repoRelative } from "@/lib/links";
 import { editorPromptsOf, PROMPT_LABELS, taskPathOf } from "@/lib/prompts";
 import {
   protectedLinesField,
@@ -50,6 +53,7 @@ import {
 } from "@/lib/protected-lines";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
+import { useLinkStore } from "@/stores/link-store";
 import { usePromptStore } from "@/stores/prompt-store";
 import { useSpecStore } from "@/stores/spec-store";
 import { useThemeStore } from "@/stores/theme-store";
@@ -111,6 +115,18 @@ const sourceExtensions = [
   frontmatterPlugin,
   protectedLinesField,
   EditorView.lineWrapping,
+  // Typing `](` or `[[` offers files to link to (`S-links`).
+  autocompletion({
+    override: [
+      linkCompletion(
+        () => useLinkStore.getState().candidates,
+        () => {
+          const { repoRoot, path } = useEditorStore.getState();
+          return repoRoot && path ? repoRelative(repoRoot, path) : null;
+        },
+      ),
+    ],
+  }),
 ];
 
 const sourceStyle = {
@@ -325,6 +341,7 @@ export function Editor() {
           <ReadView text={text} />
         )}
       </div>
+      <Backlinks />
     </section>
   );
 }

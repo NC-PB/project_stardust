@@ -13,8 +13,8 @@ use tauri_specta::Event;
 use crate::domain;
 use crate::domain::{
     agents_block, append_only, board, changelog, config, files, gate, gitattributes, ids, images,
-    init, links, make_task, prompts, questions, search, spec, spec_split, task, templates,
-    terminal, watch,
+    init, link_lookup, links, make_task, prompts, questions, search, spec, spec_split, task,
+    templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -459,6 +459,35 @@ pub fn search(
         .as_ref()
         .map(|index| index.search(&query, limit as usize))
         .unwrap_or_default())
+}
+
+/// The files under the planning root of the watched repository that a link can be made to,
+/// by path, with title and id (`S-links`). Taken from the search index, so they follow
+/// watcher batches.
+#[tauri::command]
+#[specta::specta]
+pub fn link_candidates(
+    state: tauri::State<'_, SearchState>,
+) -> Result<Vec<link_lookup::LinkCandidate>, String> {
+    let index = state.0.lock().map_err(|err| err.to_string())?;
+    Ok(index
+        .as_ref()
+        .map(link_lookup::link_candidates)
+        .unwrap_or_default())
+}
+
+/// The markdown files of the repository at `repo_root` that link to the file at `path`
+/// (absolute), by path relative to the repository root, with their lines (`S-links`).
+#[tauri::command]
+#[specta::specta]
+pub fn backlinks(repo_root: String, path: String) -> Vec<link_lookup::Backlink> {
+    let repo_root = Path::new(&repo_root);
+    let Ok(relative) = Path::new(&path).strip_prefix(repo_root) else {
+        return Vec::new();
+    };
+    let relative = relative.to_string_lossy().replace('\\', "/");
+    let config = config::load_config(repo_root).config;
+    link_lookup::backlinks(repo_root, &config.planning_root, &relative)
 }
 
 /// The watcher of the open repository; replaced by every `watch_project` call.

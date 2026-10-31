@@ -70,6 +70,13 @@ impl SearchIndex {
         self.documents.is_empty()
     }
 
+    /// Every file in the index, by path relative to the repository root, with its title.
+    pub fn files(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.documents
+            .iter()
+            .map(|(path, doc)| (path.as_str(), doc.title.as_str()))
+    }
+
     /// Re-reads the files a watcher batch touched and forgets removed ones.
     pub fn apply(&mut self, batch: &ChangeBatch) {
         for change in &batch.changes {
