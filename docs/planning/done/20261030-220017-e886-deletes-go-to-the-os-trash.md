@@ -28,4 +28,4 @@ Tasks can be deleted from the editor: "Delete" asks in a bar whether to move the
 - On macOS Finder shows no "Put Back" for these files (`NSFileManager` instead of AppleScript to avoid a permission prompt).
 
 ### Next session
-- `next/` and the phase 1 part of the inbox are empty. Left in the inbox: [signed release builds](../inbox/20261030-220019-45ec-signed-release-builds.md) and the [IPC custom protocol warning in dev](20261030-225823-gccd-ipc-custom-protocol-warning-in-dev.md). Phase 1 exit is two weeks of real use.
+- `next/` and the phase 1 part of the inbox are empty. Left in the inbox: [signed release builds](../next/20261030-220019-45ec-signed-release-builds.md) and the [IPC custom protocol warning in dev](20261030-225823-gccd-ipc-custom-protocol-warning-in-dev.md). Phase 1 exit is two weeks of real use.

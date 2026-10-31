@@ -26,5 +26,5 @@ The spec view has a Questions toggle that shows the Questions form: the open que
 - An answer cannot contain `→`; line breaks become spaces.
 
 ### Next session
-- Wave 3 is done. Unblocked now: [Agent adapters](../inbox/20261031-005411-6h8i-agent-adapters-starting-with-claude-code.md) and [Spec view rows without nested links](../inbox/20261031-013556-iwh8-spec-view-rows-without-nested-links.md). Signed release builds stay skipped; the session panel sort waits for `S-board-sort`.
+- Wave 3 is done. Unblocked now: [Agent adapters](20261031-005411-6h8i-agent-adapters-starting-with-claude-code.md) and [Spec view rows without nested links](20261031-013556-iwh8-spec-view-rows-without-nested-links.md). Signed release builds stay skipped; the session panel sort waits for `S-board-sort`.
 - None of the phase 2 views has been tried by hand in `npm run tauri dev` yet; that is the most useful next step.
