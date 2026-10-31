@@ -5,6 +5,7 @@ import {
   type DoctorReport_Serialize,
 } from "@/bindings";
 import { fixResult } from "@/lib/doctor";
+import { settleInTab } from "./tab-snapshots";
 
 interface DoctorState {
   repoRoot: string | null;
@@ -27,6 +28,16 @@ interface DoctorState {
   close: () => void;
 }
 
+/**
+ * Runs the check of `repoRoot` and writes its report into that tab's state, shown or hidden;
+ * nothing when the tab no longer holds this check.
+ */
+async function runCheck(repoRoot: string): Promise<void> {
+  if (!settleInTab(useDoctorStore, repoRoot, { checking: true })) return;
+  const report = await commands.doctor(repoRoot);
+  settleInTab(useDoctorStore, repoRoot, { report, checking: false });
+}
+
 /** The doctor's findings and their fixes, applied only after confirmation (`S-doctor`). */
 export const useDoctorStore = create<DoctorState>()((set, get) => ({
   repoRoot: null,
@@ -39,9 +50,8 @@ export const useDoctorStore = create<DoctorState>()((set, get) => ({
   check: async (repoRoot) => {
     if (get().repoRoot !== repoRoot)
       set({ report: null, pending: null, notice: null, error: null });
-    set({ repoRoot, checking: true });
-    const report = await commands.doctor(repoRoot);
-    if (get().repoRoot === repoRoot) set({ report, checking: false });
+    set({ repoRoot });
+    await runCheck(repoRoot);
   },
 
   propose: (fix) => set({ pending: fix, notice: null, error: null }),
@@ -51,10 +61,14 @@ export const useDoctorStore = create<DoctorState>()((set, get) => ({
     if (repoRoot === null || pending === null) return;
     set({ pending: null });
     const result = await commands.applyDoctorFix(repoRoot, pending);
-    if (get().repoRoot !== repoRoot) return;
-    if (result.status === "error") set({ error: `Not fixed: ${result.error}` });
-    else set({ notice: fixResult(result.data), error: null });
-    await get().check(repoRoot);
+    const landed = settleInTab(
+      useDoctorStore,
+      repoRoot,
+      result.status === "error"
+        ? { error: `Not fixed: ${result.error}` }
+        : { notice: fixResult(result.data), error: null },
+    );
+    if (landed) await runCheck(repoRoot);
   },
 
   cancel: () => set({ pending: null }),

@@ -39,6 +39,7 @@ import { useSpecStore } from "./spec-store";
 import { useSplitStore } from "./split-store";
 import { useStaleViewStore } from "./stale-view-store";
 import { useStalenessStore } from "./staleness-store";
+import { type Snapshot, snapshots } from "./tab-snapshots";
 import { useViewStore } from "./view-store";
 
 /** The open tabs and the shown one, in the app settings (`S-multi-project`). */
@@ -80,27 +81,24 @@ const PROJECT_STORES = [
   useSessionStore,
 ] as unknown as ProjectStore[];
 
-/** The states of the project stores of one tab. Zustand replaces state objects, so these stay. */
-type Snapshot = object[];
-
-const take = (): Snapshot => PROJECT_STORES.map((store) => store.getState());
+const take = (): Snapshot =>
+  new Map(PROJECT_STORES.map((store) => [store, store.getState()]));
 
 const put = (snapshot: Snapshot) => {
-  PROJECT_STORES.forEach((store, index) => {
-    store.setState(snapshot[index], true);
-  });
+  for (const store of PROJECT_STORES) {
+    const state = snapshot.get(store);
+    if (state !== undefined) store.setState(state, true);
+  }
 };
 
 const fresh = (): Snapshot =>
-  PROJECT_STORES.map((store) => store.getInitialState());
+  new Map(PROJECT_STORES.map((store) => [store, store.getInitialState()]));
 
 /** A change on disk of a tab not shown, applied when the tab is shown again. */
 type Pending =
   | { kind: "planning"; change: PlanningChanged_Serialize }
   | { kind: "outside"; change: OutsideChange };
 
-/** The tabs loaded this session but not shown, with their stores' states. */
-const snapshots = new Map<string, Snapshot>();
 /** Their changes on disk since they were hidden, oldest first. */
 const pending = new Map<string, Pending[]>();
 /** Tab changes and changes on disk run one after another, so none lands in another tab. */
@@ -181,8 +179,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const queued = pending.get(repoRoot) ?? [];
     pending.delete(repoRoot);
     // A tab hidden while its project was still opening missed the end of the open; it opens again.
-    const opening = (snapshot?.[0] as { opening?: boolean } | undefined)
-      ?.opening;
+    const opening = (
+      snapshot?.get(useProjectStore) as { opening?: boolean } | undefined
+    )?.opening;
     if (snapshot === undefined || opening === true) {
       put(fresh());
       await useProjectStore.getState().openRepository(repoRoot);
@@ -217,9 +216,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
     const snapshot = snapshots.get(repoRoot);
     if (snapshot === undefined) return false;
-    const editor = snapshot[
-      PROJECT_STORES.indexOf(useEditorStore as unknown as ProjectStore)
-    ] as { text: string; saved: string; path: string | null };
+    const editor = snapshot.get(useEditorStore) as {
+      text: string;
+      saved: string;
+      path: string | null;
+    };
     return editor.path !== null && editor.text !== editor.saved;
   };
 
