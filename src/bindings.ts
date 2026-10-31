@@ -53,6 +53,16 @@ export const commands = {
 	 *  the OS trash (`S-spec-split`). Refuses, changing nothing, when the plan has blockers.
 	 */
 	splitSpec: (repoRoot: string) => typedError<SplitReport_Serialize, string>(__TAURI_INVOKE("split_spec", { repoRoot })),
+	/**
+	 *  What adding `merge=union` lines for the questions and decisions files to `.gitattributes`
+	 *  would do (`S-gitattributes`). Writes nothing.
+	 */
+	planGitattributes: (repoRoot: string) => __TAURI_INVOKE<GitattributesPlan>("plan_gitattributes", { repoRoot }),
+	/**
+	 *  Appends the previewed `lines` to `.gitattributes`, creating it if needed (`S-gitattributes`).
+	 *  A plain file write, never a git command. Refuses when the plan changed since the preview.
+	 */
+	addGitattributes: (repoRoot: string, lines: string[]) => typedError<GitattributesReport, string>(__TAURI_INVOKE("add_gitattributes", { repoRoot, lines })),
 	/**  Every task file directly in the column folder `dir`, broken ones included. */
 	readColumn: (dir: string) => typedError<Task_Serialize[], string>(__TAURI_INVOKE("read_column", { dir })),
 	/**  One task file. */
@@ -425,6 +435,33 @@ export type GateStatus_Serialize = {
 	met: boolean,
 	/**  Every failing item of the enabled checks, in spec order per check. */
 	failures: GateFailure_Serialize[],
+};
+
+/**  What adding the lines would do, shown before anything is written. */
+export type GitattributesPlan = {
+	/**  The spec form the config chooses; the lines name its files. */
+	form: SpecForm,
+	/**  Whether `.gitattributes` exists; it is created when it does not. */
+	exists: boolean,
+	/**  Lines to append, in order. Empty when nothing is missing. */
+	missing: string[],
+	/**  Existing lines that already give a file `merge=union`. */
+	present: string[],
+	/**
+	 *  Existing lines that give a file another merge setting. That file gets no line: the
+	 *  setting is the user's.
+	 */
+	conflicting: string[],
+	/**  Why nothing can be written. Empty when the lines can be added. */
+	blockers: string[],
+};
+
+/**  What adding the lines did. */
+export type GitattributesReport = {
+	/**  The lines appended to `.gitattributes`. */
+	added: string[],
+	/**  Whether `.gitattributes` was created. */
+	created: boolean,
 };
 
 /**  A glossary entry: `- Term: definition`. */

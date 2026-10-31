@@ -12,8 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts,
-    questions, search, spec, spec_split, task, templates, terminal, watch,
+    agents_block, append_only, board, config, files, gate, gitattributes, ids, init, make_task,
+    prompts, questions, search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -140,6 +140,29 @@ pub fn split_spec(repo_root: String) -> Result<spec_split::SplitReport, String> 
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     spec_split::split_spec(repo_root, &config)
+}
+
+/// What adding `merge=union` lines for the questions and decisions files to `.gitattributes`
+/// would do (`S-gitattributes`). Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn plan_gitattributes(repo_root: String) -> gitattributes::GitattributesPlan {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    gitattributes::plan_gitattributes(repo_root, &config)
+}
+
+/// Appends the previewed `lines` to `.gitattributes`, creating it if needed (`S-gitattributes`).
+/// A plain file write, never a git command. Refuses when the plan changed since the preview.
+#[tauri::command]
+#[specta::specta]
+pub fn add_gitattributes(
+    repo_root: String,
+    lines: Vec<String>,
+) -> Result<gitattributes::GitattributesReport, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    gitattributes::add_gitattributes(repo_root, &config, &lines)
 }
 
 /// Every task file directly in the column folder `dir`, broken ones included.

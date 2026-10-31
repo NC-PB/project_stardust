@@ -1,3 +1,7 @@
+import {
+  GitattributesButton,
+  GitattributesPanel,
+} from "@/components/gitattributes";
 import { SplitSpecButton, SplitSpecPanel } from "@/components/spec-split";
 import { Button } from "@/components/ui/button";
 import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
@@ -90,11 +94,15 @@ export function ProjectPanel() {
             {sources?.spec && repoRoot !== null && (
               <SplitSpecButton repoRoot={repoRoot} />
             )}
+            {repoRoot !== null && <GitattributesButton repoRoot={repoRoot} />}
           </div>
         </div>
       )}
       {status === "ready" && repoRoot !== null && (
-        <SplitSpecPanel repoRoot={repoRoot} />
+        <>
+          <SplitSpecPanel repoRoot={repoRoot} />
+          <GitattributesPanel repoRoot={repoRoot} />
+        </>
       )}
 
       {initReport && (
