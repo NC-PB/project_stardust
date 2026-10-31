@@ -69,6 +69,17 @@ export const commands = {
 	 */
 	addGitattributes: (repoRoot: string, lines: string[]) => typedError<GitattributesReport, string>(__TAURI_INVOKE("add_gitattributes", { repoRoot, lines })),
 	/**
+	 *  Which tasks of the terminal column archiving would move into month folders, and which it
+	 *  skips (`S-archive`). Writes nothing.
+	 */
+	planArchive: (repoRoot: string) => __TAURI_INVOKE<ArchivePlan_Serialize>("plan_archive", { repoRoot }),
+	/**
+	 *  Moves the previewed tasks, named by `file_names`, into their month folders (`S-archive`).
+	 *  Refuses when the plan changed since the preview; never writes over a file. The watcher
+	 *  rewrites the links of the moved files.
+	 */
+	archiveTasks: (repoRoot: string, fileNames: string[]) => typedError<ArchiveReport_Serialize, string>(__TAURI_INVOKE("archive_tasks", { repoRoot, fileNames })),
+	/**
 	 *  The git tags of the repository at `repo_root` a changelog can start from, from read-only
 	 *  `git log` (`S-changelog`). Unavailable without git or outside a repository.
 	 */
@@ -221,6 +232,101 @@ export type AppendOnlyViolation_Serialize = {
 	now: number | null,
 	/**  What happened to the entry and what is allowed instead. */
 	message: string,
+};
+
+/**  One task the archive moves. */
+export type ArchiveMove = ArchiveMove_Serialize | ArchiveMove_Deserialize;
+
+/**  One task the archive moves. */
+export type ArchiveMove_Deserialize = {
+	file_name: string,
+	id?: string | null,
+	title: string,
+	completed: string,
+	/**  The month folder, `YYYY-MM`. */
+	month: string,
+	/**  Where the file is now, relative to the repository root, with `/`. */
+	from: string,
+	/**  Where it goes, relative to the repository root, with `/`. */
+	to: string,
+};
+
+/**  One task the archive moves. */
+export type ArchiveMove_Serialize = {
+	file_name: string,
+	id: string | null,
+	title: string,
+	completed: string,
+	/**  The month folder, `YYYY-MM`. */
+	month: string,
+	/**  Where the file is now, relative to the repository root, with `/`. */
+	from: string,
+	/**  Where it goes, relative to the repository root, with `/`. */
+	to: string,
+};
+
+/**  What archiving would do, shown before anything moves. */
+export type ArchivePlan = ArchivePlan_Serialize | ArchivePlan_Deserialize;
+
+/**  What archiving would do, shown before anything moves. */
+export type ArchivePlan_Deserialize = {
+	/**  The terminal column folder, relative to the repository root. */
+	column: string,
+	/**  The current month, `YYYY-MM`; tasks completed in it or later stay. */
+	current_month: string,
+	/**  The tasks to move, by month, then file name. */
+	moves: ArchiveMove_Deserialize[],
+	/**  How many tasks stay because they were completed this month or later. */
+	kept: number,
+	/**
+	 *  Tasks without a valid `completed` date, or whose month folder already holds a file
+	 *  with their name. They stay where they are.
+	 */
+	skipped: ArchiveSkip[],
+	/**  Why nothing can be archived. Empty when the plan can be confirmed. */
+	blockers: string[],
+};
+
+/**  What archiving would do, shown before anything moves. */
+export type ArchivePlan_Serialize = {
+	/**  The terminal column folder, relative to the repository root. */
+	column: string,
+	/**  The current month, `YYYY-MM`; tasks completed in it or later stay. */
+	current_month: string,
+	/**  The tasks to move, by month, then file name. */
+	moves: ArchiveMove_Serialize[],
+	/**  How many tasks stay because they were completed this month or later. */
+	kept: number,
+	/**
+	 *  Tasks without a valid `completed` date, or whose month folder already holds a file
+	 *  with their name. They stay where they are.
+	 */
+	skipped: ArchiveSkip[],
+	/**  Why nothing can be archived. Empty when the plan can be confirmed. */
+	blockers: string[],
+};
+
+/**  What archiving did. */
+export type ArchiveReport = ArchiveReport_Serialize | ArchiveReport_Deserialize;
+
+/**  What archiving did. */
+export type ArchiveReport_Deserialize = {
+	moved: ArchiveMove_Deserialize[],
+	/**  Moves that failed; those files stayed where they were. */
+	failed: ArchiveSkip[],
+};
+
+/**  What archiving did. */
+export type ArchiveReport_Serialize = {
+	moved: ArchiveMove_Serialize[],
+	/**  Moves that failed; those files stayed where they were. */
+	failed: ArchiveSkip[],
+};
+
+/**  A task of the terminal column that is not archived, and why. */
+export type ArchiveSkip = {
+	file_name: string,
+	reason: string,
 };
 
 /**  A domain area: `- Name (kind): description`. */

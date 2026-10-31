@@ -12,8 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, changelog, config, files, gate, gitattributes, ids, images,
-    init, links, make_task, prompts, questions, search, spec, spec_split, task, templates,
+    agents_block, append_only, archive, board, changelog, config, files, gate, gitattributes, ids,
+    images, init, links, make_task, prompts, questions, search, spec, spec_split, task, templates,
     terminal, watch,
 };
 
@@ -174,6 +174,32 @@ pub fn add_gitattributes(
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     gitattributes::add_gitattributes(repo_root, &config, &lines)
+}
+
+/// Which tasks of the terminal column archiving would move into month folders, and which it
+/// skips (`S-archive`). Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn plan_archive(repo_root: String) -> archive::ArchivePlan {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    archive::plan_archive(repo_root, &config, &today)
+}
+
+/// Moves the previewed tasks, named by `file_names`, into their month folders (`S-archive`).
+/// Refuses when the plan changed since the preview; never writes over a file. The watcher
+/// rewrites the links of the moved files.
+#[tauri::command]
+#[specta::specta]
+pub fn archive_tasks(
+    repo_root: String,
+    file_names: Vec<String>,
+) -> Result<archive::ArchiveReport, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    archive::archive(repo_root, &config, &today, &file_names)
 }
 
 /// The git tags of the repository at `repo_root` a changelog can start from, from read-only
