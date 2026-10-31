@@ -151,6 +151,8 @@ pub struct RepositoryWatcher {
 
 /// Starts watching the repository at `repo_root` outside its planning root `planning_root`
 /// (relative). `on_change` runs on a background thread once per burst that touched anything.
+/// Fails when the repository root cannot be read or a folder cannot be watched (such as the
+/// OS limit of watches on Linux), naming the folder.
 pub fn watch(
     repo_root: &Path,
     planning_root: &str,
@@ -166,7 +168,9 @@ pub fn watch(
     let mut watcher = notify::recommended_watcher(sender).map_err(|err| err.to_string())?;
     let mut watches = plan(&repo_root, &planning);
     for (dir, mode) in &watches {
-        watcher.watch(dir, *mode).map_err(|err| err.to_string())?;
+        watcher
+            .watch(dir, *mode)
+            .map_err(|err| format!("{}: {err}", dir.display()))?;
     }
     let watcher = Arc::new(Mutex::new(watcher));
     let handle: Weak<Mutex<notify::RecommendedWatcher>> = Arc::downgrade(&watcher);
@@ -422,5 +426,14 @@ mod tests {
             inside.markdown && inside.files_added_or_removed,
             "{inside:?}"
         );
+    }
+
+    #[test]
+    fn a_repository_that_cannot_be_watched_fails_with_the_reason() {
+        let root = std::env::temp_dir().join(format!("stardust-repo-watch-{}", random_suffix()));
+        let Err(reason) = watch(&root, PLANNING, |_| {}) else {
+            panic!("a missing repository root was watched");
+        };
+        assert!(reason.contains(&*root.to_string_lossy()), "{reason}");
     }
 }

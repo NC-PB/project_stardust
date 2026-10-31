@@ -106,13 +106,14 @@ const initReport = {
 
 const NO_LINKS = { rewritten: [], problems: [] };
 const NO_REPAIR = { repaired: [], unresolved: [], problems: [] };
+const OPENED = { repair: NO_REPAIR, repository_watch_error: null };
 
 describe("useProjectStore", () => {
   beforeEach(() => {
     settings.clear();
     vi.clearAllMocks();
     loadConfig.mockResolvedValue({ found: false });
-    watchProject.mockResolvedValue({ status: "ok", data: NO_REPAIR });
+    watchProject.mockResolvedValue({ status: "ok", data: OPENED });
     useProjectStore.setState({
       repoRoot: null,
       config: null,
@@ -123,6 +124,7 @@ describe("useProjectStore", () => {
       revision: 0,
       links: null,
       repair: null,
+      repositoryWatchError: null,
     });
   });
 
@@ -250,6 +252,31 @@ describe("useProjectStore", () => {
     expect(loadBoard).not.toHaveBeenCalled();
   });
 
+  it("keeps why the repository watcher could not start until the project opens again", async () => {
+    loadConfig.mockResolvedValue({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    watchProject.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        repair: NO_REPAIR,
+        repository_watch_error: "/repo/src: too many watches",
+      },
+    });
+    await useProjectStore.getState().openRepository("/repo");
+    expect(useProjectStore.getState().repositoryWatchError).toBe(
+      "/repo/src: too many watches",
+    );
+    // The planning watcher runs anyway, so the project loads as usual.
+    expect(loadBoard).toHaveBeenCalled();
+    expect(useProjectStore.getState().error).toBeNull();
+
+    await useProjectStore.getState().openRepository("/repo");
+    expect(useProjectStore.getState().repositoryWatchError).toBeNull();
+  });
+
   it("starts watching after init", async () => {
     await useProjectStore.getState().openRepository("/repo");
     initProject.mockResolvedValue({ status: "ok", data: initReport });
@@ -374,7 +401,10 @@ describe("useProjectStore", () => {
       problems: [],
     };
     loadConfig.mockResolvedValue({ found: true });
-    watchProject.mockResolvedValue({ status: "ok", data: atOpen });
+    watchProject.mockResolvedValue({
+      status: "ok",
+      data: { repair: atOpen, repository_watch_error: null },
+    });
     await useProjectStore.getState().openRepository("/repo");
     expect(useProjectStore.getState().repair).toEqual(atOpen);
 

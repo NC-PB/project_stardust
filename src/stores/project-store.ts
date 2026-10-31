@@ -54,6 +54,11 @@ interface ProjectState {
    * problems doing so (`S-links`). Shown and dismissed with `links`.
    */
   repair: LinkRepair | null;
+  /**
+   * Why the repository watcher could not start when the project was opened, if it could not
+   * (`S-watcher`). The planning watcher runs anyway. Kept until the project is opened again.
+   */
+  repositoryWatchError: string | null;
   /** Dismisses the link notice: `links` and `repair`. */
   dismissLinks: () => void;
   /** Subscribes to changes on disk; returns the function that unsubscribes. */
@@ -78,7 +83,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     const config = await commands.loadConfig(repoRoot);
     set({ config });
     if (!config.found) {
-      set({ sources: null });
+      set({ sources: null, repositoryWatchError: null });
       useBoardStore.getState().clear();
       useSpecStore.getState().clear();
       useProposalStore.getState().clear();
@@ -93,7 +98,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     // Another repository was opened meanwhile; its own load fills the stores.
     if (get().repoRoot !== repoRoot) return;
     if (watched.status === "error") set({ error: watched.error });
-    else if (hasRepairNotice(watched.data)) set({ repair: watched.data });
+    else {
+      set({
+        repositoryWatchError: watched.data.repository_watch_error ?? null,
+      });
+      if (hasRepairNotice(watched.data.repair))
+        set({ repair: watched.data.repair });
+    }
     await Promise.all([
       useBoardStore
         .getState()
@@ -119,6 +130,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     revision: 0,
     links: null,
     repair: null,
+    repositoryWatchError: null,
 
     listen: async () => {
       const stops = await Promise.all([
@@ -189,6 +201,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         lastChange: null,
         links: null,
         repair: null,
+        repositoryWatchError: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);

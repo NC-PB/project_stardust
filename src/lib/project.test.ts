@@ -4,6 +4,7 @@ import {
   describeBatch,
   describeLinks,
   describeRepair,
+  describeRepositoryWatchError,
   hasLinkNotice,
   hasRepairNotice,
   offerLabel,
@@ -137,5 +138,13 @@ describe("describeRepair", () => {
     expect(
       hasRepairNotice({ repaired: [repaired], unresolved: [], problems: [] }),
     ).toBe(true);
+  });
+});
+
+describe("describeRepositoryWatchError", () => {
+  it("names the views left behind and the reason", () => {
+    const line = describeRepositoryWatchError("/repo/src: too many watches");
+    expect(line).toContain("missing paths, link candidates and backlinks");
+    expect(line).toMatch(/Reason: \/repo\/src: too many watches$/);
   });
 });

@@ -10,6 +10,7 @@ import {
   describeBatch,
   describeLinks,
   describeRepair,
+  describeRepositoryWatchError,
   offerLabel,
   projectStatus,
 } from "@/lib/project";
@@ -28,6 +29,7 @@ export function ProjectPanel() {
     lastChange,
     links,
     repair,
+    repositoryWatchError,
     dismissLinks,
     sources,
     choose,
@@ -183,6 +185,12 @@ export function ProjectPanel() {
             Dismiss
           </Button>
         </div>
+      )}
+
+      {repositoryWatchError && (
+        <p role="status" className="text-sm text-destructive">
+          {describeRepositoryWatchError(repositoryWatchError)}
+        </p>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}

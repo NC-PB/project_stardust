@@ -84,3 +84,11 @@ export function describeRepair(repair: LinkRepair): string[] {
 export function hasRepairNotice(repair: LinkRepair): boolean {
   return repair.repaired.length > 0 || repair.problems.length > 0;
 }
+
+/**
+ * Why changes outside the planning root are not followed, when the repository watcher could
+ * not start (`S-watcher`): which views that leaves behind, and the reason.
+ */
+export function describeRepositoryWatchError(reason: string): string {
+  return `Changes outside the planning root are not followed: missing paths, link candidates and backlinks from outside it update with planning changes only, until the project is opened again. Reason: ${reason}`;
+}
