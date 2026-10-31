@@ -30,6 +30,7 @@ vi.mock("./spec-store", () => ({
 }));
 
 import { useQuestionsStore } from "./questions-store";
+import { snapshots } from "./tab-snapshots";
 
 const PATH = "/repo/docs/planning/spec/questions.md";
 
@@ -38,6 +39,67 @@ describe("useQuestionsStore", () => {
     vi.resetAllMocks();
     Object.assign(editor, { path: null, text: "", saved: "", conflict: null });
     useQuestionsStore.getState().clear();
+    useQuestionsStore.setState({ repoRoot: null });
+    snapshots.clear();
+  });
+
+  /** Starts saving Q-1, then hides its tab and shows `/other`; returns the answer's resolver. */
+  const saveThenHide = () => {
+    let resolve: (result: unknown) => void = () => {};
+    answerQuestion.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    useQuestionsStore.getState().setDraft("Q-1", "Blue.");
+    const saving = useQuestionsStore.getState().save("Q-1");
+    snapshots.set(
+      "/repo",
+      new Map([[useQuestionsStore, useQuestionsStore.getState()]]),
+    );
+    useQuestionsStore.setState({
+      repoRoot: "/other",
+      drafts: {},
+      saving: null,
+      errors: {},
+      answered: [],
+    });
+    return { saving, resolve };
+  };
+
+  const kept = () =>
+    snapshots.get("/repo")?.get(useQuestionsStore) as ReturnType<
+      typeof useQuestionsStore.getState
+    >;
+
+  it("lands an answer arriving after its tab was hidden in that tab's snapshot", async () => {
+    const { saving, resolve } = saveThenHide();
+    resolve({ status: "ok", data: {} });
+    await saving;
+    expect(kept().saving).toBeNull();
+    expect(kept().answered).toEqual(["Q-1"]);
+    expect(kept().drafts).toEqual({});
+    expect(useQuestionsStore.getState().answered).toEqual([]);
+    expect(useQuestionsStore.getState().repoRoot).toBe("/other");
+  });
+
+  it("lands a refusal arriving after its tab was hidden in that tab's snapshot", async () => {
+    const { saving, resolve } = saveThenHide();
+    resolve({ status: "error", error: "Q-1 is answered already" });
+    await saving;
+    expect(kept().saving).toBeNull();
+    expect(kept().errors["Q-1"]).toBe("Not saved: Q-1 is answered already");
+    expect(kept().drafts).toEqual({ "Q-1": "Blue." });
+    expect(useQuestionsStore.getState().errors).toEqual({});
+  });
+
+  it("drops an answer whose tab was closed", async () => {
+    const { saving, resolve } = saveThenHide();
+    snapshots.delete("/repo");
+    resolve({ status: "ok", data: {} });
+    await saving;
+    expect(useQuestionsStore.getState().answered).toEqual([]);
+    expect(useQuestionsStore.getState().saving).toBeNull();
   });
 
   it("saves the answer and hides the question until the spec is read again", async () => {
