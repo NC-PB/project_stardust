@@ -6,6 +6,7 @@ import {
   hasDetails,
   isExpanded,
   nodeKey,
+  openLabel,
   questionById,
   sourceLabel,
   specPathOf,
@@ -117,5 +118,19 @@ describe("questionById", () => {
 describe("sourceLabel", () => {
   it("is file and line", () => {
     expect(sourceLabel({ file: "spec.md", line: 3 })).toBe("spec.md:3");
+  });
+});
+
+describe("openLabel", () => {
+  const at = { file: "spec/structure.md", line: 12 };
+  it("names the row and where it opens", () => {
+    expect(openLabel(at, "S-nodes")).toBe(
+      "Open S-nodes at spec/structure.md:12",
+    );
+  });
+  it("is the place alone without a name", () => {
+    expect(openLabel(at)).toBe("Open spec/structure.md:12");
+    expect(openLabel(at, null)).toBe("Open spec/structure.md:12");
+    expect(openLabel(at, "")).toBe("Open spec/structure.md:12");
   });
 });
