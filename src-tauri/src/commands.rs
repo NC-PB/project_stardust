@@ -396,6 +396,31 @@ pub fn import_image(
     )
 }
 
+/// Writes an image pasted from the clipboard, `data` in base64 of type `mime`, into the image
+/// root and returns the markdown linking it from `file` (`S-images`). Never overwrites a file.
+#[tauri::command]
+#[specta::specta]
+pub fn paste_image(
+    repo_root: String,
+    file: String,
+    mime: String,
+    data: String,
+) -> Result<images::ImportedImage, String> {
+    let bytes = files::base64_decode(&data)
+        .ok_or_else(|| "the pasted image could not be read".to_string())?;
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    images::paste_image(
+        repo_root,
+        &config.images_root,
+        Path::new(&file),
+        &mime,
+        &bytes,
+        &stamp,
+    )
+}
+
 /// A new task in the first column from `selection`, text selected in the file `source`
 /// (`S-make-task`). Returns the path of the new file.
 #[tauri::command]

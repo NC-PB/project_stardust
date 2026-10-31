@@ -1,4 +1,4 @@
-/** Images dropped into the editor and shown in read mode (`S-images`). */
+/** Images dropped or pasted into the editor and shown in read mode (`S-images`). */
 
 import { bodyOf } from "@/lib/editor";
 
@@ -64,7 +64,29 @@ export function imageBadge(
   return { label: `Image not shown: ${name}`, title: problem.reason };
 }
 
-/** The notice for dropped files that could not be added, or `null` when all were. */
+/**
+ * The files of a paste that become images: none while the clipboard also holds plain text,
+ * which then pastes as usual (an image copied from a web page often comes with its text).
+ */
+export function pastedFiles(data: {
+  getData(format: string): string;
+  files: ArrayLike<File>;
+}): File[] {
+  if (data.getData("text/plain") !== "") return [];
+  return Array.from(data.files);
+}
+
+/** The bytes of a pasted file as base64, the form `paste_image` takes them in. */
+export async function fileBase64(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  // In chunks, since spreading megabytes into one call overflows the stack.
+  for (let at = 0; at < bytes.length; at += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  return btoa(binary);
+}
+
+/** The notice for dropped or pasted files that could not be added, or `null` when all were. */
 export function dropFailures(failures: string[]): string | null {
   if (failures.length === 0) return null;
   return `Not added: ${failures.join("; ")}`;

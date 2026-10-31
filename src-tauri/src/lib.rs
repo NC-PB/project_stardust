@@ -47,6 +47,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::remove_field_in_text,
             commands::read_image,
             commands::import_image,
+            commands::paste_image,
             commands::make_task,
             commands::append_to_braindump,
             commands::set_capture_hotkey,

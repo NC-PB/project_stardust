@@ -4,7 +4,9 @@ import {
   dropFailures,
   dropInsertion,
   dropPoint,
+  fileBase64,
   imageBadge,
+  pastedFiles,
 } from "./images";
 
 const drop = (text: string, at: number | null, snippets: string[]) =>
@@ -81,5 +83,38 @@ describe("dropFailures", () => {
     expect(dropFailures(["`a.txt` is not an image", "`b` not found"])).toBe(
       "Not added: `a.txt` is not an image; `b` not found",
     );
+  });
+});
+
+describe("pastedFiles", () => {
+  const png = new File([new Uint8Array([1, 2])], "image.png", {
+    type: "image/png",
+  });
+  const clipboard = (text: string, files: File[]) => ({
+    getData: (format: string) => (format === "text/plain" ? text : ""),
+    files,
+  });
+
+  it("takes the files of a paste without plain text", () => {
+    expect(pastedFiles(clipboard("", [png]))).toEqual([png]);
+    expect(pastedFiles(clipboard("", []))).toEqual([]);
+  });
+
+  it("leaves a paste with plain text to the text", () => {
+    expect(pastedFiles(clipboard("a caption", [png]))).toEqual([]);
+  });
+});
+
+describe("fileBase64", () => {
+  it("encodes the bytes of a file", async () => {
+    expect(await fileBase64(new Blob(["foobar"]))).toBe("Zm9vYmFy");
+    expect(await fileBase64(new Blob([]))).toBe("");
+  });
+
+  it("encodes files larger than one chunk", async () => {
+    const bytes = new Uint8Array(0x8000 * 2 + 3).map((_, i) => i % 256);
+    const decoded = atob(await fileBase64(new Blob([bytes])));
+    expect(decoded.length).toBe(bytes.length);
+    expect(decoded.charCodeAt(0x8000 + 1)).toBe((0x8000 + 1) % 256);
   });
 });

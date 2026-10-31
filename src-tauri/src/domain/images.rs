@@ -1,8 +1,8 @@
-//! Images dropped into the editor (`S-images`): copied into the image root, never over an
+//! Images dropped or pasted into the editor (`S-images`): copied or written into the image root, never over an
 //! existing file (`R-no-destroy`), and linked relative to the open file.
 
 use std::fs::{File, OpenOptions};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -50,6 +50,61 @@ pub fn import_image(
         return Err(format!("`{name}` is larger than 20 MB"));
     }
 
+    let (root, folder, images) = image_folders(repo_root, images_root, file)?;
+    let (target, copied) = if source.starts_with(&images) {
+        (source, false)
+    } else {
+        let target = write_new(&images, &name, |copy| {
+            File::open(&source).and_then(|mut from| std::io::copy(&mut from, copy).map(|_| ()))
+        })?;
+        (target, true)
+    };
+    Ok(imported(&root, &folder, &target, copied))
+}
+
+/// Writes the image `bytes` pasted from the clipboard, of type `mime`, into `images_root` as
+/// `pasted-<stamp>.<ext>` (with a suffix when taken) and returns the markdown linking it from
+/// the markdown file `file`.
+pub fn paste_image(
+    repo_root: &Path,
+    images_root: &str,
+    file: &Path,
+    mime: &str,
+    bytes: &[u8],
+    stamp: &str,
+) -> Result<ImportedImage, String> {
+    let extension =
+        image_extension(mime).ok_or_else(|| format!("the pasted `{mime}` is not an image"))?;
+    let name = format!("pasted-{stamp}.{extension}");
+    if bytes.len() as u64 > MAX_IMAGE_BYTES {
+        return Err(format!("`{name}` is larger than 20 MB"));
+    }
+    let (root, folder, images) = image_folders(repo_root, images_root, file)?;
+    let target = write_new(&images, &name, |out| out.write_all(bytes))?;
+    Ok(imported(&root, &folder, &target, true))
+}
+
+/// The file extension for an image MIME type, the reverse of `image_mime`.
+fn image_extension(mime: &str) -> Option<&'static str> {
+    Some(match mime.to_ascii_lowercase().as_str() {
+        "image/png" => "png",
+        "image/jpeg" | "image/jpg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
+        "image/avif" => "avif",
+        "image/bmp" => "bmp",
+        _ => return None,
+    })
+}
+
+/// The canonical repository root, the folder of the markdown file `file` and the image root,
+/// created when missing; both folders must be inside the repository.
+fn image_folders(
+    repo_root: &Path,
+    images_root: &str,
+    file: &Path,
+) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let root = repo_root.canonicalize().map_err(|err| err.to_string())?;
     let folder = file
         .parent()
@@ -65,32 +120,36 @@ pub fn import_image(
             "the image root `{images_root}` is outside the repository"
         ));
     }
+    Ok((root, folder, images))
+}
 
-    let (target, copied) = if source.starts_with(&images) {
-        (source, false)
-    } else {
-        (copy_new(&source, &images, &name)?, true)
-    };
+/// The markdown linking `target` from `folder`, with the file stem as alt text.
+fn imported(root: &Path, folder: &Path, target: &Path, copied: bool) -> ImportedImage {
     let alt = target
         .file_stem()
         .map(|stem| stem.to_string_lossy().replace(['[', ']', '\\'], ""))
         .unwrap_or_default();
-    Ok(ImportedImage {
-        markdown: format!("![{alt}]({})", relative_link(&folder, &target)),
+    ImportedImage {
+        markdown: format!("![{alt}]({})", relative_link(folder, target)),
         path: target
-            .strip_prefix(&root)
-            .unwrap_or(&target)
+            .strip_prefix(root)
+            .unwrap_or(target)
             .components()
             .map(|part| part.as_os_str().to_string_lossy())
             .collect::<Vec<_>>()
             .join("/"),
         copied,
-    })
+    }
 }
 
-/// Copies `source` into `folder` under `name`, or the first free `stem-N.ext`. Each name is
-/// claimed with `create_new`, so a file that appears meanwhile is not overwritten either.
-fn copy_new(source: &Path, folder: &Path, name: &str) -> Result<PathBuf, String> {
+/// Writes a new file into `folder` under `name`, or the first free `stem-N.ext`, with
+/// `write`. Each name is claimed with `create_new`, so a file that appears meanwhile is not
+/// overwritten either.
+fn write_new(
+    folder: &Path,
+    name: &str,
+    mut write: impl FnMut(&mut File) -> std::io::Result<()>,
+) -> Result<PathBuf, String> {
     let file_name = Path::new(name);
     let stem = file_name
         .file_stem()
@@ -111,9 +170,7 @@ fn copy_new(source: &Path, folder: &Path, name: &str) -> Result<PathBuf, String>
             .open(&candidate)
         {
             Ok(mut copy) => {
-                let copied =
-                    File::open(source).and_then(|mut from| std::io::copy(&mut from, &mut copy));
-                if let Err(err) = copied {
+                if let Err(err) = write(&mut copy) {
                     // Only the file just created here, never one that existed before.
                     drop(copy);
                     let _ = std::fs::remove_file(&candidate);
@@ -282,6 +339,50 @@ mod tests {
         let file = repo.parent().unwrap().join("other.md");
         let err = import_image(&repo, "docs/images", &file, &source).unwrap_err();
         assert!(err.contains("not inside the repository"), "{err}");
+        cleanup(&repo);
+    }
+
+    #[test]
+    fn a_pasted_image_gets_a_generated_name_and_a_suffix_when_taken() {
+        let repo = temp_repo("paste");
+        let file = repo.join("docs/planning/next/a.md");
+        let stamp = "20261031-103600";
+        let image = paste_image(&repo, "docs/images", &file, "image/png", b"one", stamp).unwrap();
+        assert_eq!(
+            image,
+            ImportedImage {
+                markdown: "![pasted-20261031-103600](../../images/pasted-20261031-103600.png)"
+                    .to_string(),
+                path: "docs/images/pasted-20261031-103600.png".to_string(),
+                copied: true,
+            }
+        );
+        let again = paste_image(&repo, "docs/images", &file, "IMAGE/JPEG", b"two", stamp).unwrap();
+        assert_eq!(again.path, "docs/images/pasted-20261031-103600.jpg");
+        let third = paste_image(&repo, "docs/images", &file, "image/png", b"three", stamp).unwrap();
+        assert_eq!(third.path, "docs/images/pasted-20261031-103600-1.png");
+        assert_eq!(
+            std::fs::read(repo.join("docs/images/pasted-20261031-103600.png")).unwrap(),
+            b"one"
+        );
+        assert_eq!(
+            std::fs::read(repo.join("docs/images/pasted-20261031-103600-1.png")).unwrap(),
+            b"three"
+        );
+        cleanup(&repo);
+    }
+
+    #[test]
+    fn a_paste_that_is_not_an_image_or_too_large_is_refused() {
+        let repo = temp_repo("paste-refuse");
+        let file = repo.join("docs/planning/next/a.md");
+        let err =
+            paste_image(&repo, "docs/images", &file, "application/pdf", b"x", "s").unwrap_err();
+        assert!(err.contains("not an image"), "{err}");
+        let large = vec![0u8; MAX_IMAGE_BYTES as usize + 1];
+        let err = paste_image(&repo, "docs/images", &file, "image/png", &large, "s").unwrap_err();
+        assert!(err.contains("larger than 20 MB"), "{err}");
+        assert!(!repo.join("docs/images").exists());
         cleanup(&repo);
     }
 

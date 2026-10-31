@@ -14,7 +14,12 @@ import {
   followFile,
   touchesFile,
 } from "@/lib/editor";
-import { applyInsertion, dropFailures, dropInsertion } from "@/lib/images";
+import {
+  applyInsertion,
+  dropFailures,
+  dropInsertion,
+  fileBase64,
+} from "@/lib/images";
 import { type ProposalAction, resolveProposal } from "@/lib/proposals";
 
 /** Why the open file and the disk disagree while there are unsaved edits (`S-conflicts`). */
@@ -97,6 +102,11 @@ interface EditorState {
    * named in `error`.
    */
   dropImages: (paths: string[], at: number | null) => Promise<void>;
+  /**
+   * Writes images pasted from the clipboard into the image root and inserts their links like
+   * a drop: at offset `at`, or at the end when `null` (`S-images`).
+   */
+  pasteImages: (files: File[], at: number | null) => Promise<void>;
   /** The text before and after the last Accept or Reject, so it can be undone (`S-proposals`). */
   proposalUndo: { before: string; after: string } | null;
   /**
@@ -371,6 +381,31 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       // One after another, so two files with the same name get suffixes in drop order.
       for (const source of paths) {
         const result = await commands.importImage(repoRoot, path, source);
+        if (result.status === "ok") snippets.push(result.data.markdown);
+        else failures.push(result.error);
+      }
+      if (get().path !== path) return;
+      set({ error: dropFailures(failures) });
+      if (snippets.length === 0) return;
+      const { text } = get();
+      get().edit(applyInsertion(text, dropInsertion(text, at, snippets)));
+    },
+
+    pasteImages: async (files, at) => {
+      const { repoRoot, path } = get();
+      if (repoRoot === null || path === null || files.length === 0) return;
+      const snippets: string[] = [];
+      const failures: string[] = [];
+      // One after another, so two images pasted in the same second get suffixes in order.
+      for (const file of files) {
+        const result = await fileBase64(file).then(
+          (data) => commands.pasteImage(repoRoot, path, file.type, data),
+          () =>
+            ({
+              status: "error",
+              error: `\`${file.name}\` could not be read`,
+            }) as const,
+        );
         if (result.status === "ok") snippets.push(result.data.markdown);
         else failures.push(result.error);
       }

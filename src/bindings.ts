@@ -147,6 +147,11 @@ export const commands = {
 	 */
 	importImage: (repoRoot: string, file: string, source: string) => typedError<ImportedImage, string>(__TAURI_INVOKE("import_image", { repoRoot, file, source })),
 	/**
+	 *  Writes an image pasted from the clipboard, `data` in base64 of type `mime`, into the image
+	 *  root and returns the markdown linking it from `file` (`S-images`). Never overwrites a file.
+	 */
+	pasteImage: (repoRoot: string, file: string, mime: string, data: string) => typedError<ImportedImage, string>(__TAURI_INVOKE("paste_image", { repoRoot, file, mime, data })),
+	/**
 	 *  A new task in the first column from `selection`, text selected in the file `source`
 	 *  (`S-make-task`). Returns the path of the new file.
 	 */

@@ -232,6 +232,37 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// Decodes standard base64 with padding, as `FileReader.readAsDataURL` writes it; `None` for
+/// anything else.
+pub(crate) fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    let text = text.as_bytes();
+    if !text.len().is_multiple_of(4) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    for (index, chunk) in text.chunks(4).enumerate() {
+        let last = index == text.len() / 4 - 1;
+        let padding = chunk.iter().rev().take_while(|&&c| c == b'=').count();
+        if padding > 2 || (padding > 0 && !last) {
+            return None;
+        }
+        let mut n = 0u32;
+        for (i, &c) in chunk[..4 - padding].iter().enumerate() {
+            let value = match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => return None,
+            };
+            n |= u32::from(value) << (18 - 6 * i);
+        }
+        out.extend_from_slice(&n.to_be_bytes()[1..4 - padding]);
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,6 +282,24 @@ mod tests {
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
         assert_eq!(base64(&[0xff, 0xfe, 0xfd]), "//79");
+    }
+
+    #[test]
+    fn base64_decode_reverses_base64() {
+        for bytes in [
+            &b""[..],
+            b"f",
+            b"fo",
+            b"foo",
+            b"foobar",
+            &[0xff, 0xfe, 0xfd, 0],
+        ] {
+            assert_eq!(base64_decode(&base64(bytes)).as_deref(), Some(bytes));
+        }
+        assert_eq!(base64_decode("Zg="), None);
+        assert_eq!(base64_decode("Z==="), None);
+        assert_eq!(base64_decode("Zg==Zm8="), None);
+        assert_eq!(base64_decode("Zm9*"), None);
     }
 
     #[test]

@@ -7,6 +7,7 @@ const makeTask = vi.fn();
 const checkAppendOnly = vi.fn();
 const trashed: string[] = [];
 const imported: string[] = [];
+const pasted: string[] = [];
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -52,6 +53,20 @@ vi.mock("@/bindings", () => ({
       return name.endsWith(".png")
         ? { status: "ok", data: { markdown: `![](../../images/${name})` } }
         : { status: "error", error: `\`${name}\` is not an image` };
+    },
+    pasteImage: async (
+      _repoRoot: string,
+      _file: string,
+      mime: string,
+      data: string,
+    ) => {
+      pasted.push(`${mime}:${data}`);
+      return mime.startsWith("image/")
+        ? {
+            status: "ok",
+            data: { markdown: `![](../../images/pasted-${pasted.length}.png)` },
+          }
+        : { status: "error", error: `the pasted \`${mime}\` is not an image` };
     },
   },
 }));
@@ -100,6 +115,7 @@ describe("useEditorStore", () => {
     makeTask.mockReset();
     trashed.length = 0;
     imported.length = 0;
+    pasted.length = 0;
   });
 
   afterEach(() => {
@@ -377,6 +393,34 @@ describe("useEditorStore", () => {
     await useEditorStore.getState().dropImages(["/tmp/a.png"], null);
     expect(useEditorStore.getState().text).toBe(
       "---\ntitle: A\n---\nbody\n\n![](../../images/a.png)\n",
+    );
+    expect(useEditorStore.getState().error).toBeNull();
+  });
+
+  it("writes pasted images and inserts their links like a drop", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    const at = "---\ntitle: A\n---\n".length;
+    await useEditorStore
+      .getState()
+      .pasteImages(
+        [
+          new File(["foo"], "image.png", { type: "image/png" }),
+          new File(["x"], "a.pdf", { type: "application/pdf" }),
+        ],
+        at,
+      );
+    expect(pasted).toEqual(["image/png:Zm9v", "application/pdf:eA=="]);
+    expect(useEditorStore.getState().text).toBe(
+      "---\ntitle: A\n---\n![](../../images/pasted-1.png)\nbody\n",
+    );
+    expect(useEditorStore.getState().error).toBe(
+      "Not added: the pasted `application/pdf` is not an image",
+    );
+    await useEditorStore
+      .getState()
+      .pasteImages([new File(["y"], "image.png", { type: "image/png" })], null);
+    expect(useEditorStore.getState().text).toBe(
+      "---\ntitle: A\n---\n![](../../images/pasted-1.png)\nbody\n\n![](../../images/pasted-3.png)\n",
     );
     expect(useEditorStore.getState().error).toBeNull();
   });
