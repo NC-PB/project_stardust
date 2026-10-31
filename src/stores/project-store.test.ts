@@ -12,6 +12,8 @@ const applyBatch = vi.fn();
 const clearBoard = vi.fn();
 const loadProposals = vi.fn();
 const applyProposals = vi.fn();
+const loadLinks = vi.fn();
+const applyLinks = vi.fn();
 const sources = {
   braindump: "/repo/docs/planning/braindump.md",
   spec: "/repo/docs/planning/spec.md",
@@ -42,6 +44,15 @@ vi.mock("./proposal-store", () => ({
     getState: () => ({
       load: loadProposals,
       apply: applyProposals,
+      clear: () => {},
+    }),
+  },
+}));
+vi.mock("./link-store", () => ({
+  useLinkStore: {
+    getState: () => ({
+      load: loadLinks,
+      apply: applyLinks,
       clear: () => {},
     }),
   },
@@ -199,6 +210,7 @@ describe("useProjectStore", () => {
     await useProjectStore.getState().openRepository("/repo");
     expect(loadBoard).toHaveBeenCalledWith("/repo", report.config, []);
     expect(loadProposals).toHaveBeenCalledWith("/repo", report.config);
+    expect(loadLinks).toHaveBeenCalledWith("/repo", report.config);
     expect(useProjectStore.getState().sources).toEqual(sources);
 
     loadConfig.mockResolvedValue({ found: false });
@@ -237,6 +249,7 @@ describe("useProjectStore", () => {
     expect(loadConfig).not.toHaveBeenCalled();
     expect(applyBatch).toHaveBeenCalledWith(fileChange.batch);
     expect(applyProposals).toHaveBeenCalledWith(fileChange.batch);
+    expect(applyLinks).toHaveBeenCalledWith(fileChange.batch);
 
     await useProjectStore.getState().receive({
       batch: { changes: [], config_changed: true },

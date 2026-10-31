@@ -128,7 +128,7 @@ pub(crate) fn rewrite_links(
 }
 
 /// Byte ranges of the link targets in `line`, outside code spans.
-fn link_targets(line: &str) -> Vec<(usize, usize)> {
+pub(crate) fn link_targets(line: &str) -> Vec<(usize, usize)> {
     let bytes = line.as_bytes();
     let mut targets = Vec::new();
 
@@ -290,7 +290,7 @@ pub(crate) fn relative_link(dir: &[String], to: &[String], old: &str) -> String 
 }
 
 /// `path` with the characters a bare link target cannot hold percent escaped.
-fn escape(path: &str) -> String {
+pub(crate) fn escape(path: &str) -> String {
     path.replace('%', "%25")
         .replace(' ', "%20")
         .replace('(', "%28")

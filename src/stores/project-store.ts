@@ -14,6 +14,7 @@ import { hasLinkNotice, type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
 import { useCommitStore } from "./commit-store";
 import { useEditorStore } from "./editor-store";
+import { useLinkStore } from "./link-store";
 import { useProposalStore } from "./proposal-store";
 import { useSearchStore } from "./search-store";
 import { readSetting, writeSetting } from "./settings";
@@ -66,6 +67,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       useBoardStore.getState().clear();
       useSpecStore.getState().clear();
       useProposalStore.getState().clear();
+      useLinkStore.getState().clear();
       useStalenessStore.getState().clear();
       useCommitStore.getState().clear();
       return;
@@ -79,6 +81,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         .load(repoRoot, config.config, config.missing_columns),
       useSpecStore.getState().load(repoRoot, config.config),
       useProposalStore.getState().load(repoRoot, config.config),
+      useLinkStore.getState().load(repoRoot, config.config),
       useStalenessStore.getState().load(repoRoot, config.config),
       useCommitStore.getState().load(repoRoot),
     ]);
@@ -119,6 +122,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
           useBoardStore.getState().apply(change.batch),
           useSpecStore.getState().apply(change.batch),
           useProposalStore.getState().apply(change.batch),
+          useLinkStore.getState().apply(change.batch),
           useStalenessStore.getState().apply(change.batch),
         ]);
     },
