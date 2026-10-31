@@ -1,0 +1,154 @@
+# Signed release builds (S-tauri). Setup and secrets: docs/release.md.
+#
+# Pushing a tag vX.Y.Z (matching "version" in src-tauri/tauri.conf.json)
+# creates a draft GitHub release, builds the app for Linux, macOS (universal,
+# signed and notarized) and Windows (signed with Azure Artifact Signing) and
+# attaches the bundles to the draft. Publishing the draft is done by hand.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  create-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check that the tag matches the app version
+        run: |
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $version"
+            exit 1
+          fi
+
+      # One draft release up front, so the three build jobs do not race to create it.
+      - name: Create draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            -f name="stardust $GITHUB_REF_NAME" \
+            -f body="Signed builds for Windows, macOS and Linux." \
+            -F draft=true \
+            -F generate_release_notes=true \
+            --jq .id)"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest hosted Ubuntu: the AppImage and .deb link against its older glibc and run on more distributions.
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+          - platform: windows-latest
+            args: "--config src-tauri/tauri.sign-windows.conf.json"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
+        with:
+          toolchain: stable
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install Linux dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install the Windows signing tool
+        if: startsWith(matrix.platform, 'windows')
+        run: cargo install artifact-signing-cli --version 0.12.0 --locked
+
+      # The sign command is written here, not in tauri.conf.json, so local
+      # builds stay unsigned and need no Azure tooling.
+      - name: Write the Windows signing config
+        if: startsWith(matrix.platform, 'windows')
+        shell: bash
+        env:
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        run: |
+          for name in ENDPOINT ACCOUNT PROFILE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository variable AZURE_SIGNING_$name is not set, see docs/release.md"
+              exit 1
+            fi
+          done
+          cat > src-tauri/tauri.sign-windows.conf.json <<JSON
+          {
+            "bundle": {
+              "windows": {
+                "signCommand": "artifact-signing-cli -e $ENDPOINT -a $ACCOUNT -c $PROFILE -d stardust %1"
+              }
+            }
+          }
+          JSON
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # tauri build runs the frontend build first (beforeBuildCommand: npm run build).
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing; Tauri imports the certificate into a temporary keychain.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # macOS notarization with an Apple ID and an app-specific password.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Windows signing through Azure Artifact Signing (read by artifact-signing-cli).
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
