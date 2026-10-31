@@ -1,10 +1,10 @@
 import type { Config, Spec, Task_Serialize } from "@/bindings";
-import { type BoardColumn, columnDir } from "@/lib/board";
+import { type BoardColumn, columnDir, sortTasks } from "@/lib/board";
 
 /** How many of the latest decisions the session brief shows. */
 export const SESSION_DECISIONS = 5;
 
-/** A task of the ready column, in the order the brief lists them. */
+/** A task of the ready column; the brief lists them in board order (`S-board-sort`). */
 export interface SessionTask {
   id: string | null;
   title: string;
@@ -57,20 +57,6 @@ export interface SessionBrief {
 export function readyColumnOf(columns: string[], terminal: string): string {
   const open = columns.filter((column) => column !== terminal);
   return open[1] ?? open[0] ?? terminal;
-}
-
-/**
- * The ready tasks in the order the brief lists them until `S-board-sort` exists: priority 1 to 5
- * first, tasks without priority after them, then by file name, which starts with the id and so
- * follows creation time.
- */
-export function readyOrder(tasks: Task_Serialize[]): Task_Serialize[] {
-  return [...tasks].sort(
-    (a, b) =>
-      (a.priority ?? Number.POSITIVE_INFINITY) -
-        (b.priority ?? Number.POSITIVE_INFINITY) ||
-      a.file_name.localeCompare(b.file_name),
-  );
 }
 
 /**
@@ -129,7 +115,8 @@ export function sessionBrief(
   const tasksOf = (name: string) =>
     columns.find((column) => column.name === name)?.tasks ?? [];
 
-  const ready = readyOrder(tasksOf(readyColumn)).map((task) => ({
+  // The board order of the ready column (`S-board-sort`).
+  const ready = sortTasks(tasksOf(readyColumn)).map((task) => ({
     id: task.id,
     title: task.title,
     priority: task.priority,

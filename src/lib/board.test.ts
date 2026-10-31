@@ -10,6 +10,7 @@ import {
   filterCards,
   isNewSince,
   moveCard,
+  sortTasks,
   touchedColumns,
 } from "./board";
 
@@ -129,15 +130,130 @@ describe("isNewSince", () => {
   });
 });
 
+describe("sortTasks", () => {
+  const ids = (tasks: Task_Serialize[]) => sortTasks(tasks).map((t) => t.id);
+
+  it("orders by priority, none last, then created, then id", () => {
+    expect(
+      ids([
+        task("a"),
+        task("b", { priority: 3 }),
+        task("c", { priority: 1, created: "2026-10-31" }),
+        task("d", { priority: 1, created: "2026-10-29" }),
+        task("e", { priority: 1, created: "2026-10-29" }),
+        task("f", { created: null }),
+      ]),
+    ).toEqual(["d", "e", "c", "b", "a", "f"]);
+  });
+
+  it("puts tasks without id after those with one, then by file name", () => {
+    expect(
+      sortTasks([
+        task("b", { id: null, file_name: "z.md" }),
+        task("a", { id: null, file_name: "y.md" }),
+        task("c"),
+      ]).map((t) => t.file_name),
+    ).toEqual(["c-x.md", "y.md", "z.md"]);
+  });
+
+  it("puts a task after the tasks of the column it depends on", () => {
+    expect(
+      ids([
+        task("a", { priority: 1, depends_on: ["c"] }),
+        task("b", { priority: 2 }),
+        task("c", { priority: 3 }),
+        task("d", { priority: 4 }),
+      ]),
+    ).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("follows chains of dependencies", () => {
+    expect(
+      ids([
+        task("a", { depends_on: ["b"] }),
+        task("b", { depends_on: ["c"] }),
+        task("c"),
+      ]),
+    ).toEqual(["c", "b", "a"]);
+  });
+
+  it("ignores dependencies outside the column, unknown ids and itself", () => {
+    expect(
+      ids([task("a", { depends_on: ["elsewhere", "a"] }), task("b")]),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("breaks a cycle at a task on it and keeps every task", () => {
+    expect(
+      ids([
+        task("a", { depends_on: ["c"] }),
+        task("b", { depends_on: ["a"] }),
+        task("c", { depends_on: ["b"] }),
+        task("d"),
+      ]),
+    ).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("breaks a cycle on the path from a task that depends on it", () => {
+    expect(
+      ids([
+        task("a", { depends_on: ["b"] }),
+        task("b", { depends_on: ["c"] }),
+        task("c", { depends_on: ["b"] }),
+      ]),
+    ).toEqual(["b", "a", "c"]);
+  });
+
+  it("does not change its input and gives the same order for any input order", () => {
+    const tasks = [task("b"), task("a", { depends_on: ["b"] }), task("c")];
+    const copy = [...tasks];
+    expect(ids(tasks)).toEqual(ids([...tasks].reverse()));
+    expect(tasks).toEqual(copy);
+  });
+});
+
 describe("cardsOf", () => {
+  it("lists each column in board order", () => {
+    const columns = [
+      column("next", [
+        task("a"),
+        task("b", { priority: 2 }),
+        task("c", { priority: 1, depends_on: ["b"] }),
+      ]),
+    ];
+    expect(
+      cardsOf(columns, "done", null, NOW)
+        .get("next")
+        ?.map((card) => card.id),
+    ).toEqual(["b", "c", "a"]);
+  });
+
+  it("shows a moved card at its sorted place, not at the end", () => {
+    const columns = moveCard(
+      [
+        column("inbox", [task("a", { priority: 1 })]),
+        column("next", [task("b", { priority: 2 }), task("c")]),
+      ],
+      "a-x.md",
+      "inbox",
+      "next",
+    );
+    expect(
+      cardsOf(columns, "done", null, NOW)
+        .get("next")
+        ?.map((card) => card.id),
+    ).toEqual(["a", "b", "c"]);
+  });
+
   it("counts sub-tasks across columns", () => {
     const columns = [
       column("inbox", [task("p"), task("c1", { parent: "p" })]),
       column("done", [task("c2", { parent: "p" })]),
     ];
-    const cards = cardsOf(columns, "done", null, NOW);
-    expect(cards.get("inbox")?.[0].subtasks).toBe(2);
-    expect(cards.get("inbox")?.[1].subtasks).toBe(0);
+    const cards = cardsOf(columns, "done", null, NOW).get("inbox") ?? [];
+    const card = (id: string) => cards.find((candidate) => candidate.id === id);
+    expect(card("p")?.subtasks).toBe(2);
+    expect(card("c1")?.subtasks).toBe(0);
   });
 
   it("blocks on dependencies outside the terminal column only", () => {
@@ -148,9 +264,10 @@ describe("cardsOf", () => {
       ]),
       column("done", [task("c")]),
     ];
-    const cards = cardsOf(columns, "done", null, NOW);
-    expect(cards.get("next")?.[0].blockedBy).toEqual(["b"]);
-    expect(cards.get("next")?.[1].blockedBy).toEqual([]);
+    const cards = cardsOf(columns, "done", null, NOW).get("next") ?? [];
+    const card = (id: string) => cards.find((candidate) => candidate.id === id);
+    expect(card("a")?.blockedBy).toEqual(["b"]);
+    expect(card("b")?.blockedBy).toEqual([]);
   });
 
   it("fills title, tags, age and the new marker", () => {
@@ -234,7 +351,7 @@ describe("moveCard", () => {
   const names = (columns: BoardColumn[]) =>
     columns.map((col) => col.tasks.map((t) => t.id).join(","));
 
-  it("moves the task to the end of the target column", () => {
+  it("appends the task to the target column's tasks", () => {
     expect(names(moveCard(board(), "a-x.md", "inbox", "next"))).toEqual([
       "b",
       "c,a",
