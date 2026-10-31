@@ -13,8 +13,8 @@ use tauri_specta::Event;
 use crate::domain;
 use crate::domain::{
     agents_block, append_only, archive, board, changelog, config, files, gate, gitattributes, ids,
-    images, init, link_lookup, link_repair, links, make_task, prompts, questions, search, spec,
-    spec_split, task, templates, terminal, watch,
+    images, init, link_lookup, link_repair, links, make_task, prompts, questions, repo_watch,
+    search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -529,9 +529,24 @@ pub fn backlinks(repo_root: String, path: String) -> Vec<link_lookup::Backlink> 
 /// open in progress.
 #[derive(Default)]
 pub struct WatchState {
-    current: Arc<Mutex<Option<watch::PlanningWatcher>>>,
+    current: Arc<Mutex<Option<Watchers>>>,
     /// Counts opens and closes; an open installs its watcher only while it is the latest.
     opens: Arc<watch::Generations>,
+}
+
+/// The watchers of the open repository: the planning root and the config in detail, the rest
+/// of the repository coarsely. Both stop when dropped.
+struct Watchers {
+    _planning: watch::PlanningWatcher,
+    /// `None` when the repository could not be watched; the planning watcher still runs.
+    _repository: Option<repo_watch::RepositoryWatcher>,
+}
+
+/// Sent once per burst of changes outside the planning root, in folders that are not hidden,
+/// `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct RepositoryChanged {
+    pub change: repo_watch::OutsideChange,
 }
 
 /// Sent once per burst of changes under the planning root or to the config.
@@ -551,7 +566,8 @@ pub struct PlanningChanged {
 }
 
 /// Watches the planning root and the config of the repository at `repo_root`, sending
-/// `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+/// `PlanningChanged` events, and the rest of the repository coarsely, sending
+/// `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 /// watcher did not pair are repaired by id, and a config change regenerates the planner
 /// block, before the event is sent. Stops the previous watcher; call again after the planning
 /// root changed. First repairs broken links in the whole repository by id and returns what
@@ -582,7 +598,7 @@ pub async fn watch_project(
 
 fn open_project(
     app: AppHandle,
-    current: &Mutex<Option<watch::PlanningWatcher>>,
+    current: &Mutex<Option<Watchers>>,
     opens: &watch::Generations,
     open: u64,
     index: &Arc<Mutex<Option<search::SearchIndex>>>,
@@ -607,6 +623,13 @@ fn open_project(
         return Ok(repair);
     }
     let batch_index = Arc::clone(index);
+    let outside_app = app.clone();
+    // Code files and markdown outside the planning root (`S-staleness`, `S-links`). Without it
+    // the planning watcher still runs; those views then follow only planning batches.
+    let repository = repo_watch::watch(&root, &planning_root, move |change| {
+        let _ = RepositoryChanged { change }.emit(&outside_app);
+    })
+    .ok();
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
         // Every move is seen here once, whether the board or an agent made it.
         let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
@@ -644,7 +667,10 @@ fn open_project(
     // Checked again under the lock: an unwatch or a later open may have come meanwhile.
     if opens.is_current(open) {
         *index.lock().map_err(|err| err.to_string())? = Some(built);
-        *current = Some(watcher);
+        *current = Some(Watchers {
+            _planning: watcher,
+            _repository: repository,
+        });
     }
     Ok(repair)
 }

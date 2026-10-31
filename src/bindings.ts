@@ -198,7 +198,8 @@ export const commands = {
 	addImagesToGitignore: (repoRoot: string) => typedError<boolean, string>(__TAURI_INVOKE("add_images_to_gitignore", { repoRoot })),
 	/**
 	 *  Watches the planning root and the config of the repository at `repo_root`, sending
-	 *  `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+	 *  `PlanningChanged` events, and the rest of the repository coarsely, sending
+	 *  `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 	 *  watcher did not pair are repaired by id, and a config change regenerates the planner
 	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
 	 *  root changed. First repairs broken links in the whole repository by id and returns what
@@ -222,6 +223,7 @@ export const commands = {
 /** Events */
 export const events = {
 	planningChanged: makeEvent<PlanningChanged_Serialize, PlanningChanged_Deserialize>("planning-changed"),
+	repositoryChanged: makeEvent<RepositoryChanged, RepositoryChanged>("repository-changed"),
 };
 
 /* Types */
@@ -906,6 +908,20 @@ export type Node_Serialize = {
 	end_line: number,
 };
 
+/**
+ *  What one burst of events outside the planning root touched. Paths are not sent: whoever
+ *  listens reads the disk again.
+ */
+export type OutsideChange = {
+	/**  A file or folder was created, removed or renamed (missing code paths may change). */
+	files_added_or_removed: boolean,
+	/**
+	 *  A markdown file was created, changed, removed or renamed, or a folder that may hold
+	 *  some (backlinks and link candidates may change).
+	 */
+	markdown: boolean,
+};
+
 /**  Sent once per burst of changes under the planning root or to the config. */
 export type PlanningChanged = PlanningChanged_Serialize | PlanningChanged_Deserialize;
 
@@ -1026,6 +1042,14 @@ export type Question_Serialize = {
 	decision: string | null,
 	at: SourceLine,
 	end_line: number,
+};
+
+/**
+ *  Sent once per burst of changes outside the planning root, in folders that are not hidden,
+ *  `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
+ */
+export type RepositoryChanged = {
+	change: OutsideChange,
 };
 
 /**  A rule: ``- `R-slug` · text``. */

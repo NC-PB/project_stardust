@@ -43,6 +43,21 @@ describe("useStalenessStore", () => {
     expect(useStalenessStore.getState().missingPaths).toEqual([missing]);
   });
 
+  it("checks again after files were added or removed outside the planning root", async () => {
+    missingCodePaths.mockResolvedValue([missing]);
+    await useStalenessStore.getState().load("/repo", config);
+    missingCodePaths.mockResolvedValue([]);
+    await useStalenessStore
+      .getState()
+      .applyOutside({ files_added_or_removed: false, markdown: true });
+    expect(missingCodePaths).toHaveBeenCalledTimes(1);
+    await useStalenessStore
+      .getState()
+      .applyOutside({ files_added_or_removed: true, markdown: false });
+    expect(missingCodePaths).toHaveBeenCalledTimes(2);
+    expect(useStalenessStore.getState().missingPaths).toEqual([]);
+  });
+
   it("checks again only after a batch that touched a column", async () => {
     missingCodePaths.mockResolvedValue([]);
     await useStalenessStore.getState().load("/repo", config);

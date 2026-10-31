@@ -4,6 +4,7 @@ import {
   type Config,
   commands,
   type MissingCodePath,
+  type OutsideChange,
 } from "@/bindings";
 import { touchedColumns } from "@/lib/board";
 
@@ -16,6 +17,8 @@ interface StalenessState {
   load: (repoRoot: string, config: Config) => Promise<void>;
   /** Checks them again after a batch that touched a column. */
   apply: (batch: ChangeBatch) => Promise<void>;
+  /** Checks them again after files were added or removed outside the planning root. */
+  applyOutside: (change: OutsideChange) => Promise<void>;
   clear: () => void;
 }
 
@@ -44,6 +47,12 @@ export const useStalenessStore = create<StalenessState>()((set, get) => ({
     if (repoRoot === null || config === null) return;
     if (touchedColumns(batch, config.planning_root, config.columns).length > 0)
       await get().load(repoRoot, config);
+  },
+
+  applyOutside: async (change) => {
+    const { repoRoot, config } = get();
+    if (repoRoot === null || config === null) return;
+    if (change.files_added_or_removed) await get().load(repoRoot, config);
   },
 
   clear: () => {

@@ -28,7 +28,10 @@ vi.mock("@/bindings", () => ({
     watchProject: (...args: unknown[]) => watchProject(...args),
     sourceFiles: async () => sources,
   },
-  events: { planningChanged: { listen: vi.fn() } },
+  events: {
+    planningChanged: { listen: vi.fn() },
+    repositoryChanged: { listen: vi.fn() },
+  },
 }));
 vi.mock("./spec-store", () => ({
   useSpecStore: {
@@ -57,11 +60,13 @@ vi.mock("./link-store", () => ({
     }),
   },
 }));
+const applyOutsideStaleness = vi.fn();
 vi.mock("./staleness-store", () => ({
   useStalenessStore: {
     getState: () => ({
       load: async () => {},
       apply: async () => {},
+      applyOutside: applyOutsideStaleness,
       clear: () => {},
     }),
   },
@@ -287,6 +292,13 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().revision).toBe(2);
     expect(loadConfig).toHaveBeenCalledWith("/repo");
     expect(watchProject).toHaveBeenCalledWith("/repo");
+  });
+
+  it("passes changes outside the planning root to the stores reading the disk", async () => {
+    const change = { files_added_or_removed: true, markdown: false };
+    await useProjectStore.getState().receiveOutside(change);
+    expect(applyOutsideStaleness).toHaveBeenCalledWith(change);
+    expect(useProjectStore.getState().revision).toBe(0);
   });
 
   it("shows why the planner block could not be regenerated", async () => {

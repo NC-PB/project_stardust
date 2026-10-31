@@ -59,7 +59,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::unwatch_project,
             commands::broken_links,
         ])
-        .events(collect_events![commands::PlanningChanged])
+        .events(collect_events![
+            commands::PlanningChanged,
+            commands::RepositoryChanged
+        ])
 }
 
 fn export_bindings(builder: &Builder<tauri::Wry>) {
