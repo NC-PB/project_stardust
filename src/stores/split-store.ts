@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
   commands,
-  type SplitPlan,
+  type SplitPlan_Serialize,
   type SplitReport_Serialize,
 } from "@/bindings";
 import { useEditorStore } from "./editor-store";
@@ -10,7 +10,7 @@ import { useProjectStore } from "./project-store";
 interface SplitState {
   repoRoot: string | null;
   /** What the split would do, shown for confirmation; `null` when no split is pending. */
-  plan: SplitPlan | null;
+  plan: SplitPlan_Serialize | null;
   /** What the last split did, shown until dismissed. */
   report: SplitReport_Serialize | null;
   error: string | null;

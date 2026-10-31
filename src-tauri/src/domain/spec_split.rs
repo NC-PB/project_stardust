@@ -6,10 +6,13 @@
 //! (see [`links::SKIPPED`] for what is not searched), and so are the links in the moved text itself. `spec.md` goes to the OS trash only after the folder was written,
 //! read back and found to give the same model (`R-no-destroy`).
 //!
+//! A `.gitattributes` line that gives `spec.md` `merge=union` is replaced by the same line for
+//! `spec/questions.md` and `spec/decisions.md` ([`gitattributes::plan_split_lines`]).
+//!
 //! The order keeps every text on disk at every step: the folder is created first, never over
-//! an existing file; the links are rewritten next; `spec.md` goes to the trash last. When a
-//! step fails, the steps before it are undone (rewritten links written back, the new files
-//! moved to the trash) and `spec.md` stays where it is.
+//! an existing file; `.gitattributes` and the links are rewritten next; `spec.md` goes to the
+//! trash last. When a step fails, the steps before it are undone (rewritten text written back,
+//! the new files moved to the trash) and `spec.md` stays where it is.
 
 use std::collections::HashMap;
 use std::fs::OpenOptions;
@@ -22,6 +25,7 @@ use specta::Type;
 use super::agents_block::{self, START_MARKER};
 use super::config::{Config, SpecLocation};
 use super::files::{self, SaveOutcome, has_scheme, percent_decode};
+use super::gitattributes::{self, SplitAttributes};
 use super::links::{self, FileLinks, LineKind, classify, contains, markdown_files, rewrite_links};
 use super::spec::{
     FOLDER_FILES, SPEC_FILE, SPEC_FOLDER, SectionKind, Spec, SpecForm, parse_spec, parse_spec_text,
@@ -40,6 +44,9 @@ pub struct SplitPlan {
     /// The links the split rewrites, by file. The moved text of the spec is listed under its
     /// new files.
     pub links: Vec<FileLinks>,
+    /// What happens to the `.gitattributes` line that gives `spec.md` `merge=union`. `None`
+    /// when there is no such line; `.gitattributes` is not changed then.
+    pub gitattributes: Option<SplitAttributes>,
 }
 
 /// One file of the folder form the split creates.
@@ -68,6 +75,9 @@ pub struct SplitReport {
     pub block_written: Vec<String>,
     /// Why the planner block could not be regenerated, if it could not.
     pub block_error: Option<String>,
+    /// The lines that replaced the `spec.md` line in `.gitattributes`. Empty when it was not
+    /// changed.
+    pub gitattributes: Vec<String>,
 }
 
 /// What a split of the spec in the repository at `repo_root` would do. Writes nothing.
@@ -94,6 +104,8 @@ struct Prepared {
     parts: Vec<(&'static str, String)>,
     /// (markdown file, text as read, text with its links rewritten).
     rewrites: Vec<(PathBuf, String, String)>,
+    /// (`.gitattributes`, text as read, text with the folder lines), when it changes.
+    attributes: Option<(PathBuf, String, String)>,
 }
 
 fn prepare(repo_root: &Path, config: &Config) -> Prepared {
@@ -105,11 +117,13 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
             blockers: Vec::new(),
             files: Vec::new(),
             links: Vec::new(),
+            gitattributes: None,
         },
         text: String::new(),
         before: None,
         parts: Vec::new(),
         rewrites: Vec::new(),
+        attributes: None,
     };
     let blockers = &mut prepared.plan.blockers;
     if config.spec == SpecLocation::File {
@@ -227,6 +241,17 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
             prepared.rewrites.push((path.to_path_buf(), old, new));
         }
     }
+
+    match gitattributes::plan_split_lines(repo_root, config) {
+        Ok(Some(lines)) => {
+            if lines.new_text != lines.old_text {
+                prepared.attributes = Some((lines.path, lines.old_text, lines.new_text));
+            }
+            prepared.plan.gitattributes = Some(lines.preview);
+        }
+        Ok(None) => {}
+        Err(blocker) => prepared.plan.blockers.push(blocker),
+    }
     prepared.text = text;
     prepared
 }
@@ -284,7 +309,8 @@ fn split_spec_with(
         return Err(undo.fail(format!("the written folder reads differently: {problem}")));
     }
 
-    for (path, old, new) in &prepared.rewrites {
+    // The `spec.md` line in `.gitattributes` first, then the links; each only over the text read.
+    for (path, old, new) in prepared.attributes.iter().chain(&prepared.rewrites) {
         match files::save_text(path, old, new) {
             Ok(SaveOutcome::Saved) => undo
                 .rewritten
@@ -321,14 +347,18 @@ fn split_spec_with(
                 )
             })
             .collect(),
-        rewritten: undo
-            .rewritten
+        rewritten: prepared
+            .rewrites
             .iter()
             .map(|(path, ..)| relative(path))
             .collect(),
         trashed: SPEC_FILE.to_string(),
         block_written,
         block_error,
+        gitattributes: match (&prepared.attributes, prepared.plan.gitattributes) {
+            (Some(_), Some(preview)) => preview.new,
+            _ => Vec::new(),
+        },
     })
 }
 
@@ -349,7 +379,7 @@ impl Undo<'_> {
             match files::save_text(path, new, old) {
                 Ok(SaveOutcome::Saved) => {}
                 Ok(SaveOutcome::ChangedOnDisk { .. }) => problems.push(format!(
-                    "{} changed meanwhile and keeps its new links",
+                    "{} changed meanwhile and keeps the split's changes",
                     path.display()
                 )),
                 Err(err) => problems.push(format!("{}: {err}", path.display())),
@@ -1046,6 +1076,9 @@ mod tests {
         // Outside the planning root, and rewritten before the locked file.
         let architecture = "[spec](docs/planning/spec.md)\n";
         std::fs::write(root.join("ARCHITECTURE.md"), architecture).unwrap();
+        // Rewritten before the links.
+        let attributes = "docs/planning/spec.md merge=union\n";
+        std::fs::write(root.join(".gitattributes"), attributes).unwrap();
         let locked = root.join("docs/planning/next/b.md");
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o444)).unwrap();
         let config = Config::default();
@@ -1078,9 +1111,113 @@ mod tests {
             std::fs::read_to_string(root.join("ARCHITECTURE.md")).unwrap(),
             architecture
         );
+        assert_eq!(
+            std::fs::read_to_string(root.join(".gitattributes")).unwrap(),
+            attributes
+        );
         assert!(!root.join("docs/planning/spec").exists());
         assert_eq!(std::fs::read_dir(root.join(".trash")).unwrap().count(), 4);
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_spec_md_union_line_becomes_the_folder_lines() {
+        let root = temp_repo(SMALL, &[]);
+        let attributes = "*.png binary\n/docs/planning/spec.md merge=union\n*.sh text\n";
+        std::fs::write(root.join(".gitattributes"), attributes).unwrap();
+        let config = Config::default();
+        let plan = plan_split(&root, &config);
+        assert_eq!(plan.blockers, Vec::<String>::new());
+        let preview = plan.gitattributes.clone().unwrap();
+        assert_eq!(preview.line, 2);
+        assert_eq!(preview.old, "/docs/planning/spec.md merge=union");
+        assert_eq!(
+            preview.new,
+            [
+                "/docs/planning/spec/questions.md merge=union",
+                "/docs/planning/spec/decisions.md merge=union"
+            ]
+        );
+
+        let trash = fake_trash(&root);
+        let report = split_spec_with(&root, &config, &trash).unwrap();
+        assert_eq!(report.gitattributes, preview.new);
+        assert_eq!(report.rewritten, Vec::<String>::new());
+        assert_eq!(
+            std::fs::read_to_string(root.join(".gitattributes")).unwrap(),
+            "*.png binary\n/docs/planning/spec/questions.md merge=union\n\
+             /docs/planning/spec/decisions.md merge=union\n*.sh text\n"
+        );
+        // The "Git attributes" action finds nothing missing afterwards.
+        let after = gitattributes::plan_gitattributes(&root, &config);
+        assert!(after.missing.is_empty() && after.present.len() == 2);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn gitattributes_without_a_spec_md_line_stays() {
+        let config = Config::default();
+        for attributes in [
+            None,
+            Some("*.png binary\n"),
+            Some("docs/planning/spec.md -merge\n"),
+        ] {
+            let root = temp_repo(SMALL, &[]);
+            if let Some(text) = attributes {
+                std::fs::write(root.join(".gitattributes"), text).unwrap();
+            }
+            let plan = plan_split(&root, &config);
+            assert_eq!(plan.gitattributes, None);
+            let trash = fake_trash(&root);
+            let report = split_spec_with(&root, &config, &trash).unwrap();
+            assert_eq!(report.gitattributes, Vec::<String>::new());
+            match attributes {
+                None => assert!(!root.join(".gitattributes").exists()),
+                Some(text) => assert_eq!(
+                    std::fs::read_to_string(root.join(".gitattributes")).unwrap(),
+                    text
+                ),
+            }
+            std::fs::remove_dir_all(&root).unwrap();
+        }
+
+        // Folder files with their own settings: shown, and the file stays as it is.
+        let root = temp_repo(SMALL, &[]);
+        let attributes = "docs/planning/spec.md merge=union\n\
+            docs/planning/spec/questions.md -merge\n\
+            docs/planning/spec/decisions.md merge=union\n";
+        std::fs::write(root.join(".gitattributes"), attributes).unwrap();
+        let plan = plan_split(&root, &config);
+        let preview = plan.gitattributes.unwrap();
+        assert!(preview.new.is_empty());
+        assert_eq!(preview.kept.len(), 2);
+        let trash = fake_trash(&root);
+        let report = split_spec_with(&root, &config, &trash).unwrap();
+        assert_eq!(report.gitattributes, Vec::<String>::new());
+        assert_eq!(
+            std::fs::read_to_string(root.join(".gitattributes")).unwrap(),
+            attributes
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_gitattributes_write_undoes_the_split() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = temp_repo(SMALL, &[]);
+        let path = root.join(".gitattributes");
+        std::fs::write(&path, "docs/planning/spec.md merge=union\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        let config = Config::default();
+        let trash = fake_trash(&root);
+        let err = split_spec_with(&root, &config, &trash).unwrap_err();
+        assert!(err.starts_with("could not rewrite .gitattributes"), "{err}");
+        assert!(err.ends_with("nothing was changed, spec.md stays"), "{err}");
+        assert_eq!(read(&root, SPEC_FILE), SMALL);
+        assert!(!root.join("docs/planning/spec").exists());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
     }
 

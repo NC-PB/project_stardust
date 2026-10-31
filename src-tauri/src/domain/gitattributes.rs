@@ -6,13 +6,14 @@
 //! git (`R-no-git-writes`).
 
 use std::io::ErrorKind;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 use specta::Type;
 
 use super::config::Config;
 use super::files::{self, SaveOutcome};
+use super::links::contains;
 use super::spec::{self, SPEC_FILE, SPEC_FOLDER, SpecForm};
 
 /// The attributes file at the repository root.
@@ -55,6 +56,12 @@ pub struct GitattributesReport {
 /// repository root with `/` separators: `spec.md` in the single file form, `spec/questions.md`
 /// and `spec/decisions.md` in the folder form. Never a task file.
 pub fn append_only_files(repo_root: &Path, config: &Config) -> (SpecForm, Vec<String>) {
+    let form = spec::spec_form(config, repo_root);
+    (form, form_files(config, form))
+}
+
+/// The files that hold Questions and Decisions in `form`, as [`append_only_files`] names them.
+fn form_files(config: &Config, form: SpecForm) -> Vec<String> {
     let root: Vec<String> = Path::new(&config.planning_root)
         .components()
         .filter_map(|component| match component {
@@ -69,15 +76,13 @@ pub fn append_only_files(repo_root: &Path, config: &Config) -> (SpecForm, Vec<St
             .collect::<Vec<_>>()
             .join("/")
     };
-    let form = spec::spec_form(config, repo_root);
-    let files = match form {
+    match form {
         SpecForm::File => vec![path(&[SPEC_FILE])],
         SpecForm::Folder => FOLDER_APPEND_ONLY
             .iter()
             .map(|name| path(&[SPEC_FOLDER, name]))
             .collect(),
-    };
-    (form, files)
+    }
 }
 
 /// What adding the `merge=union` lines to `.gitattributes` would do. Writes nothing.
@@ -188,6 +193,128 @@ fn prepare(repo_root: &Path, config: &Config) -> (GitattributesPlan, String) {
         plan.missing.clear();
     }
     (plan, text)
+}
+
+/// What a split of the spec does to `.gitattributes` (`S-spec-split`), shown in its preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+pub struct SplitAttributes {
+    /// The line of `.gitattributes`, counted from 1, that gives `spec.md` `merge=union`.
+    pub line: u32,
+    /// That line as written, trimmed. The split removes it when `new` is not empty.
+    pub old: String,
+    /// The lines that take its place: one per folder file that has no merge setting of its own,
+    /// the old line with the folder file's path. Empty when nothing changes.
+    pub new: Vec<String>,
+    /// Existing lines that already set `merge` for a folder file. They stay as they are and
+    /// that file gets no line: the setting is the user's.
+    pub kept: Vec<String>,
+}
+
+/// The change [`plan_split_lines`] found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SplitLines {
+    pub preview: SplitAttributes,
+    /// `.gitattributes`.
+    pub path: PathBuf,
+    /// Its text as read.
+    pub old_text: String,
+    /// Its text after the split; the same as `old_text` when nothing changes.
+    pub new_text: String,
+}
+
+/// What a split of the single spec file into the folder form does to `.gitattributes` at
+/// `repo_root`. `None` when the file is missing or does not give `spec.md` `merge=union` (no
+/// line for it, or the user's own other setting): then nothing changes. Otherwise the line that
+/// gives it `merge=union` is replaced, in place, by the same line for each folder file that has
+/// no merge setting yet. An error is a reason the split cannot run. Writes nothing.
+pub fn plan_split_lines(repo_root: &Path, config: &Config) -> Result<Option<SplitLines>, String> {
+    let path = repo_root.join(GITATTRIBUTES);
+    let spec_path = form_files(config, SpecForm::File).remove(0);
+    let text = match std::fs::read(&path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => text,
+            // Bytes that cannot name the spec do not matter to the split.
+            Err(err) if !contains(err.as_bytes(), SPEC_FILE.as_bytes()) => return Ok(None),
+            Err(_) => return Err(format!("{GITATTRIBUTES} is not UTF-8 text")),
+        },
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(format!("could not read {GITATTRIBUTES}: {err}")),
+    };
+    let raw: Vec<&str> = text.split_inclusive('\n').collect();
+    let parsed: Vec<(usize, AttrLine)> = raw
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| parse_line(line).map(|parsed| (index, parsed)))
+        .collect();
+    // The last line with the path that sets `merge` decides, as in git.
+    let setting = |target: &str| {
+        parsed
+            .iter()
+            .rev()
+            .find(|(_, line)| line.pattern == target && line.merge.is_some())
+    };
+    let Some((index, spec_line)) = setting(&spec_path) else {
+        return Ok(None);
+    };
+    if spec_line.merge.as_deref() != Some(UNION) {
+        return Ok(None);
+    }
+    let index = *index;
+    let ending = if raw[index].ends_with("\r\n") {
+        "\r\n"
+    } else if raw[index].ends_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
+    let line = &raw[index][..raw[index].len() - ending.len()];
+    let mut new = Vec::new();
+    let mut kept = Vec::new();
+    for target in form_files(config, SpecForm::Folder) {
+        match setting(&target) {
+            Some((_, existing)) => kept.push(existing.text.clone()),
+            None => new.push(with_path(line, &target)?),
+        }
+    }
+    let new_text = if new.is_empty() {
+        text.clone()
+    } else {
+        let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+        let mut out: String = raw[..index].concat();
+        out.push_str(&new.join(newline));
+        out.push_str(ending);
+        out.push_str(&raw[index + 1..].concat());
+        out
+    };
+    Ok(Some(SplitLines {
+        preview: SplitAttributes {
+            line: index as u32 + 1,
+            old: spec_line.text.clone(),
+            new: new.iter().map(|line| line.trim().to_string()).collect(),
+            kept,
+        },
+        path,
+        old_text: text,
+        new_text,
+    }))
+}
+
+/// `line`, a `.gitattributes` line without its line ending, with its pattern replaced by `path`.
+/// Indentation, a leading `/` and the attributes after the pattern are kept as written.
+fn with_path(line: &str, path: &str) -> Result<String, String> {
+    let body = line.trim_start();
+    let indent = &line[..line.len() - body.len()];
+    let end = match body.strip_prefix('"') {
+        Some(quoted) => quoted.find('"').map_or(body.len(), |end| end + 2),
+        None => body.find(char::is_whitespace).unwrap_or(body.len()),
+    };
+    let slash = if body[..end].trim_start_matches('"').starts_with('/') {
+        "/"
+    } else {
+        ""
+    };
+    let pattern = pattern_for(&format!("{slash}{path}"))?;
+    Ok(format!("{indent}{pattern}{}", &body[end..]))
 }
 
 /// `text` with `lines` appended, each ended by the line ending the file already uses (`\r\n`
@@ -479,5 +606,119 @@ mod tests {
         assert_eq!(line.merge.as_deref(), Some("merge=union"));
         let binary = parse_line("docs/planning/spec.md binary").unwrap();
         assert_eq!(binary.merge.as_deref(), Some("-merge"));
+    }
+
+    /// [`plan_split_lines`] for a `.gitattributes` holding `text`, or none when `None`.
+    fn split_lines(text: Option<&[u8]>) -> Result<Option<SplitLines>, String> {
+        let root = scratch_repo();
+        if let Some(text) = text {
+            std::fs::write(root.join(GITATTRIBUTES), text).unwrap();
+        }
+        let result = plan_split_lines(&root, &config_with(SpecLocation::Auto));
+        std::fs::remove_dir_all(&root).unwrap();
+        result
+    }
+
+    #[test]
+    fn a_split_replaces_the_spec_line_in_place() {
+        let text = "*.png binary\r\n/docs/planning/spec.md merge=union -diff\r\n*.sh text\r\n";
+        let lines = split_lines(Some(text.as_bytes())).unwrap().unwrap();
+        assert_eq!(
+            lines.preview,
+            SplitAttributes {
+                line: 2,
+                old: "/docs/planning/spec.md merge=union -diff".to_string(),
+                new: vec![
+                    "/docs/planning/spec/questions.md merge=union -diff".to_string(),
+                    "/docs/planning/spec/decisions.md merge=union -diff".to_string(),
+                ],
+                kept: Vec::new(),
+            }
+        );
+        assert_eq!(lines.old_text, text);
+        assert_eq!(
+            lines.new_text,
+            "*.png binary\r\n/docs/planning/spec/questions.md merge=union -diff\r\n\
+             /docs/planning/spec/decisions.md merge=union -diff\r\n*.sh text\r\n"
+        );
+    }
+
+    #[test]
+    fn a_split_replaces_an_unterminated_last_line() {
+        let lines = split_lines(Some(b"docs/planning/spec.md merge=union"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            lines.new_text,
+            "docs/planning/spec/questions.md merge=union\n\
+             docs/planning/spec/decisions.md merge=union"
+        );
+    }
+
+    #[test]
+    fn a_split_keeps_the_folder_files_own_settings() {
+        let text = "docs/planning/spec.md merge=union\ndocs/planning/spec/decisions.md -merge\n";
+        let lines = split_lines(Some(text.as_bytes())).unwrap().unwrap();
+        assert_eq!(
+            lines.preview.new,
+            vec!["docs/planning/spec/questions.md merge=union"]
+        );
+        assert_eq!(
+            lines.preview.kept,
+            vec!["docs/planning/spec/decisions.md -merge"]
+        );
+        assert_eq!(
+            lines.new_text,
+            "docs/planning/spec/questions.md merge=union\ndocs/planning/spec/decisions.md -merge\n"
+        );
+
+        let both = "docs/planning/spec.md merge=union\n\
+            docs/planning/spec/questions.md merge=union\n\
+            docs/planning/spec/decisions.md merge=union\n";
+        let lines = split_lines(Some(both.as_bytes())).unwrap().unwrap();
+        assert!(lines.preview.new.is_empty());
+        assert_eq!(lines.preview.kept.len(), 2);
+        assert_eq!(lines.new_text, both);
+    }
+
+    #[test]
+    fn a_split_changes_nothing_without_a_union_line_for_spec_md() {
+        assert_eq!(split_lines(None), Ok(None));
+        assert_eq!(split_lines(Some(b"*.png binary\n")), Ok(None));
+        assert_eq!(
+            split_lines(Some(
+                b"docs/planning/spec.md text\n# docs/planning/spec.md merge=union\n"
+            )),
+            Ok(None)
+        );
+        // The user's own setting wins over an earlier union line.
+        assert_eq!(
+            split_lines(Some(
+                b"docs/planning/spec.md merge=union\ndocs/planning/spec.md -merge\n"
+            )),
+            Ok(None)
+        );
+        // Text that is no UTF-8 matters only when it may name the spec.
+        assert_eq!(split_lines(Some(b"caf\xe9 text\n")), Ok(None));
+        assert_eq!(
+            split_lines(Some(b"docs/planning/spec.md merge=union # caf\xe9\n")),
+            Err(".gitattributes is not UTF-8 text".to_string())
+        );
+    }
+
+    #[test]
+    fn with_path_keeps_quotes_slash_and_attributes() {
+        assert_eq!(
+            with_path(
+                "  \"/my docs/spec.md\"  merge=union",
+                "my docs/spec/questions.md"
+            )
+            .unwrap(),
+            "  \"/my docs/spec/questions.md\"  merge=union"
+        );
+        assert_eq!(
+            with_path("a/spec.md\tmerge=union", "a/spec/decisions.md").unwrap(),
+            "a/spec/decisions.md\tmerge=union"
+        );
     }
 }

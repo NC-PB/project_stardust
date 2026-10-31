@@ -36,6 +36,7 @@ const plan = (blockers: string[] = []) => ({
     { file: "spec/README.md", lines: 3, bytes: 20, first_line: "# Spec" },
   ],
   links: [],
+  gitattributes: null,
 });
 
 describe("useSplitStore", () => {
@@ -59,6 +60,7 @@ describe("useSplitStore", () => {
       trashed: "spec.md",
       block_written: [],
       block_error: null,
+      gitattributes: [],
     };
     splitSpec.mockResolvedValue({ status: "ok", data: report });
     sourceFiles.mockResolvedValue({ braindump: null, spec: null });
