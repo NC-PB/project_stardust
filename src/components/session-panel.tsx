@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { cn } from "cn";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { type SessionEntry, sessionBrief } from "@/lib/session";
 import { useBoardStore } from "@/stores/board-store";
@@ -10,8 +11,9 @@ import { useSpecStore } from "@/stores/spec-store";
 /**
  * Where to pick up at the start of a session (`S-session-panel`): the ready tasks, the Result of
  * the task finished last, the latest decisions and the open blocking questions. Computed from
- * the board and the spec; every entry opens its file in the editor. Shown when a project opens,
- * hidden for the session on request.
+ * the board and the spec; every entry opens its file in the editor. It fills the right pane
+ * while no file is open and shows over the open file on request (`S-window-layout`); hidden for
+ * the session on request.
  */
 export function SessionPanel() {
   const { repoRoot, config, columns, archived } = useBoardStore();
@@ -20,106 +22,147 @@ export function SessionPanel() {
   );
   const openFile = useEditorStore((state) => state.open);
   const hiddenFor = useSessionStore((state) => state.hiddenFor);
+  const over = useSessionStore((state) => state.over);
+  const setOver = useSessionStore((state) => state.setOver);
 
-  if (repoRoot === null || config === null) return null;
-  if (hiddenFor === repoRoot)
-    return (
-      <div className="flex w-full justify-end">
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={() => runCommand("session.show")}
-        >
-          Show session
-        </Button>
-      </div>
-    );
+  if (repoRoot === null || config === null || (hiddenFor === repoRoot && !over))
+    return null;
 
   const brief = sessionBrief(repoRoot, config, columns, spec, archived);
-  const open = (path: string, line?: number) =>
+  const open = (path: string, line?: number) => {
+    setOver(false);
     void openFile(repoRoot, path, line);
+  };
   const last = brief.lastCompleted;
+  const prioritized = brief.ready.some((task) => task.priority !== null);
 
   return (
     <section
       aria-label="Session"
-      className="flex w-full flex-col gap-2 rounded-lg border p-2"
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto"
     >
-      <header className="flex items-center gap-2 px-1">
-        <h2 className="text-sm font-semibold">Session</h2>
+      <header className="sticky top-0 flex items-baseline gap-3 border-b bg-card px-5 pt-4 pb-3">
+        <h2 className="text-base font-semibold">Where to pick up</h2>
         <Button
           variant="ghost"
           size="xs"
           className="ml-auto"
           onClick={() => runCommand("session.hide")}
         >
-          Hide
+          {over ? "Back to the file" : "Hide"}
         </Button>
       </header>
-      <div className="grid max-h-56 grid-cols-1 gap-3 overflow-y-auto px-1 text-xs md:grid-cols-2 xl:grid-cols-4">
-        <Part title={`Ready in ${brief.readyColumn}/`}>
-          {brief.ready.length === 0 && <Empty>No tasks</Empty>}
-          {brief.ready.map((task) => (
-            <EntryLink
-              key={task.path}
-              onOpen={() => open(task.path)}
-              title={task.path}
-            >
-              {task.priority !== null && (
-                <span className="mr-1 text-muted-foreground">
-                  P{task.priority}
-                </span>
-              )}
-              {task.title}
-            </EntryLink>
-          ))}
+      <div className="flex flex-col gap-6 px-5 py-4 text-sm">
+        <Part title="Ready" detail={`${brief.readyColumn}/`}>
+          {brief.ready.length === 0 && <Empty>No tasks are ready.</Empty>}
+          <ol className="flex flex-col">
+            {brief.ready.map((task) => (
+              <li key={task.path}>
+                <EntryLink onOpen={() => open(task.path)} title={task.path}>
+                  {prioritized && (
+                    <span className="code-id w-6 shrink-0 text-muted-foreground">
+                      {task.priority !== null ? `P${task.priority}` : ""}
+                    </span>
+                  )}
+                  <span>{task.title}</span>
+                </EntryLink>
+              </li>
+            ))}
+          </ol>
         </Part>
-        <Part title="Last finished">
+        <Part title="Last finished" detail={last?.completed ?? undefined}>
           {last === null ? (
-            <Empty>No finished task</Empty>
+            <Empty>No task is finished yet.</Empty>
           ) : (
             <>
               <EntryLink onOpen={() => open(last.path)} title={last.path}>
-                {last.title}
-                {last.completed && (
-                  <span className="ml-1 text-muted-foreground">
-                    {last.completed}
-                  </span>
-                )}
+                <span className="font-medium">{last.title}</span>
               </EntryLink>
               {last.result === null ? (
-                <Empty>No Result written</Empty>
+                <Empty>No Result written.</Empty>
               ) : (
-                <p className="whitespace-pre-wrap text-muted-foreground">
-                  {last.result}
-                </p>
+                <ResultText text={last.result} />
               )}
             </>
           )}
         </Part>
         <Part title="Latest decisions">
-          {brief.decisions.length === 0 && <Empty>No decisions</Empty>}
-          {brief.decisions.map((entry) => (
-            <SpecEntry key={entryKey(entry)} entry={entry} onOpen={open} />
-          ))}
+          {brief.decisions.length === 0 && <Empty>No decisions yet.</Empty>}
+          <ul className="flex flex-col">
+            {brief.decisions.map((entry) => (
+              <li key={entryKey(entry)}>
+                <SpecEntry entry={entry} onOpen={open} />
+              </li>
+            ))}
+          </ul>
         </Part>
-        <Part title="Open blocking questions">
-          {brief.blockingQuestions.length === 0 && <Empty>None</Empty>}
-          {brief.blockingQuestions.map((entry) => (
-            <SpecEntry key={entryKey(entry)} entry={entry} onOpen={open} />
-          ))}
+        <Part title="Blocking questions">
+          {brief.blockingQuestions.length === 0 && (
+            <Empty>No question blocks the work.</Empty>
+          )}
+          <ul className="flex flex-col">
+            {brief.blockingQuestions.map((entry) => (
+              <li key={entryKey(entry)}>
+                <SpecEntry entry={entry} onOpen={open} />
+              </li>
+            ))}
+          </ul>
         </Part>
       </div>
     </section>
   );
 }
 
+/** The Result of the task finished last, folded to a few lines until asked for in full. */
+function ResultText({ text }: { text: string }) {
+  const [full, setFull] = useState(false);
+  const long = text.length > 480;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <p
+        className={cn(
+          "max-w-[70ch] whitespace-pre-wrap font-serif text-[0.9rem] leading-relaxed text-muted-foreground",
+          long && !full && "line-clamp-6",
+        )}
+      >
+        {text}
+      </p>
+      {long && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="-ml-2"
+          onClick={() => setFull(!full)}
+        >
+          {full ? "Show less" : "Show all"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 const entryKey = (entry: SessionEntry) => `${entry.path}:${entry.line}`;
 
-function Part({ title, children }: { title: string; children: ReactNode }) {
+function Part({
+  title,
+  detail,
+  children,
+}: {
+  title: string;
+  /** A folder or date beside the title. */
+  detail?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <h3 className="font-semibold">{title}</h3>
+      <h3 className="flex items-baseline gap-2 font-semibold">
+        {title}
+        {detail && (
+          <span className="code-id font-normal text-muted-foreground">
+            {detail}
+          </span>
+        )}
+      </h3>
       {children}
     </div>
   );
@@ -143,7 +186,7 @@ function EntryLink({
       type="button"
       onClick={onOpen}
       title={title}
-      className="text-left hover:underline"
+      className="-mx-2 flex w-[calc(100%+1rem)] items-baseline gap-2 rounded-sm px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
     >
       {children}
     </button>
@@ -163,11 +206,13 @@ function SpecEntry({
       onOpen={() => onOpen(entry.path, entry.line)}
       title={`${entry.path}:${entry.line}`}
     >
-      {entry.id && (
-        <span className="mr-1 font-mono text-muted-foreground">{entry.id}</span>
-      )}
-      <span className={entry.superseded ? "line-through" : undefined}>
-        {entry.text}
+      <span className="flex min-w-0 flex-col">
+        <span className={entry.superseded ? "line-through" : undefined}>
+          {entry.text}
+        </span>
+        {entry.id && (
+          <span className="code-id text-muted-foreground">{entry.id}</span>
+        )}
       </span>
     </EntryLink>
   );

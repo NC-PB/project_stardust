@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { Search } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { SearchHit } from "@/bindings";
 import { highlight, hitLocation } from "@/lib/search";
@@ -43,7 +44,11 @@ export function SearchBox() {
   };
 
   return (
-    <div className="relative w-full max-w-xl">
+    <div className="relative w-64 max-w-[30vw] shrink">
+      <Search
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+      />
       <input
         ref={input}
         type="search"
@@ -53,12 +58,12 @@ export function SearchBox() {
           setQuery(event.target.value);
         }}
         onKeyDown={onKeyDown}
-        placeholder="Search planning files"
+        placeholder="Search"
         aria-label="Search planning files"
-        className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+        className="h-7 w-full rounded-md border bg-card pr-2 pl-7 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
       />
       {query.trim() !== "" && (
-        <div className="absolute top-full z-10 mt-1 max-h-96 w-full overflow-y-auto rounded-md border bg-background shadow-md">
+        <div className="absolute top-full right-0 z-30 mt-1 max-h-[70vh] w-[32rem] max-w-[90vw] overflow-y-auto rounded-md border bg-popover p-1 shadow-[0_8px_24px_-12px_rgb(30_39_51/0.35)]">
           {error && <p className="p-2 text-xs text-destructive">{error}</p>}
           {!error && hits.length === 0 && (
             <p className="p-2 text-xs text-muted-foreground">No matches</p>
@@ -71,19 +76,19 @@ export function SearchBox() {
                   onClick={() => open(hit)}
                   onMouseEnter={() => setChosen(index)}
                   className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left text-xs",
-                    index === chosen && "bg-muted",
+                    "flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left text-xs",
+                    index === chosen && "bg-accent",
                   )}
                 >
                   <span className="font-medium text-sm">{hit.title}</span>
-                  <span className="text-muted-foreground">
+                  <span className="code-id text-muted-foreground">
                     {hit.path}:{hit.line}
                   </span>
                   <span>
                     {highlight(hit.snippet, query).map((segment, at) =>
                       segment.match ? (
                         // biome-ignore lint/suspicious/noArrayIndexKey: segments never reorder.
-                        <mark key={at} className="rounded bg-primary/20">
+                        <mark key={at} className="rounded-sm bg-primary/15">
                           {segment.text}
                         </mark>
                       ) : (

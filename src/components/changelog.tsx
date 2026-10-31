@@ -2,21 +2,6 @@ import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { entriesLabel, entryCount } from "@/lib/changelog";
 import { useChangelogStore } from "@/stores/changelog-store";
-import { runCommand } from "@/stores/command-store";
-
-/** Opens the changelog form for `repoRoot` (`S-changelog`). */
-export function ChangelogButton() {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => runCommand("project.changelog")}
-      title="Drafts CHANGELOG.md entries from the finished tasks, after a preview"
-    >
-      Changelog
-    </Button>
-  );
-}
 
 /** The changelog form, the draft for confirmation and what the write did, for `repoRoot`. */
 export function ChangelogPanel({ repoRoot }: { repoRoot: string }) {
@@ -44,7 +29,7 @@ export function ChangelogPanel({ repoRoot }: { repoRoot: string }) {
       {open && (
         <fieldset
           aria-label="Changelog"
-          className="flex flex-col gap-2 rounded-md border p-2 text-xs"
+          className="flex flex-col gap-2 rounded-md border bg-card p-3 text-xs"
         >
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">Tasks finished since</span>

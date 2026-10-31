@@ -105,11 +105,11 @@ export function Board() {
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 pt-3 pl-3">
       {moveError && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-2 rounded-md border border-destructive/50 px-2 py-1 text-xs text-destructive"
+          className="mr-3 flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-card px-3 py-1.5 text-xs text-destructive"
         >
           <span>Move failed: {moveError}</span>
           <Button variant="ghost" size="xs" onClick={dismissMoveError}>
@@ -131,7 +131,7 @@ export function Board() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setDragged(null)}
       >
-        <div className="flex min-h-0 w-full flex-1 gap-4 overflow-x-auto pb-2">
+        <div className="flex min-h-0 w-full flex-1 gap-3 overflow-x-auto pr-3 pb-3">
           {columns.map((column, index) => (
             <Column
               triage={
@@ -201,11 +201,11 @@ function Column({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col gap-2 overflow-y-auto rounded-lg bg-muted/50 p-2",
-        isOver && "ring-2 ring-primary/50",
+        "flex w-[17.5rem] shrink-0 flex-col gap-1.5 overflow-y-auto rounded-lg bg-column p-1.5 transition-shadow",
+        isOver && "shadow-[inset_0_0_0_2px_var(--primary)]",
       )}
     >
-      <header className="flex items-center gap-2 px-1">
+      <header className="flex h-7 shrink-0 items-center gap-2 px-1.5">
         <h2 className="text-sm font-semibold">{column.name}</h2>
         {triage && (
           <Button
@@ -217,7 +217,7 @@ function Column({
             {PROMPT_LABELS["triage-inbox"]}
           </Button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="code-id ml-auto text-muted-foreground tabular-nums">
           {filtering
             ? `${shown.length} of ${column.tasks.length}`
             : column.tasks.length}
@@ -314,8 +314,8 @@ function TagBar({
   onClear: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      <span className="mr-1 text-xs text-muted-foreground">Tags</span>
+    <div className="flex flex-wrap items-center gap-1 pr-3">
+      <span className="mr-1 text-xs text-muted-foreground">Filter by tag</span>
       {tags.map((tag) => (
         <TagChip
           key={tag}
@@ -348,10 +348,10 @@ function TagChip({
       aria-pressed={selected}
       onClick={() => onToggle(tag)}
       className={cn(
-        "rounded px-1.5 py-0.5 text-xs",
+        "rounded-sm border px-1.5 py-px text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground hover:text-foreground",
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background text-muted-foreground hover:border-input hover:text-foreground",
       )}
     >
       {tag}
@@ -382,8 +382,8 @@ function TaskCard({
   return (
     <article
       className={cn(
-        "flex shrink-0 flex-col gap-1.5 rounded-md border bg-background p-2 text-sm shadow-xs",
-        isOpen && "ring-2 ring-primary",
+        "flex shrink-0 flex-col gap-2 rounded-md border bg-card px-2.5 py-2 text-sm transition-colors hover:border-input",
+        isOpen && "border-primary shadow-[inset_3px_0_0_var(--primary)]",
       )}
     >
       <div className="flex items-start gap-1.5">
@@ -396,7 +396,7 @@ function TaskCard({
         <button
           type="button"
           onClick={onOpen}
-          className="text-left font-medium leading-snug hover:underline"
+          className="text-left leading-snug font-medium outline-none hover:underline focus-visible:underline"
         >
           {card.title}
         </button>
@@ -424,7 +424,7 @@ function TaskCard({
         )}
         {card.blockedBy.length > 0 && (
           <span
-            className="font-medium text-destructive"
+            className="font-medium text-attention"
             title={`Waiting for ${card.blockedBy.join(", ")}`}
           >
             Blocked

@@ -69,7 +69,7 @@ export function StaleBadges({ flags }: { flags: StaleFlag[] }) {
   return badgesOf(flags).map((badge) => (
     <span
       key={badge.kind}
-      className="font-medium text-amber-600 dark:text-amber-400"
+      className="font-medium text-attention"
       title={badge.reasons}
     >
       {badge.label}

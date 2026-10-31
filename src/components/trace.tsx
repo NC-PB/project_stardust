@@ -104,6 +104,22 @@ export function NodeTasks({ id }: { id: string | null | undefined }) {
   );
 }
 
+/** How many tasks implement the node, on its collapsed row; the tasks show when it is expanded. */
+export function NodeTaskCount({ id }: { id: string | null | undefined }) {
+  const trace = useTrace();
+  if (trace === null) return null;
+  const count = tasksOfNode(trace, id).length;
+  if (count === 0) return null;
+  return (
+    <span
+      className="code-id text-muted-foreground"
+      title="Tasks implementing this node"
+    >
+      {count} {count === 1 ? "task" : "tasks"}
+    </span>
+  );
+}
+
 /**
  * The gaps of the trace (`S-trace`): tasks without `implements`, ticked nodes without any task
  * and `implements` entries naming no node. Tasks open in the editor, nodes at their line.

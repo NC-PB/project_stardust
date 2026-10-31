@@ -6,23 +6,8 @@ import {
   fixLabel,
   reportSummary,
 } from "@/lib/doctor";
-import { runCommand } from "@/stores/command-store";
 import { useDoctorStore } from "@/stores/doctor-store";
 import { useEditorStore } from "@/stores/editor-store";
-
-/** Runs the doctor over the planning files (`S-doctor`). */
-export function DoctorButton() {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => runCommand("project.doctor")}
-      title="Checks ids, links, images, frontmatter and trace of the planning files"
-    >
-      Doctor
-    </Button>
-  );
-}
 
 /** The doctor's findings for `repoRoot`, each opening its file at its line. */
 export function DoctorPanel({ repoRoot }: { repoRoot: string }) {
@@ -38,7 +23,7 @@ export function DoctorPanel({ repoRoot }: { repoRoot: string }) {
   return (
     <div
       role="status"
-      className="flex max-h-96 flex-col gap-2 overflow-y-auto rounded-md border p-2 text-xs"
+      className="flex max-h-96 flex-col gap-2 overflow-y-auto rounded-md border bg-card p-3 text-xs"
     >
       <div className="flex items-center justify-between gap-2">
         <p className="font-medium">
@@ -84,11 +69,11 @@ export function DoctorPanel({ repoRoot }: { repoRoot: string }) {
             {group.findings.map((finding) => (
               <li
                 key={findingKey(finding)}
-                className="flex items-baseline gap-2"
+                className="flex flex-wrap items-baseline gap-x-2 py-0.5"
               >
                 <button
                   type="button"
-                  className="shrink-0 font-mono text-left hover:underline"
+                  className="code-id min-w-0 text-left break-all hover:underline"
                   onClick={() =>
                     void openFile(
                       repoRoot,
@@ -100,7 +85,7 @@ export function DoctorPanel({ repoRoot }: { repoRoot: string }) {
                 >
                   {finding.file}:{finding.line}
                 </button>
-                <span className="min-w-0 flex-1 break-words text-muted-foreground">
+                <span className="order-last basis-full break-words text-muted-foreground">
                   {finding.message}
                 </span>
                 {finding.fix && (

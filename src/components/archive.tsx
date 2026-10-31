@@ -1,21 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { movesByMonth, tasksLabel } from "@/lib/archive";
 import { useArchiveStore } from "@/stores/archive-store";
-import { runCommand } from "@/stores/command-store";
-
-/** Previews which finished tasks move into month folders (`S-archive`). */
-export function ArchiveButton() {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => runCommand("project.archive")}
-      title="Moves finished tasks of earlier months into month folders, after a preview"
-    >
-      Archive
-    </Button>
-  );
-}
 
 /** The preview of the moves, their confirmation, and what was moved, for `repoRoot`. */
 export function ArchivePanel({ repoRoot }: { repoRoot: string }) {
@@ -34,7 +19,7 @@ export function ArchivePanel({ repoRoot }: { repoRoot: string }) {
       {plan && (
         <div
           role="alert"
-          className="flex flex-col gap-2 rounded-md border p-2 text-xs"
+          className="flex flex-col gap-2 rounded-md border bg-card p-3 text-xs"
         >
           <p className="font-medium">
             {plan.moves.length > 0

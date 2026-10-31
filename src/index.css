@@ -1,13 +1,22 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/atkinson-hyperlegible-next/wght.css";
+@import "@fontsource-variable/atkinson-hyperlegible-next/wght-italic.css";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/literata/opsz.css";
+@import "@fontsource-variable/literata/opsz-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Geist Variable", sans-serif;
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-serif: "Literata Variable", Georgia, serif;
+  --color-attention: var(--attention);
+  --color-attention-surface: var(--attention-surface);
+  --color-column: var(--column);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,73 +57,83 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Fog and clarity (`S-window-layout`): chrome in fog, documents and cards on paper, text in ink,
+ * ink blue for selection and primary actions, sodium only for what needs attention.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #e9edf1;
+  --foreground: #1e2733;
+  --card: #fafbfc;
+  --card-foreground: #1e2733;
+  --popover: #fafbfc;
+  --popover-foreground: #1e2733;
+  --primary: #2e4a86;
+  --primary-foreground: #fafbfc;
+  --secondary: #d9e0e9;
+  --secondary-foreground: #1e2733;
+  --muted: #dfe4ea;
+  --muted-foreground: #5d6a79;
+  --accent: #dde3eb;
+  --accent-foreground: #1e2733;
+  --destructive: #b4362b;
+  --attention: #9a6c08;
+  --attention-surface: #f6ecd2;
+  --border: #d3dae1;
+  --input: #c6ced8;
+  --ring: #2e4a86;
+  --column: #e0e5eb;
+  --chart-1: #2e4a86;
+  --chart-2: #5d6a79;
+  --chart-3: #9a6c08;
+  --chart-4: #8fa8e8;
+  --chart-5: #c6ced8;
+  --radius: 0.375rem;
+  --sidebar: #e9edf1;
+  --sidebar-foreground: #1e2733;
+  --sidebar-primary: #2e4a86;
+  --sidebar-primary-foreground: #fafbfc;
+  --sidebar-accent: #d9e0e9;
+  --sidebar-accent-foreground: #1e2733;
+  --sidebar-border: #d3dae1;
+  --sidebar-ring: #2e4a86;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #161c24;
+  --foreground: #e3e8ee;
+  --card: #1d252f;
+  --card-foreground: #e3e8ee;
+  --popover: #1d252f;
+  --popover-foreground: #e3e8ee;
+  --primary: #8fa8e8;
+  --primary-foreground: #10151c;
+  --secondary: #2a3441;
+  --secondary-foreground: #e3e8ee;
+  --muted: #252e3a;
+  --muted-foreground: #93a0ae;
+  --accent: #27313d;
+  --accent-foreground: #e3e8ee;
+  --destructive: #e8796e;
+  --attention: #e0a93a;
+  --attention-surface: #2f2818;
+  --border: #2c3642;
+  --input: #3a4553;
+  --ring: #8fa8e8;
+  --column: #1a212a;
+  --chart-1: #8fa8e8;
+  --chart-2: #93a0ae;
+  --chart-3: #e0a93a;
+  --chart-4: #2e4a86;
+  --chart-5: #3a4553;
+  --sidebar: #161c24;
+  --sidebar-foreground: #e3e8ee;
+  --sidebar-primary: #8fa8e8;
+  --sidebar-primary-foreground: #10151c;
+  --sidebar-accent: #2a3441;
+  --sidebar-accent-foreground: #e3e8ee;
+  --sidebar-border: #2c3642;
+  --sidebar-ring: #8fa8e8;
 }
 
 @layer base {
@@ -122,26 +141,31 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "kern", "liga";
   }
   html {
     @apply font-sans;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 25%, transparent);
   }
 }
 
 /* Read mode of the editor (`S-editor-layout`). */
 @layer components {
   .markdown-read {
-    @apply flex flex-col gap-3 leading-relaxed;
+    @apply flex max-w-[70ch] flex-col gap-3 font-serif text-[0.95rem] leading-[1.65];
+    font-optical-sizing: auto;
   }
   .markdown-read h1 {
-    @apply text-2xl font-bold;
+    @apply mt-2 text-[1.75rem] leading-tight font-semibold tracking-[-0.01em];
   }
   .markdown-read h2 {
-    @apply text-xl font-bold;
+    @apply mt-4 border-b pb-1 text-[1.3rem] leading-snug font-semibold;
   }
   .markdown-read h3 {
-    @apply text-lg font-semibold;
+    @apply mt-2 text-[1.1rem] font-semibold;
   }
   .markdown-read h4,
   .markdown-read h5,
@@ -149,7 +173,7 @@
     @apply font-semibold;
   }
   .markdown-read a {
-    @apply cursor-pointer text-primary underline;
+    @apply cursor-pointer text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary;
   }
   .markdown-read ul {
     @apply list-disc pl-6;
@@ -164,10 +188,10 @@
     @apply mr-1.5 -ml-5;
   }
   .markdown-read blockquote {
-    @apply border-l-4 pl-3 text-muted-foreground;
+    @apply border-l-2 border-primary/40 pl-4 text-muted-foreground italic;
   }
   .markdown-read code {
-    @apply rounded bg-muted px-1 font-mono text-[0.9em];
+    @apply rounded-sm bg-muted px-1 font-mono text-[0.82em] not-italic;
   }
   .markdown-read pre {
     @apply overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap;
@@ -180,6 +204,9 @@
   }
   .markdown-read table {
     @apply border-collapse text-xs;
+  }
+  .markdown-read table {
+    @apply font-sans;
   }
   .markdown-read th,
   .markdown-read td {
@@ -201,5 +228,32 @@
   }
   .markdown-read hr {
     @apply border-t;
+  }
+}
+
+/* Window regions (`S-window-layout`). */
+@layer components {
+  /* An id, path or count that is code: the mono face, a size below the text around it. */
+  .code-id {
+    @apply font-mono text-[0.8em] tracking-tight;
+  }
+}
+
+/*
+ * The right pane steps aside while it has neither a tool panel nor a file or brief to show.
+ * Outside the layers so it wins over the pane's own `flex` utility.
+ */
+.right-pane:not(:has(> .pane-tools:not(:empty), > .pane-body)) {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every utility. */
+    animation-duration: 0.01ms !important;
   }
 }

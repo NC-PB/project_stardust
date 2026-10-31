@@ -5,6 +5,7 @@ import {
   commandForKey,
 } from "@/lib/commands";
 import { isMac, type ShortcutKeys } from "@/lib/editor";
+import { paneContent } from "@/lib/layout";
 import { projectStatus } from "@/lib/project";
 import {
   editorPromptsOf,
@@ -75,7 +76,12 @@ export function commandContext(): CommandContext {
     specFound: spec?.found ?? false,
     view: useViewStore.getState().view,
     sessionHidden: boardReady
-      ? useSessionStore.getState().hiddenFor === board.repoRoot
+      ? paneContent({
+          filePath: editor.path,
+          repoRoot: board.repoRoot,
+          hiddenFor: useSessionStore.getState().hiddenFor,
+          over: useSessionStore.getState().over,
+        }) !== "session"
       : null,
     file:
       editor.path === null
@@ -179,10 +185,18 @@ const RUNS: Record<CommandId, () => void> = {
   "spec.mind-map": inSpecView(() => useViewStore.getState().toggleMindMap()),
   "spec.expand-all": expandAll(true),
   "spec.collapse-all": expandAll(false),
-  "session.show": () => useSessionStore.getState().show(),
+  // With a file open the brief shows over it; without one it fills the empty pane
+  // (`S-window-layout`).
+  "session.show": () => {
+    const session = useSessionStore.getState();
+    session.show();
+    if (useEditorStore.getState().path !== null) session.setOver(true);
+  },
   "session.hide": () => {
+    const session = useSessionStore.getState();
+    if (session.over) return session.setOver(false);
     const { repoRoot } = useBoardStore.getState();
-    if (repoRoot !== null) useSessionStore.getState().hide(repoRoot);
+    if (repoRoot !== null) session.hide(repoRoot);
   },
   "editor.save": () => void useEditorStore.getState().save(),
   "editor.toggle-mode": () => useEditorStore.getState().toggleMode(),

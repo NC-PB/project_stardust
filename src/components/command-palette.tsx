@@ -37,11 +37,13 @@ export function PaletteButton() {
     <button
       type="button"
       onClick={() => runCommand("palette.open")}
-      className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+      className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[0.8rem] text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       Commands
       {shortcut && (
-        <kbd className="ml-1.5">{formatShortcut(shortcut, isMac)}</kbd>
+        <kbd className="code-id rounded-sm border bg-card px-1 text-muted-foreground">
+          {formatShortcut(shortcut, isMac)}
+        </kbd>
       )}
     </button>
   );

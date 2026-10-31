@@ -7,6 +7,8 @@ interface MenuState {
   settings: boolean;
   /** The list of open proposals in the header is shown (`S-proposals`). */
   proposals: boolean;
+  /** The Project menu of the rail is open (`S-window-layout`). */
+  projectMenu: boolean;
   /** Counts requests to put the focus into the search box; the box follows when it grows. */
   searchFocus: number;
   /** The file the editor asks about before moving it to the trash (`S-trash`), if any. */
@@ -14,6 +16,7 @@ interface MenuState {
   setPalette: (open: boolean) => void;
   setSettings: (open: boolean) => void;
   setProposals: (shown: boolean) => void;
+  setProjectMenu: (open: boolean) => void;
   focusSearch: () => void;
   setConfirmTrash: (path: string | null) => void;
 }
@@ -26,11 +29,13 @@ export const useMenuStore = create<MenuState>()((set) => ({
   palette: false,
   settings: false,
   proposals: false,
+  projectMenu: false,
   searchFocus: 0,
   confirmTrash: null,
   setPalette: (palette) => set({ palette }),
   setSettings: (settings) => set({ settings }),
   setProposals: (proposals) => set({ proposals }),
+  setProjectMenu: (projectMenu) => set({ projectMenu }),
   focusSearch: () => set((state) => ({ searchFocus: state.searchFocus + 1 })),
   setConfirmTrash: (confirmTrash) => set({ confirmTrash }),
 }));

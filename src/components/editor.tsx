@@ -12,8 +12,9 @@ import { tags } from "@lezer/highlight";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import CodeMirror from "@uiw/react-codemirror";
 import { cn } from "cn";
-import { ImageOff } from "lucide-react";
+import { ImageOff, X } from "lucide-react";
 import {
+  type ClipboardEvent,
   type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
@@ -42,7 +43,7 @@ import {
   resolveLink,
 } from "@/lib/editor";
 import { remarkGlossary } from "@/lib/glossary";
-import { dropPoint, imageBadge } from "@/lib/images";
+import { dropPoint, imageBadge, pastedFiles } from "@/lib/images";
 import { linkCompletion, repoRelative } from "@/lib/links";
 import { editorPromptsOf, PROMPT_LABELS, taskPathOf } from "@/lib/prompts";
 import {
@@ -71,7 +72,7 @@ const sourceHighlight = HighlightStyle.define([
   { tag: tags.url, color: "var(--color-primary)", textDecoration: "underline" },
   {
     tag: tags.monospace,
-    fontFamily: "ui-monospace, monospace",
+    fontFamily: "var(--font-mono)",
     backgroundColor: "var(--color-muted)",
     borderRadius: "3px",
   },
@@ -139,7 +140,7 @@ const sourceStyle = {
   },
   ".cm-cursor": { borderLeftColor: "var(--color-foreground)" },
   ".cm-frontmatter": {
-    fontFamily: "ui-monospace, monospace",
+    fontFamily: "var(--font-mono)",
     fontSize: "0.85em",
     backgroundColor: "var(--color-muted)",
     color: "var(--color-muted-foreground)",
@@ -191,6 +192,7 @@ export function Editor() {
     view,
   );
   const staleFlags = useStaleFlagsOf(path);
+  const pasteImages = useEditorStore((state) => state.pasteImages);
 
   // A line asked for by `open` (the spec view, for example) is shown once the source view has
   // the text; CodeMirror takes a new value in its own effect, which runs before this one.
@@ -213,26 +215,50 @@ export function Editor() {
   const mode = modes[path] ?? "source";
   const unsaved = text !== saved;
 
+  // An image on the clipboard goes in like a drop: at the source cursor, in read mode at the
+  // end. A paste with text is left to the field or editor it lands in.
+  const onPaste = (event: ClipboardEvent<HTMLElement>) => {
+    const files = pastedFiles(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    const source = mode === "source" && view !== null && view.dom.isConnected;
+    void pasteImages(files, source ? view.state.selection.main.head : null);
+  };
+
   return (
     <section
       ref={pane}
+      onPaste={onPaste}
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col gap-2 rounded-lg border p-2",
-        dropping && "ring-2 ring-primary",
+        "flex min-h-0 min-w-0 flex-1 flex-col",
+        dropping && "ring-2 ring-primary ring-inset",
       )}
     >
-      <header className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b px-4">
+        <h2 className="min-w-0 truncate text-sm font-semibold" title={path}>
           {fileNameOf(path)}
         </h2>
-        <span className="flex items-center gap-2 text-xs">
-          <StaleBadges flags={staleFlags} />
-        </span>
-        <span className="text-xs text-muted-foreground">
+        <span
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 text-xs",
+            unsaved ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 rounded-full",
+              unsaved ? "bg-attention" : "bg-muted-foreground/40",
+            )}
+          />
           {unsaved ? "Unsaved" : "Saved"}
         </span>
+        <span className="flex min-w-0 items-center gap-2 text-xs">
+          <StaleBadges flags={staleFlags} />
+        </span>
+        <span className="ml-auto" />
         <Button
-          variant="outline"
+          variant="ghost"
           size="xs"
           disabled={selection.trim() === ""}
           onClick={() => runCommand("editor.make-task")}
@@ -240,14 +266,30 @@ export function Editor() {
         >
           Make task
         </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={() => runCommand("editor.toggle-mode")}
+        <fieldset
+          className="flex shrink-0 rounded-md border bg-background p-0.5 text-xs"
           title="Ctrl/⌘+E"
         >
-          {mode === "source" ? "Read" : "Source"}
-        </Button>
+          <legend className="sr-only">Mode</legend>
+          {(["source", "read"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={mode === option}
+              onClick={() => {
+                if (mode !== option) runCommand("editor.toggle-mode");
+              }}
+              className={cn(
+                "rounded-sm px-2 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                mode === option
+                  ? "bg-card text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {option === "source" ? "Source" : "Read"}
+            </button>
+          ))}
+        </fieldset>
         {isTask && (
           <Button
             variant="ghost"
@@ -260,49 +302,54 @@ export function Editor() {
         )}
         <Button
           variant="ghost"
-          size="xs"
+          size="icon-xs"
+          aria-label="Close file"
+          title="Close file"
           onClick={() => runCommand("editor.close")}
         >
-          Close
+          <X aria-hidden className="size-3.5" />
         </Button>
       </header>
-      {confirmDelete === path && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/50 px-2 py-1 text-xs"
-        >
-          <span className="flex-1">
-            Move {fileNameOf(path)} to the trash? It can be restored from there.
-          </span>
-          <Button
-            variant="destructive"
-            size="xs"
-            onClick={() => {
-              setConfirmDelete(null);
-              void trash();
-            }}
+      <div className="flex shrink-0 flex-col gap-2 px-4 pt-2 empty:hidden">
+        {confirmDelete === path && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-3 py-1.5 text-xs"
           >
-            Move to trash
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setConfirmDelete(null)}
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
-      <ConflictBar />
-      <AppendOnlyBar />
-      <ProposalUndo />
-      <PromptBar path={path} />
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+            <span className="flex-1">
+              Move {fileNameOf(path)} to the trash? It can be restored from
+              there.
+            </span>
+            <Button
+              variant="destructive"
+              size="xs"
+              onClick={() => {
+                setConfirmDelete(null);
+                void trash();
+              }}
+            >
+              Move to trash
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setConfirmDelete(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+        )}
+        <ConflictBar />
+        <AppendOnlyBar />
+        <ProposalUndo />
+        <PromptBar path={path} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
         {task && frontmatterLineCount(text) > 0 && (
           <FrontmatterForm key={path} />
         )}
@@ -422,7 +469,7 @@ function Notice({
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-attention/40 bg-attention-surface px-3 py-1.5 text-xs"
     >
       <span className="flex-1">{message}</span>
       {children}
@@ -560,11 +607,11 @@ function FrontmatterForm() {
   if (task === null) return null;
   return (
     <form
-      className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 rounded-md bg-muted/50 p-2 text-xs"
+      className="grid max-w-[70ch] grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 rounded-md border bg-background px-3 py-2 text-xs"
       onSubmit={(event) => event.preventDefault()}
     >
       <span className="text-muted-foreground">Id</span>
-      <span className="font-mono">{task.id ?? "none"}</span>
+      <span className="code-id">{task.id ?? "none"}</span>
       {FORM_FIELDS.map((field) => (
         <FieldInput
           key={field.key}
@@ -620,7 +667,7 @@ function FieldInput({ field, value }: { field: FormField; value: string }) {
           onKeyDown={onKeyDown}
           placeholder={field.kind === "list" ? "comma separated" : undefined}
           className={cn(
-            "rounded border bg-background px-1.5 py-0.5",
+            "h-6 rounded-sm border bg-card px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
             problem && "border-destructive",
           )}
         />
@@ -640,8 +687,10 @@ function ReadView({ text }: { text: string }) {
   const readSelection = () =>
     setSelection(window.getSelection()?.toString() ?? "");
   return (
+    // Focusable on click, so a paste in read mode reaches the pane.
     <article
-      className="markdown-read text-sm"
+      tabIndex={-1}
+      className="markdown-read text-sm outline-none"
       onMouseUp={readSelection}
       onKeyUp={readSelection}
     >

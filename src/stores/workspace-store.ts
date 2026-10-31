@@ -143,6 +143,7 @@ const closeMenus = () =>
     palette: false,
     settings: false,
     proposals: false,
+    projectMenu: false,
     confirmTrash: null,
   });
 

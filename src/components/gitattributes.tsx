@@ -1,20 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { runCommand } from "@/stores/command-store";
 import { useGitattributesStore } from "@/stores/gitattributes-store";
-
-/** Previews the `merge=union` lines for the questions and decisions files (`S-gitattributes`). */
-export function GitattributesButton() {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => runCommand("project.gitattributes")}
-      title="Lets git keep both sides when two branches append questions or decisions, after a preview"
-    >
-      Git attributes
-    </Button>
-  );
-}
 
 /** The preview of the lines, their confirmation, and what was written, for `repoRoot`. */
 export function GitattributesPanel({ repoRoot }: { repoRoot: string }) {
@@ -33,7 +18,7 @@ export function GitattributesPanel({ repoRoot }: { repoRoot: string }) {
       {plan && (
         <div
           role="alert"
-          className="flex flex-col gap-2 rounded-md border p-2 text-xs"
+          className="flex flex-col gap-2 rounded-md border bg-card p-3 text-xs"
         >
           <p className="font-medium">
             {plan.missing.length > 0

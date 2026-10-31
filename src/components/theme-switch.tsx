@@ -13,7 +13,7 @@ const LABELS: Record<ThemeChoice, string> = {
 export function ThemeSwitch() {
   const choice = useThemeStore((state) => state.choice);
   return (
-    <fieldset className="flex rounded-md border p-0.5 text-xs">
+    <fieldset className="flex w-fit rounded-md border bg-background p-0.5 text-xs">
       <legend className="sr-only">Theme</legend>
       {THEME_CHOICES.map((option) => (
         <button
@@ -22,9 +22,9 @@ export function ThemeSwitch() {
           aria-pressed={choice === option}
           onClick={() => runCommand(`theme.${option}`)}
           className={cn(
-            "rounded px-2 py-0.5",
+            "rounded-sm px-2.5 py-1",
             choice === option
-              ? "bg-primary text-primary-foreground"
+              ? "bg-card text-foreground shadow-[inset_0_0_0_1px_var(--border)]"
               : "text-muted-foreground hover:text-foreground",
           )}
         >

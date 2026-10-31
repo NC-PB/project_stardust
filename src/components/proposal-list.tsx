@@ -18,18 +18,25 @@ export function ProposalList() {
   return (
     <div className="relative">
       <Button
-        variant="outline"
+        variant="ghost"
         size="sm"
         onClick={() => runCommand("proposals.toggle")}
         aria-expanded={shown}
+        title="Open proposals in the planning files"
       >
         Proposals
-        <span className="text-muted-foreground tabular-nums">
+        <span
+          className={
+            proposals.length > 0
+              ? "code-id rounded-sm bg-primary px-1 text-primary-foreground"
+              : "code-id text-muted-foreground"
+          }
+        >
           {proposals.length}
         </span>
       </Button>
       {shown && (
-        <div className="absolute top-full left-0 z-10 mt-1 max-h-96 w-96 overflow-y-auto rounded-md border bg-background shadow-md">
+        <div className="absolute top-full right-0 z-30 mt-1 max-h-[70vh] w-[28rem] max-w-[90vw] overflow-y-auto rounded-md border bg-popover p-1 shadow-[0_8px_24px_-12px_rgb(30_39_51/0.35)]">
           {proposals.length === 0 && (
             <p className="p-2 text-xs text-muted-foreground">
               No open proposals
@@ -44,10 +51,10 @@ export function ProposalList() {
                     setShown(false);
                     void open(repoRoot, proposal);
                   }}
-                  className="flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left text-xs hover:bg-muted"
+                  className="flex w-full flex-col items-start gap-0.5 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
                 >
                   <span className="text-sm">{proposal.text || "(empty)"}</span>
-                  <span className="text-muted-foreground">
+                  <span className="code-id text-muted-foreground">
                     {proposal.path}:{proposal.line}
                   </span>
                 </button>

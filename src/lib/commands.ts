@@ -27,7 +27,7 @@ export interface CommandContext {
   specRead: boolean;
   specFound: boolean;
   view: MainView;
-  /** The session panel is hidden; `null` while it has no project. */
+  /** The session brief is not shown in the right pane; `null` while it has no project. */
   sessionHidden: boolean | null;
   /** The open file, if any. */
   file: {
@@ -200,12 +200,12 @@ export const COMMANDS = [
   },
   {
     id: "session.show",
-    name: "Show session panel",
+    name: "Show session",
     available: (context) => context.sessionHidden === true,
   },
   {
     id: "session.hide",
-    name: "Hide session panel",
+    name: "Hide session",
     available: (context) => context.sessionHidden === false,
   },
   {

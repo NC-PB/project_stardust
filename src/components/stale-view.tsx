@@ -45,9 +45,9 @@ export function StaleView() {
   if (repoRoot === null || config === null) return null;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto rounded-lg border p-3 text-sm">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-medium">{staleSummary(entries)}</p>
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto bg-card px-6 py-5 text-sm">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold">{staleSummary(entries)}</h2>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>
             {state.checking
@@ -67,36 +67,39 @@ export function StaleView() {
         </div>
       </header>
       {staleGroups(entries).map((group) => (
-        <div key={group.group} className="flex flex-col gap-1">
-          <p className="font-medium">
-            {group.label} ({group.entries.length})
-          </p>
+        <div key={group.group} className="flex max-w-4xl flex-col gap-1">
+          <h3 className="flex items-baseline gap-2 border-b pb-1 font-semibold">
+            {group.label}
+            <span className="code-id font-normal text-muted-foreground">
+              {group.entries.length}
+            </span>
+          </h3>
           {group.group === "broken" && report === null ? (
-            <p className="pl-2 text-xs text-muted-foreground">
+            <p className="py-1 text-xs text-muted-foreground">
               The doctor is checking…
             </p>
           ) : group.entries.length === 0 ? (
-            <p className="pl-2 text-xs text-muted-foreground">Nothing.</p>
+            <p className="py-1 text-xs text-muted-foreground">Nothing here.</p>
           ) : (
-            <ul className="flex flex-col gap-1 pl-2">
+            <ul className="-mx-2 flex flex-col">
               {group.entries.map((entry) => (
                 <li key={entry.key}>
                   <button
                     type="button"
-                    className="flex w-full flex-col items-start rounded-md px-2 py-1 text-left text-xs hover:bg-muted"
+                    className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() =>
                       void open(repoRoot, entry.path, entry.line ?? undefined)
                     }
                     title="Opens the file in the editor"
                   >
                     <span className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-medium text-amber-600 dark:text-amber-400">
+                      <span className="font-medium text-attention">
                         {entry.label}
                       </span>
                       {entry.title !== null && (
                         <span className="font-medium">{entry.title}</span>
                       )}
-                      <span className="font-mono text-muted-foreground">
+                      <span className="code-id text-muted-foreground">
                         {entry.location}
                       </span>
                     </span>

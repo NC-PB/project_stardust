@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { ChevronRight } from "lucide-react";
 import type { Node, SourceLine, Spec } from "@/bindings";
 import { FogMeter } from "@/components/fog-meter";
 import { GateStatus } from "@/components/gate-status";
@@ -7,7 +8,7 @@ import { MindMap } from "@/components/mind-map";
 import { QuestionsForm } from "@/components/questions-form";
 import { SpecPrompts } from "@/components/spec-prompts";
 import { useStaleFlags } from "@/components/stale-flags";
-import { NodeTasks, TracePanel } from "@/components/trace";
+import { NodeTaskCount, NodeTasks, TracePanel } from "@/components/trace";
 import { Button } from "@/components/ui/button";
 import { VerifyAreaButton } from "@/components/verify-area-button";
 import {
@@ -54,10 +55,12 @@ export function SpecView() {
   if (spec === null || openAt === null) return null;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto rounded-lg border p-3">
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-lg font-semibold">{spec.title ?? "Spec"}</h2>
-        <span className="text-xs text-muted-foreground">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-y-auto bg-card px-6 py-5">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+        <h2 className="text-xl font-semibold tracking-[-0.01em]">
+          {spec.title ?? "Spec"}
+        </h2>
+        <span className="code-id text-muted-foreground">
           {spec.location}
           {spec.form === "folder" && " (folder form)"}
         </span>
@@ -98,7 +101,7 @@ export function SpecView() {
           <SectionNav spec={spec} openAt={openAt} />
           {questions && <QuestionsForm onOpen={openAt} />}
           {mindMap ? (
-            <div className="h-[28rem] shrink-0 rounded-md border">
+            <div className="h-[32rem] shrink-0 rounded-md border bg-background">
               <MindMap onOpen={openAt} />
             </div>
           ) : (
@@ -121,11 +124,14 @@ function SectionNav({
   openAt: (at: SourceLine) => void;
 }) {
   return (
-    <nav aria-label="Spec sections" className="flex flex-wrap gap-1">
+    <nav
+      aria-label="Spec sections"
+      className="-mx-2 flex flex-wrap gap-0.5 border-b pb-3"
+    >
       {spec.sections.map((section) => (
         <Button
           key={sourceLabel(section.at)}
-          variant="outline"
+          variant="ghost"
           size="xs"
           title={`Open ${sourceLabel(section.at)}`}
           onClick={() => openAt(section.at)}
@@ -209,16 +215,22 @@ function NodeItem({
 
   return (
     <li className="flex flex-col">
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="group/row -mx-1 flex flex-wrap items-center gap-1.5 rounded-sm px-1 py-0.5 hover:bg-accent/60">
         <button
           type="button"
           aria-expanded={expandable ? expanded : undefined}
           aria-label={expanded ? "Collapse" : "Expand"}
           disabled={!expandable}
           onClick={() => setExpanded(key, !expanded)}
-          className="w-4 shrink-0 text-xs text-muted-foreground disabled:invisible"
+          className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:invisible"
         >
-          {expanded ? "▾" : "▸"}
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "size-3.5 transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
         </button>
         {tick !== null && (
           <span
@@ -249,12 +261,14 @@ function NodeItem({
         </span>
         <OpenButton at={node.at} name={node.id} openAt={openAt} />
         {node.id ? (
-          <code className="rounded bg-muted px-1 text-xs">{node.id}</code>
+          <code className="code-id rounded-sm bg-muted px-1 text-muted-foreground">
+            {node.id}
+          </code>
         ) : (
           <span className="text-xs text-destructive">no id</span>
         )}
         {node.later && (
-          <span className="rounded border px-1 text-xs text-muted-foreground">
+          <span className="code-id rounded-sm border px-1 text-muted-foreground">
             #later
           </span>
         )}
@@ -270,13 +284,23 @@ function NodeItem({
             {count.clarified}/{count.total} clarified
           </span>
         )}
-        {node.id && <VerifyAreaButton nodeId={node.id} />}
-        <NodeTasks id={node.id} />
+        {/* A node that cannot expand keeps its tasks on the row. */}
+        {!expandable ? (
+          <NodeTasks id={node.id} />
+        ) : expanded ? null : (
+          <NodeTaskCount id={node.id} />
+        )}
+        {node.id && (
+          <span className="opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+            <VerifyAreaButton nodeId={node.id} />
+          </span>
+        )}
       </div>
       {expandable && expanded && (
-        <div className="ml-5 flex flex-col gap-0.5 border-l pl-3">
+        <div className="ml-5 flex flex-col gap-1 border-l pl-3">
+          <NodeTasks id={node.id} />
           {node.criteria.length > 0 && (
-            <ul className="flex flex-col gap-0.5 text-xs">
+            <ul className="flex max-w-[78ch] flex-col gap-1 py-1">
               {node.criteria.map((criterion) => (
                 <li
                   key={sourceLabel(criterion.at)}
@@ -287,7 +311,7 @@ function NodeItem({
                     name="criterion"
                     openAt={openAt}
                   />
-                  <span className="whitespace-pre-line text-muted-foreground">
+                  <span className="font-serif text-[0.85rem] leading-relaxed whitespace-pre-line text-foreground/80">
                     <InlineMarkdown
                       text={criterion.text}
                       file={criterion.at.file}
@@ -336,7 +360,7 @@ function OpenButton({
       onClick={() => openAt(at)}
       title={label}
       aria-label={label}
-      className="shrink-0 rounded px-0.5 text-xs leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="shrink-0 rounded-sm px-0.5 text-xs leading-none text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
     >
       ↗
     </button>
@@ -369,10 +393,10 @@ function BlockingQuestion({
       onClick={() => openAt(question.at)}
       title={`${question.question}\n${sourceLabel(question.at)}`}
       className={cn(
-        "rounded border px-1 text-xs hover:underline",
+        "rounded-sm border px-1 text-xs hover:underline",
         question.answered
           ? "text-muted-foreground"
-          : "border-amber-500/50 bg-amber-500/10",
+          : "border-attention/40 bg-attention-surface",
       )}
     >
       {question.answered ? "Answered" : "Blocked by"} {id}
@@ -430,13 +454,11 @@ function ReviewFlags() {
     .filter((flag) => flag.kind === "unreviewed-spec");
   if (repoRoot === null || flags.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-1 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs">
+    <ul className="flex flex-col gap-1 rounded-md border border-attention/40 bg-attention-surface px-2 py-1 text-xs">
       {flags.map((flag) => (
         <li key={flag.path} className="flex items-center gap-2">
-          <span className="font-medium text-amber-600 dark:text-amber-400">
-            Review due
-          </span>
-          <span className="font-mono">{repoRelative(repoRoot, flag.path)}</span>
+          <span className="font-medium text-attention">Review due</span>
+          <span className="code-id">{repoRelative(repoRoot, flag.path)}</span>
           <span className="min-w-0 flex-1">{flag.reason}</span>
           <Button
             variant="ghost"
