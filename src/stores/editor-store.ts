@@ -14,6 +14,7 @@ import {
   followFile,
   touchesFile,
 } from "@/lib/editor";
+import { applyInsertion, dropFailures, dropInsertion } from "@/lib/images";
 import { type ProposalAction, resolveProposal } from "@/lib/proposals";
 
 /** Why the open file and the disk disagree while there are unsaved edits (`S-conflicts`). */
@@ -90,6 +91,12 @@ interface EditorState {
   trash: () => Promise<void>;
   /** Creates a task in the first column from the selection and opens it (`S-make-task`). */
   makeTask: () => Promise<void>;
+  /**
+   * Copies the dropped files `paths` into the image root and inserts their links at offset
+   * `at` of the text, or at the end for `null` (`S-images`). Files that are not added are
+   * named in `error`.
+   */
+  dropImages: (paths: string[], at: number | null) => Promise<void>;
   /** The text before and after the last Accept or Reject, so it can be undone (`S-proposals`). */
   proposalUndo: { before: string; after: string } | null;
   /**
@@ -354,6 +361,24 @@ export const useEditorStore = create<EditorState>()((set, get) => {
       }
       set({ selection: "" });
       await get().open(repoRoot, result.data);
+    },
+
+    dropImages: async (paths, at) => {
+      const { repoRoot, path } = get();
+      if (repoRoot === null || path === null || paths.length === 0) return;
+      const snippets: string[] = [];
+      const failures: string[] = [];
+      // One after another, so two files with the same name get suffixes in drop order.
+      for (const source of paths) {
+        const result = await commands.importImage(repoRoot, path, source);
+        if (result.status === "ok") snippets.push(result.data.markdown);
+        else failures.push(result.error);
+      }
+      if (get().path !== path) return;
+      set({ error: dropFailures(failures) });
+      if (snippets.length === 0) return;
+      const { text } = get();
+      get().edit(applyInsertion(text, dropInsertion(text, at, snippets)));
     },
 
     resolveProposal: (start, action) => {

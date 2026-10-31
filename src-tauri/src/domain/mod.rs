@@ -10,6 +10,7 @@ pub mod config;
 pub mod files;
 pub mod gate;
 pub mod ids;
+pub mod images;
 pub mod init;
 pub mod make_task;
 pub mod prompts;

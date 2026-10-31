@@ -175,6 +175,9 @@
   .markdown-read pre code {
     @apply bg-transparent p-0;
   }
+  .markdown-read img {
+    @apply h-auto max-w-full;
+  }
   .markdown-read table {
     @apply border-collapse text-xs;
   }

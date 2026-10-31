@@ -6,6 +6,7 @@ const createText = vi.fn();
 const makeTask = vi.fn();
 const checkAppendOnly = vi.fn();
 const trashed: string[] = [];
+const imported: string[] = [];
 
 vi.mock("@/bindings", () => ({
   commands: {
@@ -45,6 +46,13 @@ vi.mock("@/bindings", () => ({
       ),
     }),
     removeFieldInText: async (text: string) => ({ status: "ok", data: text }),
+    importImage: async (_repoRoot: string, _file: string, source: string) => {
+      imported.push(source);
+      const name = source.split("/").pop() as string;
+      return name.endsWith(".png")
+        ? { status: "ok", data: { markdown: `![](../../images/${name})` } }
+        : { status: "error", error: `\`${name}\` is not an image` };
+    },
   },
 }));
 
@@ -91,6 +99,7 @@ describe("useEditorStore", () => {
     checkAppendOnly.mockResolvedValue([]);
     makeTask.mockReset();
     trashed.length = 0;
+    imported.length = 0;
   });
 
   afterEach(() => {
@@ -341,6 +350,35 @@ describe("useEditorStore", () => {
     await useEditorStore.getState().trash();
     expect(useEditorStore.getState().path).toBe(A);
     expect(useEditorStore.getState().error).toContain("Not deleted");
+  });
+
+  it("inserts links to dropped images in drop order and autosaves them", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    const at = "---\ntitle: A\n---\n".length;
+    await useEditorStore
+      .getState()
+      .dropImages(["/tmp/a.png", "/tmp/notes.txt", "/tmp/b.png"], at);
+    expect(imported).toEqual(["/tmp/a.png", "/tmp/notes.txt", "/tmp/b.png"]);
+    expect(useEditorStore.getState().text).toBe(
+      "---\ntitle: A\n---\n![](../../images/a.png)\n![](../../images/b.png)\nbody\n",
+    );
+    expect(useEditorStore.getState().error).toBe(
+      "Not added: `notes.txt` is not an image",
+    );
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+    expect(files.get(A)).toContain("![](../../images/b.png)");
+  });
+
+  it("appends dropped images at the end in read mode and changes nothing when none is added", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    await useEditorStore.getState().dropImages(["/tmp/x.gif"], null);
+    expect(useEditorStore.getState().text).toBe("---\ntitle: A\n---\nbody\n");
+    expect(useEditorStore.getState().error).toContain("not an image");
+    await useEditorStore.getState().dropImages(["/tmp/a.png"], null);
+    expect(useEditorStore.getState().text).toBe(
+      "---\ntitle: A\n---\nbody\n\n![](../../images/a.png)\n",
+    );
+    expect(useEditorStore.getState().error).toBeNull();
   });
 
   describe("changes on disk", () => {

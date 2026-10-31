@@ -20,8 +20,19 @@ pub enum SaveOutcome {
     ChangedOnDisk { text: String },
 }
 
-/// Images larger than this are not shown in read mode.
-const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+/// What read mode gets for a local image (`S-images`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ImageRead {
+    /// The image as a `data:` URL.
+    Shown { url: String },
+    /// No file at the place the link points to, such as an image root not synced to this
+    /// machine (D-20260919-104200-9f03).
+    Missing,
+}
+
+/// Images larger than this are not shown in read mode, nor copied into the image root.
+pub(crate) const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 /// The whole text of the file at `path`.
 pub fn read_text(path: &Path) -> Result<String, String> {
@@ -115,11 +126,11 @@ fn os_trash(path: &Path) -> Result<(), String> {
         .map_err(|err| format!("could not move to the trash: {err}"))
 }
 
-/// The image `src` of the markdown file `file` as a `data:` URL. `src` is relative to the
-/// folder of `file`, or to `repo_root` when it starts with `/`; it must stay inside
-/// `repo_root`. Remote and other non-file sources are refused, since the app makes no
-/// network calls.
-pub fn image_data_url(repo_root: &Path, file: &Path, src: &str) -> Result<String, String> {
+/// The image `src` of the markdown file `file` as a `data:` URL, or `Missing` when no file is
+/// there. `src` is relative to the folder of `file`, or to `repo_root` when it starts with `/`;
+/// it must stay inside `repo_root`. Remote and other non-file sources are refused, since the
+/// app makes no network calls.
+pub fn image_data_url(repo_root: &Path, file: &Path, src: &str) -> Result<ImageRead, String> {
     let src = src.split(['#', '?']).next().unwrap_or_default();
     if src.is_empty() || has_scheme(src) {
         return Err(format!("`{src}` is not a local image"));
@@ -135,9 +146,9 @@ pub fn image_data_url(repo_root: &Path, file: &Path, src: &str) -> Result<String
         .components()
         .filter(|part| !matches!(part, Component::RootDir | Component::Prefix(_)))
         .fold(base, |path: PathBuf, part| path.join(part));
-    let path = joined
-        .canonicalize()
-        .map_err(|_| format!("`{src}` not found"))?;
+    let Ok(path) = joined.canonicalize() else {
+        return Ok(ImageRead::Missing);
+    };
     let root = repo_root.canonicalize().map_err(|err| err.to_string())?;
     if !path.starts_with(&root) {
         return Err(format!("`{src}` is outside the repository"));
@@ -148,7 +159,9 @@ pub fn image_data_url(repo_root: &Path, file: &Path, src: &str) -> Result<String
         return Err(format!("`{src}` is larger than 20 MB"));
     }
     let bytes = std::fs::read(&path).map_err(|err| err.to_string())?;
-    Ok(format!("data:{mime};base64,{}", base64(&bytes)))
+    Ok(ImageRead::Shown {
+        url: format!("data:{mime};base64,{}", base64(&bytes)),
+    })
 }
 
 /// Whether `src` starts with a URL scheme such as `https:` or `data:`. A Windows drive letter
@@ -162,7 +175,7 @@ pub(crate) fn has_scheme(src: &str) -> bool {
     })
 }
 
-fn image_mime(path: &Path) -> Option<&'static str> {
+pub(crate) fn image_mime(path: &Path) -> Option<&'static str> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     Some(match extension.as_str() {
         "png" => "image/png",
@@ -336,7 +349,9 @@ mod tests {
         let repo = temp_repo("image");
         let file = repo.join("docs/planning/next/a.md");
         std::fs::write(repo.join("docs/images/my shot.png"), b"foo").unwrap();
-        let expected = Ok("data:image/png;base64,Zm9v".to_string());
+        let expected = Ok(ImageRead::Shown {
+            url: "data:image/png;base64,Zm9v".to_string(),
+        });
         assert_eq!(
             image_data_url(&repo, &file, "../../images/my%20shot.png"),
             expected
@@ -376,10 +391,9 @@ mod tests {
                 .unwrap_err()
                 .contains("not an image")
         );
-        assert!(
-            image_data_url(&repo, &file, "missing.png")
-                .unwrap_err()
-                .contains("not found")
+        assert_eq!(
+            image_data_url(&repo, &file, "missing.png"),
+            Ok(ImageRead::Missing)
         );
         std::fs::remove_dir_all(repo).unwrap();
     }

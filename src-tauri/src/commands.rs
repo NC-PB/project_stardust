@@ -12,7 +12,7 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts,
+    agents_block, append_only, board, config, files, gate, ids, images, init, make_task, prompts,
     questions, search, spec, spec_split, task, templates, terminal, watch,
 };
 
@@ -253,11 +253,35 @@ pub fn remove_field_in_text(text: String, key: String) -> Result<String, String>
 }
 
 /// The image `src` of the markdown file `file` as a `data:` URL, if it is a local image inside
-/// the repository at `repo_root`.
+/// the repository at `repo_root`; `missing` when no file is there (`S-images`).
 #[tauri::command]
 #[specta::specta]
-pub fn read_image(repo_root: String, file: String, src: String) -> Result<String, String> {
+pub fn read_image(
+    repo_root: String,
+    file: String,
+    src: String,
+) -> Result<files::ImageRead, String> {
     files::image_data_url(Path::new(&repo_root), Path::new(&file), &src)
+}
+
+/// Copies the image at `source`, dropped into the editor, into the image root of the
+/// repository at `repo_root` and returns the markdown linking it from the open file `file`
+/// (`S-images`). Never overwrites a file.
+#[tauri::command]
+#[specta::specta]
+pub fn import_image(
+    repo_root: String,
+    file: String,
+    source: String,
+) -> Result<images::ImportedImage, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    images::import_image(
+        repo_root,
+        &config.images_root,
+        Path::new(&file),
+        Path::new(&source),
+    )
 }
 
 /// A new task in the first column from `selection`, text selected in the file `source`
