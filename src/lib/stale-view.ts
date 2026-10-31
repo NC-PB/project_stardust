@@ -57,6 +57,7 @@ export const FINDING_LABELS: Record<FindingKind, string> = {
   broken_link: "Broken link",
   missing_image: "Missing image",
   frontmatter_error: "Frontmatter error",
+  dependency_error: "Dependency error",
   untraced: "Untraced",
 };
 

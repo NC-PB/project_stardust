@@ -40,6 +40,8 @@ pub enum FindingKind {
     MissingImage,
     /// Frontmatter that is not valid, or a field that is missing or has an invalid value.
     FrontmatterError,
+    /// A `depends_on` entry that cannot mean anything: the task's own id (`S-dependencies`).
+    DependencyError,
     /// A task outside the terminal column without `implements`, or an `implements` entry
     /// naming no node of the Structure (`S-trace`).
     Untraced,
@@ -60,6 +62,9 @@ pub enum DoctorFix {
     },
     /// Repairs the broken links of `file` by the id in their target's filename (`S-links`).
     RepairLinks { file: String },
+    /// Removes `id`, the task's own id, from the `depends_on` of `file`; the other entries stay
+    /// in their order.
+    RemoveDependency { file: String, id: String },
 }
 
 /// One problem found by the doctor.
@@ -132,6 +137,9 @@ pub fn doctor(repo_root: &Path, config: &Config) -> DoctorReport {
             report.findings.push(duplicate(file, id, files, &mut fresh));
         }
     }
+    report
+        .findings
+        .extend(tasks.iter().filter_map(self_dependency));
     report.findings.extend(untraced(repo_root, config, &tasks));
     report
         .findings
@@ -379,6 +387,33 @@ fn duplicate(file: &TaskFile, id: &str, files: &[&TaskFile], fresh: &mut FreshId
     }
 }
 
+/// The finding for a task whose `depends_on` names its own id. The board sort and the blocked
+/// marker ignore such an entry (D-20261031-033553-2skc), so it is shown only here. The fix
+/// rewrites the `depends_on` line, so it is offered only when that field was read without issue
+/// in frontmatter read as a whole.
+fn self_dependency(file: &TaskFile) -> Option<Finding> {
+    let task = &file.task;
+    let id = task.id.as_deref()?;
+    if !task.depends_on.iter().any(|entry| entry == id) {
+        return None;
+    }
+    let clean = read_as_whole(task)
+        && task
+            .issues
+            .iter()
+            .all(|issue| issue.key.as_deref() != Some("depends_on"));
+    Some(Finding {
+        kind: FindingKind::DependencyError,
+        file: file.file.clone(),
+        line: field_line(file.text.as_deref(), "depends_on"),
+        message: format!("`depends_on` names the task's own id `{id}`"),
+        fix: clean.then(|| DoctorFix::RemoveDependency {
+            file: file.file.clone(),
+            id: id.to_string(),
+        }),
+    })
+}
+
 /// Tasks outside the terminal column without `implements`, and `implements` entries naming no
 /// node, for the tasks in the columns and the archive, as the trace counts them (D-20261031-013706-d7rx,
 /// D-20261031-031457-vjn2). Entries are checked only when the spec exists, and not at all in a
@@ -543,7 +578,9 @@ fn repair_file(repo_root: &Path, config: &Config, file: &str) -> Result<FixRepor
 /// (`R-no-destroy`) and never written over another file.
 pub fn apply_fix(repo_root: &Path, config: &Config, fix: &DoctorFix) -> Result<FixReport, String> {
     let file = match fix {
-        DoctorFix::SetId { file, .. } | DoctorFix::Rename { file, .. } => file,
+        DoctorFix::SetId { file, .. }
+        | DoctorFix::Rename { file, .. }
+        | DoctorFix::RemoveDependency { file, .. } => file,
         DoctorFix::RepairLinks { file } => return repair_file(repo_root, config, file),
     };
     let parts = components(file);
@@ -629,6 +666,32 @@ pub fn apply_fix(repo_root: &Path, config: &Config, fix: &DoctorFix) -> Result<F
                 }],
             );
             Ok(FixReport { file: moved, links })
+        }
+        DoctorFix::RemoveDependency { id, .. } => {
+            let task = task::parse_task(&name, &text);
+            let still = task.id.as_ref() == Some(id)
+                && task.depends_on.contains(id)
+                && read_as_whole(&task)
+                && task
+                    .issues
+                    .iter()
+                    .all(|issue| issue.key.as_deref() != Some("depends_on"));
+            if !still {
+                return Err(stale());
+            }
+            let rest: Vec<String> = task
+                .depends_on
+                .into_iter()
+                .filter(|entry| entry != id)
+                .collect();
+            let new = task::set_field(&text, "depends_on", &FieldValue::List(rest))?;
+            match files::save_text(&path, &text, &new)? {
+                SaveOutcome::Saved => Ok(FixReport {
+                    file: file.clone(),
+                    links: MoveLinks::default(),
+                }),
+                SaveOutcome::ChangedOnDisk { .. } => Err(stale()),
+            }
         }
         DoctorFix::RepairLinks { .. } => unreachable!("repairs are applied above"),
     }
@@ -735,6 +798,13 @@ mod tests {
             &format!("{p}/next/{G}-untraced.md"),
             &task(G, "", ""),
         );
+        put(
+            &root,
+            &format!("{p}/inbox/{C}-self.md"),
+            &format!(
+                "---\nid: {C}\ntitle: Self\ncreated: 2026-10-01\ndepends_on: [{A}, {C}]\nimplements: [S-feature]\n---\n"
+            ),
+        );
         put(&root, &format!("{p}/done/{A}x-ignored.md"), "no task");
         put(
             &root,
@@ -811,6 +881,11 @@ mod tests {
                     1
                 ),
                 (
+                    FindingKind::DependencyError,
+                    format!("{p}/inbox/{C}-self.md"),
+                    5
+                ),
+                (
                     FindingKind::Untraced,
                     format!("{p}/done/20261001-100000-hhhh-unknown.md"),
                     5
@@ -818,7 +893,7 @@ mod tests {
                 (FindingKind::Untraced, next(&format!("{G}-untraced.md")), 5),
             ]
         );
-        assert_eq!(report.task_files, 10);
+        assert_eq!(report.task_files, 11);
         assert!(report.problems.is_empty());
     }
 
@@ -985,6 +1060,84 @@ mod tests {
                 .iter()
                 .filter(|f| matches!(f.kind, FindingKind::Untraced | FindingKind::BrokenLink))
                 .all(|f| f.fix.is_none())
+        );
+    }
+
+    #[test]
+    fn a_dependency_on_the_task_itself_is_reported_and_removed_on_confirmation() {
+        let (root, config) = scratch();
+        let p = "docs/planning";
+        put(&root, &format!("{p}/spec.md"), SPEC);
+        let file = format!("{p}/next/{A}-self.md");
+        let text = format!(
+            "---\nid: {A}\ntitle: Self\ncreated: 2026-10-01\ndepends_on: [{B}, {A}, {C}]\nimplements: [S-feature] # keep\n---\n\nBody\n"
+        );
+        put(&root, &file, &text);
+        // A dependency on another task is not a finding.
+        put(
+            &root,
+            &format!("{p}/next/{B}-other.md"),
+            &format!(
+                "---\nid: {B}\ntitle: Other\ncreated: 2026-10-01\ndepends_on: [{A}]\nimplements: [S-feature]\n---\n"
+            ),
+        );
+        // A self id whose `depends_on` has an issue is reported, if at all, without a fix.
+        put(
+            &root,
+            &format!("{p}/next/{D}-invalid.md"),
+            &format!(
+                "---\nid: {D}\ntitle: Invalid\ncreated: 2026-10-01\ndepends_on: [{D}, nope]\nimplements: [S-feature]\n---\n"
+            ),
+        );
+
+        let report = doctor(&root, &config);
+        let found: Vec<&Finding> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::DependencyError)
+            .filter(|f| f.file == file || f.fix.is_some())
+            .collect();
+        assert_eq!(found.len(), 1, "{:?}", report.findings);
+        assert_eq!(found[0].file, file);
+        assert_eq!(found[0].line, 5);
+        assert!(found[0].message.contains(A), "{}", found[0].message);
+        assert!(
+            report
+                .findings
+                .iter()
+                .all(|f| !f.file.ends_with("-other.md"))
+        );
+        let fix = found[0].fix.clone().expect("a fix");
+        assert_eq!(
+            fix,
+            DoctorFix::RemoveDependency {
+                file: file.clone(),
+                id: A.into()
+            }
+        );
+
+        // Refused when the file no longer has the entry.
+        let without = text.replace(&format!(", {A}"), "");
+        put(&root, &file, &without);
+        assert!(apply_fix(&root, &config, &fix).is_err());
+        assert_eq!(read(&root, &file), without);
+        put(&root, &file, &text);
+
+        let fixed = apply_fix(&root, &config, &fix).unwrap();
+        assert_eq!(fixed.file, file);
+        assert_eq!(
+            read(&root, &file),
+            text.replace(&format!("[{B}, {A}, {C}]"), &format!("[{B}, {C}]"))
+        );
+        let again = doctor(&root, &config);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(
+            again
+                .findings
+                .iter()
+                .all(|f| f.kind != FindingKind::DependencyError || f.file != file),
+            "{:?}",
+            again.findings
         );
     }
 
