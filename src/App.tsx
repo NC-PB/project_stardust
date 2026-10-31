@@ -15,6 +15,7 @@ import { ViewSwitch } from "@/components/view-switch";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
 import { useCommitStore } from "@/stores/commit-store";
+import { useHotkeyStore } from "@/stores/quick-capture-store";
 import { useTerminalStore } from "@/stores/terminal-store";
 import { useThemeStore } from "@/stores/theme-store";
 import { useViewStore } from "@/stores/view-store";
@@ -28,12 +29,16 @@ function App() {
   const refreshCommitsOnFocus = useCommitStore((state) => state.refreshOnFocus);
   const startTheme = useThemeStore((state) => state.start);
   const loadTerminal = useTerminalStore((state) => state.load);
+  const loadHotkey = useHotkeyStore((state) => state.load);
   const view = useViewStore((state) => state.view);
 
   useEffect(() => startTheme(), [startTheme]);
   useEffect(() => {
     void loadTerminal();
   }, [loadTerminal]);
+  useEffect(() => {
+    void loadHotkey();
+  }, [loadHotkey]);
 
   useEffect(() => {
     void loadVersion();

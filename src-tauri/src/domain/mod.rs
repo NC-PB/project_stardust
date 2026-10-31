@@ -6,6 +6,7 @@ pub mod agents_block;
 pub mod append_only;
 pub mod archive;
 pub mod board;
+pub mod capture;
 pub mod changelog;
 pub mod code_paths;
 pub mod columns;

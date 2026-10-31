@@ -151,6 +151,20 @@ export const commands = {
 	 *  (`S-make-task`). Returns the path of the new file.
 	 */
 	makeTask: (repoRoot: string, source: string, selection: string) => typedError<string, string>(__TAURI_INVOKE("make_task", { repoRoot, source, selection })),
+	/**
+	 *  Appends `text`, as one line, to the braindump of the repository at `repo_root`
+	 *  (`S-quick-capture`). Returns the braindump's path.
+	 */
+	appendToBraindump: (repoRoot: string, text: string) => typedError<string, string>(__TAURI_INVOKE("append_to_braindump", { repoRoot, text })),
+	/**
+	 *  Registers `hotkey` as the quick capture hotkey in place of the one before; empty turns it
+	 *  off. Returns the hotkey as registered, or why the system refused it.
+	 */
+	setCaptureHotkey: (hotkey: string) => typedError<string, string>(__TAURI_INVOKE("set_capture_hotkey", { hotkey })),
+	/**  Shows the quick capture window, as the hotkey does. */
+	openQuickCapture: () => typedError<null, string>(__TAURI_INVOKE("open_quick_capture")),
+	/**  Hides the window that calls it; the capture window hides itself after a capture. */
+	hideWindow: () => typedError<null, string>(__TAURI_INVOKE("hide_window")),
 	/**  The braindump and the spec file of the repository at `repo_root`, where they exist. */
 	sourceFiles: (repoRoot: string) => __TAURI_INVOKE<SourceFiles_Serialize>("source_files", { repoRoot }),
 	/**

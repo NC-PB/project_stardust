@@ -1,6 +1,8 @@
 mod commands;
 pub mod domain;
+mod quick_capture;
 
+use tauri::Manager;
 use tauri_specta::{Builder, collect_commands, collect_events};
 
 const BINDINGS_PATH: &str = "../src/bindings.ts";
@@ -46,6 +48,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::read_image,
             commands::import_image,
             commands::make_task,
+            commands::append_to_braindump,
+            commands::set_capture_hotkey,
+            commands::open_quick_capture,
+            commands::hide_window,
             commands::source_files,
             commands::fill_prompt,
             commands::search,
@@ -85,9 +91,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(quick_capture::HotkeyState::default())
         .manage(commands::WatchState::default())
         .manage(commands::SearchState::default())
         .invoke_handler(builder.invoke_handler())
+        // Closing the main window quits the app, also while the capture window exists, so
+        // nothing keeps running in the background (Constraints).
+        .on_window_event(|window, event| {
+            if window.label() == quick_capture::MAIN_LABEL
+                && matches!(event, tauri::WindowEvent::Destroyed)
+            {
+                window.app_handle().exit(0);
+            }
+        })
         .setup(move |app| {
             builder.mount_events(app);
             Ok(())

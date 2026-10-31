@@ -13,10 +13,11 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, archive, board, changelog, config, doctor, files, gate,
+    agents_block, append_only, archive, board, capture, changelog, config, doctor, files, gate,
     gitattributes, ids, images, init, link_lookup, link_repair, links, make_task, prompts,
     questions, repo_watch, search, spec, spec_split, task, templates, terminal, watch,
 };
+use crate::quick_capture;
 
 #[tauri::command]
 #[specta::specta]
@@ -405,6 +406,43 @@ pub fn make_task(repo_root: String, source: String, selection: String) -> Result
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     make_task::make_task(repo_root, &config, Path::new(&source), &selection, &today)
         .map(|path| path.to_string_lossy().replace('\\', "/"))
+}
+
+/// Appends `text`, as one line, to the braindump of the repository at `repo_root`
+/// (`S-quick-capture`). Returns the braindump's path.
+#[tauri::command]
+#[specta::specta]
+pub fn append_to_braindump(repo_root: String, text: String) -> Result<String, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    capture::append_to_braindump(repo_root, &config, &text)
+        .map(|path| path.to_string_lossy().replace('\\', "/"))
+}
+
+/// Registers `hotkey` as the quick capture hotkey in place of the one before; empty turns it
+/// off. Returns the hotkey as registered, or why the system refused it.
+#[tauri::command]
+#[specta::specta]
+pub fn set_capture_hotkey(
+    app: AppHandle,
+    state: tauri::State<'_, quick_capture::HotkeyState>,
+    hotkey: String,
+) -> Result<String, String> {
+    quick_capture::set_hotkey(&app, &state, &hotkey)
+}
+
+/// Shows the quick capture window, as the hotkey does.
+#[tauri::command]
+#[specta::specta]
+pub fn open_quick_capture(app: AppHandle) -> Result<(), String> {
+    quick_capture::show_window(&app)
+}
+
+/// Hides the window that calls it; the capture window hides itself after a capture.
+#[tauri::command]
+#[specta::specta]
+pub fn hide_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|err| err.to_string())
 }
 
 /// The braindump and the spec file of the repository at `repo_root`, where they exist.

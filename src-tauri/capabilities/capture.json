@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "Capability for the quick capture window: reads the app settings and follows the theme",
+  "windows": [
+    "capture"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme",
+    "store:default"
+  ]
+}
