@@ -19,7 +19,7 @@ The doctor reports `depends_on` ids that no task file carries (task [20261031-03
 ## Implementation notes
 - Spec and code agree on `parent`: `task.rs` reads it as an optional task id (an invalid id is a frontmatter issue), `cardsOf` in `src/lib/board.ts` counts children by it (`S-subtasks`). No proposal needed.
 - Done: new kind `ParentError` after `DependencyError` in `src-tauri/src/domain/doctor.rs` (`parent_error`), bindings regenerated, labels in `src/lib/doctor.ts` and `src/lib/stale-view.ts` with tests; tests `a_parent_on_itself_or_unknown_is_reported_without_a_fix`, a parent error in `reports_every_kind_with_file_and_line`, parents in the phase 3 exit test.
-- Open: nothing. Found on the way: the board counts a self parent as the card's own sub-task (inbox task [20261031-035143-3197](../inbox/20261031-035143-3197-a-parent-on-itself-is-no-sub-task.md)).
+- Open: nothing. Found on the way: the board counts a self parent as the card's own sub-task (inbox task [20261031-035143-3197](20261031-035143-3197-a-parent-on-itself-is-no-sub-task.md)).
 
 ## Result
 The doctor reports a `parent` that is the task's own id, or that no task file carries in the columns or the archive's month folders (the filename id, else the frontmatter id), as a new finding kind `ParentError` ("Parent errors" in the panel, "Parent error" in the Stale view), one finding per task at the line of `parent`, without a fix (D-20261031-035143-pr9u). Unknown parents are not checked when a column or month folder could not be read; a self parent always is. An invalid `parent` value stays a frontmatter error only.

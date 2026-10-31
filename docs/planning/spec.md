@@ -126,7 +126,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Show title, tags, age since last change, sub-task count, blocked marker, new-since-last-visit marker, commit info (`S-commit-info`).
     - Commit info: `n commits · YYYY-MM-DD`, the number of commits mentioning the task id and the date of the newest, with an explanation on hover; nothing when no commit mentions the id or git cannot be read (`S-commit-info`).
     - Age is the time since the file's last change on disk (`modified` of a task), in the largest fitting unit: now, m, h, d, mo, y; recomputed every minute.
-    - The sub-task count counts tasks in any column whose `parent` is the card's id (`S-subtasks`).
+    - The sub-task count counts the other tasks in any column whose `parent` is the card's id (`S-subtasks`).
     - Blocked: a `depends_on` id whose task is in a column other than the terminal one (`S-dependencies`); the marker names the ids on hover. An id found in no column (archived or deleted) does not block (D-20261030-231221-spj4).
     - New: the file changed after the previous visit of the project. A visit is recorded when the project is opened and with every batch seen while it is open; last visits are kept per repository in the app settings, never in the repository. On the first visit nothing is new (D-20261030-231221-spj4).
     - Implemented in `src/lib/board.ts` (`cardsOf`, `ageLabel`, `isNewSince`), `src/components/board.tsx`; commit info from `src/stores/commit-store.ts` and `src/lib/commit-info.ts` (`commitLabel`).
@@ -151,7 +151,7 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/make_task.rs`; commands `make_task(repo_root, source, selection)` returning the new path, `source_files(repo_root)`.
   - [x] Sub-tasks `S-subtasks`
     - A task with `parent: <id>` is a child. The parent card shows the child count.
-    - `parent` is read as one task id; any other value is a frontmatter error and the task is no child (`S-task-format`). The child count is counted in `cardsOf` (`src/lib/board.ts`).
+    - `parent` is read as one task id; any other value is a frontmatter error and the task is no child (`S-task-format`). The child count is counted in `cardsOf` (`src/lib/board.ts`); a task whose `parent` is its own id is not counted as its own child, as a dependency on itself does not block (D-20261031-033553-2skc).
     - A `parent` that is the task's own id, or that no task file carries in the columns or the archive, is reported by the doctor as a parent error without a fix (`S-doctor`, D-20261031-035143-pr9u).
   - [x] Dependencies `S-dependencies`
     - A task whose `depends_on` contains a task outside the terminal column is shown as blocked. A dependency on the task's own id never blocks, as in the board sort (D-20261031-033553-2skc); the doctor reports it as a dependency error and offers to remove it (`S-doctor`, D-20261031-034053-k2rd). An id that no task file carries, in the columns or the archive, does not block either (D-20261030-231221-spj4); the doctor reports it as a dependency error without a fix (D-20261031-034606-n8vb).

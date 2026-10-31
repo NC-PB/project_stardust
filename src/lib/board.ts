@@ -159,7 +159,7 @@ export function cardsOf(
   for (const column of columns) {
     for (const task of column.tasks) {
       if (task.id !== null) columnOf.set(task.id, column.name);
-      if (task.parent !== null)
+      if (task.parent !== null && task.parent !== task.id)
         subtasks.set(task.parent, (subtasks.get(task.parent) ?? 0) + 1);
     }
   }

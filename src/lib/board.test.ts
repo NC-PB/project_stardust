@@ -270,6 +270,14 @@ describe("cardsOf", () => {
     expect(card("b")?.blockedBy).toEqual([]);
   });
 
+  it("does not count a task as its own sub-task", () => {
+    const columns = [
+      column("next", [task("a", { parent: "a" }), task("b", { parent: "a" })]),
+    ];
+    const cards = cardsOf(columns, "done", null, NOW).get("next") ?? [];
+    expect(cards.find((card) => card.id === "a")?.subtasks).toBe(1);
+  });
+
   it("does not block a task on itself", () => {
     const columns = [
       column("next", [task("a", { depends_on: ["a", "b"] }), task("b")]),
