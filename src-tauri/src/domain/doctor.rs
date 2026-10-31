@@ -22,7 +22,7 @@ use super::ids::{self, IdKind};
 use super::link_repair::{self, BrokenReason, RepairScope};
 use super::links::{self, Move, MoveLinks, components, local_path, resolve};
 use super::spec::{self, Node};
-use super::task::{self, FieldValue, NO_FILENAME_ID, Task};
+use super::task::{self, FieldValue, MISSING_FIELD, NO_FILENAME_ID, Task};
 
 /// What a finding is about, in the order the doctor lists them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Type)]
@@ -283,27 +283,24 @@ fn id_and_frontmatter(
     let text = file.text.as_deref();
     let name_id = ids::parse_task_filename(&task.file_name).map(|name| name.id);
     let mut findings = Vec::new();
-    // `id` is required (`S-task-format`), but the reader takes the filename id without it. A
-    // file without frontmatter is a frontmatter error; without a filename id the rename below
-    // writes the frontmatter id too.
-    if let (Some(id), Some(text)) = (&name_id, text)
-        && text.starts_with("---")
-        && task.issues.iter().all(|issue| issue.key.is_some())
-        && find_field(text, "id").is_none()
-    {
-        findings.push(Finding {
-            kind: FindingKind::MissingId,
-            file: file.file.clone(),
-            line: 1,
-            message: "the frontmatter has no `id`".into(),
-            fix: Some(DoctorFix::SetId {
-                file: file.file.clone(),
-                id: id.clone(),
-            }),
-        });
-    }
+    let readable = read_as_whole(task);
     for issue in &task.issues {
         match (issue.key.as_deref(), &name_id) {
+            // Without a filename id the rename of the filename finding writes the id too.
+            (Some("id"), None) if issue.message == MISSING_FIELD => {}
+            // `id` is required (`S-task-format`). The filename id is written only into
+            // frontmatter that was read as a whole; otherwise it is reported without a fix,
+            // like the other fields of that file.
+            (Some("id"), Some(id)) if issue.message == MISSING_FIELD => findings.push(Finding {
+                kind: FindingKind::MissingId,
+                file: file.file.clone(),
+                line: field_line(text, "id"),
+                message: "the frontmatter has no `id`".into(),
+                fix: readable.then(|| DoctorFix::SetId {
+                    file: file.file.clone(),
+                    id: id.clone(),
+                }),
+            }),
             (None, _) if issue.message == NO_FILENAME_ID => {
                 // The frontmatter id is kept when no other task file carries it.
                 let unique = task
@@ -350,6 +347,14 @@ fn id_and_frontmatter(
     findings
 }
 
+/// Whether the frontmatter of `task` was read as a whole: no issue for the file except a
+/// filename without id.
+fn read_as_whole(task: &Task) -> bool {
+    task.issues
+        .iter()
+        .all(|issue| issue.key.is_some() || issue.message == NO_FILENAME_ID)
+}
+
 /// The finding for `file`, one of several task files carrying `id`.
 fn duplicate(file: &TaskFile, id: &str, files: &[&TaskFile], fresh: &mut FreshIds) -> Finding {
     let others: Vec<&str> = files
@@ -383,13 +388,7 @@ fn untraced(repo_root: &Path, config: &Config, tasks: &[TaskFile]) -> Vec<Findin
     let mut known = HashSet::new();
     collect_node_ids(&spec.structure, &mut known);
     let mut findings = Vec::new();
-    let readable = |file: &&TaskFile| {
-        file.task
-            .issues
-            .iter()
-            .all(|issue| issue.key.is_some() || issue.message == NO_FILENAME_ID)
-    };
-    for file in tasks.iter().filter(readable) {
+    for file in tasks.iter().filter(|file| read_as_whole(&file.task)) {
         let line = field_line(file.text.as_deref(), "implements");
         let mut entries: Vec<&str> = Vec::new();
         for entry in file.task.implements.iter().map(|e| e.trim()) {
@@ -821,6 +820,77 @@ mod tests {
         );
         assert_eq!(report.task_files, 10);
         assert!(report.problems.is_empty());
+    }
+
+    #[test]
+    fn reports_a_missing_frontmatter_id_once_from_the_reader() {
+        let (root, config) = scratch();
+        let p = "docs/planning";
+        put(&root, &format!("{p}/spec.md"), SPEC);
+        let fields = "title: T\ncreated: 2026-10-01\nimplements: [S-feature]\n";
+        put(
+            &root,
+            &format!("{p}/next/{A}-no-id.md"),
+            &format!("---\n{fields}---\n"),
+        );
+        put(
+            &root,
+            &format!("{p}/next/{B}-empty-id.md"),
+            &format!("---\nid:\n{fields}---\n"),
+        );
+        put(
+            &root,
+            &format!("{p}/next/loose.md"),
+            &format!("---\n{fields}---\n"),
+        );
+        put(&root, &format!("{p}/done/{C}-text.md"), "Just text\n");
+
+        let report = doctor(&root, &config);
+        let missing: Vec<(String, u32, Option<DoctorFix>)> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::MissingId)
+            .map(|f| (f.file.clone(), f.line, f.fix.clone()))
+            .collect();
+        let set_id = |file: String, id: &str| {
+            Some(DoctorFix::SetId {
+                file,
+                id: id.into(),
+            })
+        };
+        let empty = format!("{p}/next/{B}-empty-id.md");
+        assert_eq!(missing.len(), 4, "{missing:?}");
+        // Frontmatter that was not read as a whole gets no fix, as its other fields.
+        assert_eq!(missing[0], (format!("{p}/done/{C}-text.md"), 1, None));
+        assert_eq!(
+            missing[1],
+            (
+                format!("{p}/next/{A}-no-id.md"),
+                1,
+                set_id(format!("{p}/next/{A}-no-id.md"), A)
+            )
+        );
+        assert_eq!(missing[2], (empty.clone(), 2, set_id(empty.clone(), B)));
+        // Without a filename id the rename writes the id: no second finding.
+        assert_eq!(missing[3].0, format!("{p}/next/loose.md"));
+        assert!(matches!(missing[3].2, Some(DoctorFix::Rename { .. })));
+        let frontmatter: Vec<&str> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::FrontmatterError)
+            .map(|f| f.message.as_str())
+            .collect();
+        assert_eq!(frontmatter.len(), 3, "{frontmatter:?}");
+        assert!(frontmatter.iter().all(|m| !m.contains("`id`")));
+
+        apply_fix(&root, &config, &set_id(empty.clone(), B).unwrap()).unwrap();
+        let again = doctor(&root, &config);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(
+            again.findings.iter().all(|f| f.file != empty),
+            "{:?}",
+            again.findings
+        );
     }
 
     #[test]
