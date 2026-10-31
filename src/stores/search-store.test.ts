@@ -15,7 +15,7 @@ describe("useSearchStore", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     search.mockReset();
-    useSearchStore.getState().clear();
+    useSearchStore.getState().reset("/repo");
   });
 
   afterEach(() => {
@@ -29,7 +29,7 @@ describe("useSearchStore", () => {
     useSearchStore.getState().setQuery("board");
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     expect(search).toHaveBeenCalledTimes(1);
-    expect(search).toHaveBeenCalledWith("board", SEARCH_LIMIT);
+    expect(search).toHaveBeenCalledWith("/repo", "board", SEARCH_LIMIT);
     expect(useSearchStore.getState().hits).toEqual([hit("a.md")]);
   });
 

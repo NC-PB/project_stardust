@@ -159,16 +159,16 @@ export const commands = {
 	 */
 	fillPrompt: (repoRoot: string, prompt: Prompt, input: PromptInput_Deserialize) => typedError<string, string>(__TAURI_INVOKE("fill_prompt", { repoRoot, prompt, input })),
 	/**
-	 *  Files under the planning root of the watched repository containing every word of `query`,
-	 *  best first, at most `limit`.
+	 *  Files under the planning root of the watched repository at `repo_root` containing every
+	 *  word of `query`, best first, at most `limit`. None when the repository is not watched.
 	 */
-	search: (query: string, limit: number) => typedError<SearchHit[], string>(__TAURI_INVOKE("search", { query, limit })),
+	search: (repoRoot: string, query: string, limit: number) => typedError<SearchHit[], string>(__TAURI_INVOKE("search", { repoRoot, query, limit })),
 	/**
-	 *  The files under the planning root of the watched repository that a link can be made to,
-	 *  by path, with title and id (`S-links`). Taken from the search index, so they follow
-	 *  watcher batches.
+	 *  The files under the planning root of the watched repository at `repo_root` that a link can
+	 *  be made to, by path, with title and id (`S-links`). Taken from the search index, so they
+	 *  follow watcher batches.
 	 */
-	linkCandidates: () => typedError<LinkCandidate_Serialize[], string>(__TAURI_INVOKE("link_candidates")),
+	linkCandidates: (repoRoot: string) => typedError<LinkCandidate_Serialize[], string>(__TAURI_INVOKE("link_candidates", { repoRoot })),
 	/**
 	 *  The markdown files of the repository at `repo_root` outside its planning root that a link
 	 *  can be made to (`S-links`). Read again when `RepositoryChanged` says markdown changed.
@@ -211,8 +211,9 @@ export const commands = {
 	 *  `PlanningChanged` events, and the rest of the repository coarsely, sending
 	 *  `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 	 *  watcher did not pair are repaired by id, and a config change regenerates the planner
-	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
-	 *  root changed. First repairs broken links in the whole repository by id and returns what
+	 *  block, before the event is sent. Stops the previous watcher of this repository; watchers of
+	 *  other repositories keep running (`S-multi-project`). Call again after the planning root
+	 *  changed. First repairs broken links in the whole repository by id and returns what
 	 *  it did, with the reason the repository watcher could not start, if it could not.
 	 * 
 	 *  Async, and the walks run on a blocking thread, so a large repository does not freeze the
@@ -221,8 +222,11 @@ export const commands = {
 	 *  `unwatch_project` while it walks installs nothing.
 	 */
 	watchProject: (repoRoot: string) => typedError<ProjectOpened_Serialize, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
-	/**  Stops watching and forgets the search index. */
-	unwatchProject: () => typedError<null, string>(__TAURI_INVOKE("unwatch_project")),
+	/**
+	 *  Stops watching the repository at `repo_root` and forgets its search index, when its tab is
+	 *  closed (`S-multi-project`). Other repositories stay watched.
+	 */
+	unwatchProject: (repoRoot: string) => typedError<null, string>(__TAURI_INVOKE("unwatch_project", { repoRoot })),
 	/**
 	 *  The relative links in the repository at `repo_root` that do not resolve and cannot be
 	 *  repaired by id (`S-links`), for the doctor (`S-doctor`). Writes nothing.
@@ -1078,6 +1082,8 @@ export type PlanningChanged = PlanningChanged_Serialize | PlanningChanged_Deseri
 
 /**  Sent once per burst of changes under the planning root or to the config. */
 export type PlanningChanged_Deserialize = {
+	/**  The repository root as given to `watch_project` (`S-multi-project`). */
+	repo_root: string,
 	batch: ChangeBatch,
 	/**  Files rewritten because the config changed and the planner block was regenerated. */
 	block_written: string[],
@@ -1097,6 +1103,8 @@ export type PlanningChanged_Deserialize = {
 
 /**  Sent once per burst of changes under the planning root or to the config. */
 export type PlanningChanged_Serialize = {
+	/**  The repository root as given to `watch_project` (`S-multi-project`). */
+	repo_root: string,
 	batch: ChangeBatch,
 	/**  Files rewritten because the config changed and the planner block was regenerated. */
 	block_written: string[],
@@ -1225,6 +1233,8 @@ export type Question_Serialize = {
  *  `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
  */
 export type RepositoryChanged = {
+	/**  The repository root as given to `watch_project` (`S-multi-project`). */
+	repo_root: string,
 	change: OutsideChange,
 };
 

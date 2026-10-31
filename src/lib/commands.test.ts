@@ -20,6 +20,8 @@ const keys = (key: string, mods: Partial<Record<string, boolean>> = {}) => ({
 
 const NOTHING_OPEN: CommandContext = {
   repository: false,
+  tabs: 0,
+  closedRecent: false,
   needsInit: false,
   projectBar: false,
   braindump: false,
@@ -36,6 +38,7 @@ const NOTHING_OPEN: CommandContext = {
 const READY: CommandContext = {
   ...NOTHING_OPEN,
   repository: true,
+  tabs: 1,
   projectBar: true,
   braindump: true,
   specFile: true,
@@ -59,7 +62,8 @@ const TASK_OPEN: CommandContext = {
 /** The states of the app a user passes through, from the start screen to an open task. */
 const STATES: CommandContext[] = [
   NOTHING_OPEN,
-  { ...NOTHING_OPEN, repository: true, needsInit: true },
+  { ...NOTHING_OPEN, closedRecent: true },
+  { ...NOTHING_OPEN, repository: true, tabs: 1, needsInit: true },
   READY,
   TASK_OPEN,
   {
@@ -74,7 +78,7 @@ const STATES: CommandContext[] = [
       proposalUndo: false,
     },
   },
-  { ...READY, view: "stale" },
+  { ...READY, view: "stale", tabs: 2, closedRecent: true },
 ];
 
 /** The registered commands that no state of the app lists in the palette. */

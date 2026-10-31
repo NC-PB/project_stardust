@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const settings = new Map<string, unknown>();
-const pick = vi.fn<() => Promise<string | null>>();
 const loadConfig = vi.fn();
 const initProject = vi.fn();
 const addImagesToGitignore = vi.fn();
@@ -86,7 +85,6 @@ vi.mock("./board-store", () => ({
     getState: () => ({ load: loadBoard, apply: applyBatch, clear: clearBoard }),
   },
 }));
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: () => pick() }));
 vi.mock("./settings", () => ({
   readSetting: async (key: string) => settings.get(key),
   writeSetting: async (key: string, value: unknown) => {
@@ -129,26 +127,11 @@ describe("useProjectStore", () => {
     });
   });
 
-  it("opens a picked folder and remembers it in the settings", async () => {
-    pick.mockResolvedValue("/repo");
-    await useProjectStore.getState().choose();
+  it("opens a repository without writing the settings", async () => {
+    await useProjectStore.getState().openRepository("/repo");
     expect(useProjectStore.getState().repoRoot).toBe("/repo");
     expect(useProjectStore.getState().config).toEqual({ found: false });
-    expect(settings.get("repoRoot")).toBe("/repo");
-  });
-
-  it("does nothing when the picker is cancelled", async () => {
-    pick.mockResolvedValue(null);
-    await useProjectStore.getState().choose();
-    expect(useProjectStore.getState().repoRoot).toBeNull();
-    expect(loadConfig).not.toHaveBeenCalled();
-  });
-
-  it("restores the remembered repository", async () => {
-    settings.set("repoRoot", "/saved");
-    await useProjectStore.getState().restore();
-    expect(loadConfig).toHaveBeenCalledWith("/saved");
-    expect(useProjectStore.getState().repoRoot).toBe("/saved");
+    expect(settings.size).toBe(0);
   });
 
   it("runs init, keeps its report and reloads the config", async () => {
@@ -372,6 +355,7 @@ describe("useProjectStore", () => {
         ],
         config_changed: false,
       },
+      repo_root: "/repo",
       block_written: [],
       block_error: null,
       links: NO_LINKS,
@@ -387,6 +371,7 @@ describe("useProjectStore", () => {
 
     await useProjectStore.getState().receive({
       batch: { changes: [], config_changed: true },
+      repo_root: "/repo",
       block_written: ["AGENTS.md"],
       block_error: null,
       links: NO_LINKS,
@@ -408,6 +393,7 @@ describe("useProjectStore", () => {
   it("shows why the planner block could not be regenerated", async () => {
     await useProjectStore.getState().receive({
       batch: { changes: [], config_changed: true },
+      repo_root: "/repo",
       block_written: [],
       block_error: "AGENTS.md: markers out of order",
       links: NO_LINKS,
@@ -433,6 +419,7 @@ describe("useProjectStore", () => {
         changes: [{ kind: "moved", id: "x", from: "a", to: "b" }],
         config_changed: false,
       },
+      repo_root: "/repo",
       block_written: [],
       block_error: null,
       links,
@@ -446,6 +433,7 @@ describe("useProjectStore", () => {
         changes: [{ kind: "modified", path: "docs/planning/next/b.md" }],
         config_changed: false,
       },
+      repo_root: "/repo",
       block_written: [],
       block_error: null,
       links: NO_LINKS,
@@ -488,6 +476,7 @@ describe("useProjectStore", () => {
         changes: [{ kind: "created", path: "docs/planning/done/a.md" }],
         config_changed: false,
       },
+      repo_root: "/repo",
       block_written: [],
       block_error: null,
       links: NO_LINKS,
@@ -501,6 +490,7 @@ describe("useProjectStore", () => {
         changes: [{ kind: "modified", path: "README.md" }],
         config_changed: false,
       },
+      repo_root: "/repo",
       block_written: [],
       block_error: null,
       links: NO_LINKS,

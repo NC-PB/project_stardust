@@ -3,6 +3,8 @@ import { commands, type SearchHit } from "@/bindings";
 import { SEARCH_DEBOUNCE_MS, SEARCH_LIMIT } from "@/lib/search";
 
 interface SearchState {
+  /** The repository searched: the shown tab's (`S-multi-project`). */
+  repoRoot: string | null;
   query: string;
   hits: SearchHit[];
   error: string | null;
@@ -10,7 +12,10 @@ interface SearchState {
   setQuery: (query: string) => void;
   /** Runs the current query now, for example after files changed on disk. */
   refresh: () => Promise<void>;
+  /** Clears the query and results. */
   clear: () => void;
+  /** Clears everything and searches `repoRoot` from now on. */
+  reset: (repoRoot: string | null) => void;
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -19,6 +24,7 @@ let sent = 0;
 
 /** Full text search over the planning root of the open project (`S-search-fulltext`). */
 export const useSearchStore = create<SearchState>()((set, get) => ({
+  repoRoot: null,
   query: "",
   hits: [],
   error: null,
@@ -35,12 +41,12 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
   },
 
   refresh: async () => {
-    const { query } = get();
-    if (query.trim() === "") return;
+    const { query, repoRoot } = get();
+    if (query.trim() === "" || repoRoot === null) return;
     sent += 1;
     const mine = sent;
-    const result = await commands.search(query, SEARCH_LIMIT);
-    if (mine !== sent) return;
+    const result = await commands.search(repoRoot, query, SEARCH_LIMIT);
+    if (mine !== sent || get().repoRoot !== repoRoot) return;
     set(
       result.status === "ok"
         ? { hits: result.data, error: null }
@@ -52,5 +58,10 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
     clearTimeout(timer);
     sent += 1;
     set({ query: "", hits: [], error: null });
+  },
+
+  reset: (repoRoot) => {
+    get().clear();
+    set({ repoRoot });
   },
 }));

@@ -31,7 +31,8 @@ export const useCommitStore = create<CommitState>()((set, get) => ({
     const mine = sent;
     set({ repoRoot });
     const info = await commands.commitInfo(repoRoot);
-    if (mine === sent) set({ byId: commitsById(info) });
+    if (mine === sent && get().repoRoot === repoRoot)
+      set({ byId: commitsById(info) });
   },
 
   refresh: async () => {

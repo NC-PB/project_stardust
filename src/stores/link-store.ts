@@ -64,7 +64,7 @@ export const useLinkStore = create<LinkState>()((set, get) => {
   const loadInside = async (repoRoot: string) => {
     sentInside += 1;
     const mine = sentInside;
-    const result = await commands.linkCandidates();
+    const result = await commands.linkCandidates(repoRoot);
     if (mine === sentInside && get().repoRoot === repoRoot)
       setCandidates({ inside: result.status === "ok" ? result.data : [] });
   };

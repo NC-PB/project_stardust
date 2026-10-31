@@ -25,7 +25,8 @@ export const useGateStore = create<GateState>()((set) => ({
       return;
     }
     const status = await commands.gateStatus(repoRoot);
-    if (mine === sent) set({ status });
+    if (mine === sent && useSpecStore.getState().repoRoot === repoRoot)
+      set({ status });
   },
 }));
 

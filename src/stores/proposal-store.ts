@@ -36,7 +36,7 @@ export const useProposalStore = create<ProposalState>()((set, get) => ({
     const mine = sent;
     set({ repoRoot, config });
     const proposals = await commands.listProposals(repoRoot);
-    if (mine === sent) set({ proposals });
+    if (mine === sent && get().repoRoot === repoRoot) set({ proposals });
   },
 
   apply: async (batch) => {

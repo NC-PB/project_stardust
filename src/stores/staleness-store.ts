@@ -39,7 +39,7 @@ export const useStalenessStore = create<StalenessState>()((set, get) => ({
     const mine = sent;
     set({ repoRoot, config });
     const missingPaths = await commands.missingCodePaths(repoRoot);
-    if (mine === sent) set({ missingPaths });
+    if (mine === sent && get().repoRoot === repoRoot) set({ missingPaths });
   },
 
   apply: async (batch) => {

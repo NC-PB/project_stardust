@@ -41,7 +41,8 @@ export const useStaleViewStore = create<StaleViewState>()((set, get) => ({
       set({ repoRoot, report: null, checkedAt: null });
     set({ checking: true });
     const report = await commands.doctor(repoRoot);
-    if (mine === sent) set({ report, checking: false, checkedAt: Date.now() });
+    if (mine === sent && get().repoRoot === repoRoot)
+      set({ report, checking: false, checkedAt: Date.now() });
   },
 
   follow: (repoRoot) => {
@@ -56,9 +57,15 @@ export const useStaleViewStore = create<StaleViewState>()((set, get) => ({
       }, RECHECK_DELAY_MS);
     };
     const unlisten = [
-      events.planningChanged.listen(later),
+      events.planningChanged.listen((event) => {
+        if (event.payload.repo_root === repoRoot) later();
+      }),
       events.repositoryChanged.listen((event) => {
-        if (event.payload.change.markdown) later();
+        if (
+          event.payload.repo_root === repoRoot &&
+          event.payload.change.markdown
+        )
+          later();
       }),
     ];
     void get().check(repoRoot);
