@@ -1,3 +1,4 @@
+import { ChangelogButton, ChangelogPanel } from "@/components/changelog";
 import {
   GitattributesButton,
   GitattributesPanel,
@@ -95,6 +96,7 @@ export function ProjectPanel() {
               <SplitSpecButton repoRoot={repoRoot} />
             )}
             {repoRoot !== null && <GitattributesButton repoRoot={repoRoot} />}
+            {repoRoot !== null && <ChangelogButton repoRoot={repoRoot} />}
           </div>
         </div>
       )}
@@ -103,6 +105,9 @@ export function ProjectPanel() {
           <SplitSpecPanel repoRoot={repoRoot} />
           <GitattributesPanel repoRoot={repoRoot} />
         </>
+      )}
+      {status === "ready" && repoRoot !== null && (
+        <ChangelogPanel repoRoot={repoRoot} />
       )}
 
       {initReport && (
