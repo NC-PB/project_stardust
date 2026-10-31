@@ -6,11 +6,17 @@ import {
   commands,
   events,
   type InitReport,
+  type LinkRepair,
   type MoveLinks,
   type PlanningChanged_Serialize,
   type SourceFiles,
 } from "@/bindings";
-import { hasLinkNotice, type Offer, offersOf } from "@/lib/project";
+import {
+  hasLinkNotice,
+  hasRepairNotice,
+  type Offer,
+  offersOf,
+} from "@/lib/project";
 import { useBoardStore } from "./board-store";
 import { useEditorStore } from "./editor-store";
 import { useProposalStore } from "./proposal-store";
@@ -40,6 +46,12 @@ interface ProjectState {
    * until dismissed or another repository opens, since the rewrites bring a batch of their own.
    */
   links: MoveLinks | null;
+  /**
+   * The last links repaired by id, when the project was watched or after a batch, or the
+   * problems doing so (`S-links`). Shown and dismissed with `links`.
+   */
+  repair: LinkRepair | null;
+  /** Dismisses the link notice: `links` and `repair`. */
   dismissLinks: () => void;
   /** Subscribes to changes on disk; returns the function that unsubscribes. */
   listen: () => Promise<UnlistenFn>;
@@ -71,6 +83,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     set({ sources: await commands.sourceFiles(repoRoot) });
     const watched = await commands.watchProject(repoRoot);
     if (watched.status === "error") set({ error: watched.error });
+    else if (hasRepairNotice(watched.data)) set({ repair: watched.data });
     await Promise.all([
       useBoardStore
         .getState()
@@ -93,6 +106,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     lastChange: null,
     revision: 0,
     links: null,
+    repair: null,
 
     listen: () =>
       events.planningChanged.listen((event) => get().receive(event.payload)),
@@ -103,6 +117,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         revision: state.revision + 1,
         error: change.block_error,
         links: hasLinkNotice(change.links) ? change.links : state.links,
+        repair: hasRepairNotice(change.repair) ? change.repair : state.repair,
       }));
       const { repoRoot } = get();
       // The planning root may have moved, so the watcher restarts with the new config.
@@ -120,7 +135,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         ]);
     },
 
-    dismissLinks: () => set({ links: null }),
+    dismissLinks: () => set({ links: null, repair: null }),
 
     restore: async () => {
       const repoRoot = await readSetting<string>(REPO_ROOT_SETTING);
@@ -144,6 +159,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         sources: null,
         lastChange: null,
         links: null,
+        repair: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);

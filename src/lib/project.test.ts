@@ -3,7 +3,9 @@ import type { Config, ConfigReport_Serialize, InitReport } from "@/bindings";
 import {
   describeBatch,
   describeLinks,
+  describeRepair,
   hasLinkNotice,
+  hasRepairNotice,
   offerLabel,
   offersOf,
   projectStatus,
@@ -96,5 +98,44 @@ describe("describeLinks", () => {
     expect(hasLinkNotice({ rewritten: [file("a.md")], problems: [] })).toBe(
       true,
     );
+  });
+});
+
+describe("describeRepair", () => {
+  const repaired = {
+    file: "docs/planning/note.md",
+    changes: [
+      { line: 3, old: "next/a.md", new: "done/a.md" },
+      { line: 5, old: "inbox/b.md#x", new: "done/2026-10/b.md#x" },
+    ],
+  };
+
+  it("names each repaired link with its file and new target", () => {
+    expect(
+      describeRepair({ repaired: [repaired], unresolved: [], problems: [] }),
+    ).toEqual([
+      "Link repaired in docs/planning/note.md, line 3: next/a.md → done/a.md",
+      "Link repaired in docs/planning/note.md, line 5: inbox/b.md#x → done/2026-10/b.md#x",
+    ]);
+  });
+
+  it("has a notice for repairs and problems, not for unresolved links", () => {
+    const unresolved = [
+      {
+        file: "a.md",
+        line: 1,
+        target: "x.md",
+        reason: { kind: "no_id" as const },
+      },
+    ];
+    expect(hasRepairNotice({ repaired: [], unresolved, problems: [] })).toBe(
+      false,
+    );
+    expect(
+      hasRepairNotice({ repaired: [], unresolved: [], problems: ["x"] }),
+    ).toBe(true);
+    expect(
+      hasRepairNotice({ repaired: [repaired], unresolved: [], problems: [] }),
+    ).toBe(true);
   });
 });
