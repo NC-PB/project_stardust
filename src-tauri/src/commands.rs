@@ -12,8 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts,
-    questions, search, spec, spec_split, task, templates, terminal, watch,
+    agents_block, append_only, board, changelog, config, files, gate, ids, init, make_task,
+    prompts, questions, search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -140,6 +140,40 @@ pub fn split_spec(repo_root: String) -> Result<spec_split::SplitReport, String> 
     let repo_root = Path::new(&repo_root);
     let config = config::load_config(repo_root).config;
     spec_split::split_spec(repo_root, &config)
+}
+
+/// The git tags of the repository at `repo_root` a changelog can start from, from read-only
+/// `git log` (`S-changelog`). Unavailable without git or outside a repository.
+#[tauri::command]
+#[specta::specta]
+pub fn changelog_tags(repo_root: String) -> changelog::TagList {
+    changelog::list_tags(Path::new(&repo_root))
+}
+
+/// The changelog entries for the tasks finished since `since` and `CHANGELOG.md` with them at
+/// the top (`S-changelog`). Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn draft_changelog(
+    repo_root: String,
+    since: changelog::Since,
+) -> Result<changelog::ChangelogDraft, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    changelog::draft_changelog(repo_root, &config, &since, &today)
+}
+
+/// Writes `text`, a previewed draft, to `CHANGELOG.md` of the repository at `repo_root`, if the
+/// file still holds `expected` (`null`: it still does not exist) and `text` keeps all of it.
+#[tauri::command]
+#[specta::specta]
+pub fn write_changelog(
+    repo_root: String,
+    expected: Option<String>,
+    text: String,
+) -> Result<(), String> {
+    changelog::write_changelog(Path::new(&repo_root), expected.as_deref(), &text)
 }
 
 /// Every task file directly in the column folder `dir`, broken ones included.

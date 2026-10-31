@@ -1,3 +1,4 @@
+import { ChangelogButton, ChangelogPanel } from "@/components/changelog";
 import { SplitSpecButton, SplitSpecPanel } from "@/components/spec-split";
 import { Button } from "@/components/ui/button";
 import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
@@ -90,11 +91,15 @@ export function ProjectPanel() {
             {sources?.spec && repoRoot !== null && (
               <SplitSpecButton repoRoot={repoRoot} />
             )}
+            {repoRoot !== null && <ChangelogButton repoRoot={repoRoot} />}
           </div>
         </div>
       )}
       {status === "ready" && repoRoot !== null && (
         <SplitSpecPanel repoRoot={repoRoot} />
+      )}
+      {status === "ready" && repoRoot !== null && (
+        <ChangelogPanel repoRoot={repoRoot} />
       )}
 
       {initReport && (

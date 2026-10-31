@@ -53,6 +53,21 @@ export const commands = {
 	 *  the OS trash (`S-spec-split`). Refuses, changing nothing, when the plan has blockers.
 	 */
 	splitSpec: (repoRoot: string) => typedError<SplitReport_Serialize, string>(__TAURI_INVOKE("split_spec", { repoRoot })),
+	/**
+	 *  The git tags of the repository at `repo_root` a changelog can start from, from read-only
+	 *  `git log` (`S-changelog`). Unavailable without git or outside a repository.
+	 */
+	changelogTags: (repoRoot: string) => __TAURI_INVOKE<TagList_Serialize>("changelog_tags", { repoRoot }),
+	/**
+	 *  The changelog entries for the tasks finished since `since` and `CHANGELOG.md` with them at
+	 *  the top (`S-changelog`). Writes nothing.
+	 */
+	draftChangelog: (repoRoot: string, since: Since) => typedError<ChangelogDraft_Serialize, string>(__TAURI_INVOKE("draft_changelog", { repoRoot, since })),
+	/**
+	 *  Writes `text`, a previewed draft, to `CHANGELOG.md` of the repository at `repo_root`, if the
+	 *  file still holds `expected` (`null`: it still does not exist) and `text` keeps all of it.
+	 */
+	writeChangelog: (repoRoot: string, expected: string | null, text: string) => typedError<null, string>(__TAURI_INVOKE("write_changelog", { repoRoot, expected, text })),
 	/**  Every task file directly in the column folder `dir`, broken ones included. */
 	readColumn: (dir: string) => typedError<Task_Serialize[], string>(__TAURI_INVOKE("read_column", { dir })),
 	/**  One task file. */
@@ -219,6 +234,79 @@ export type ChangeBatch = {
 	changes: FileChange[],
 	/**  Whether `docs/planner.yml` was created, changed or removed. */
 	config_changed: boolean,
+};
+
+/**  What writing the changelog would do. Nothing is written until `write_changelog`. */
+export type ChangelogDraft = ChangelogDraft_Serialize | ChangelogDraft_Deserialize;
+
+/**  What writing the changelog would do. Nothing is written until `write_changelog`. */
+export type ChangelogDraft_Deserialize = {
+	/**  The changelog file, relative to the repository root. */
+	path: string,
+	/**  Which tasks count, in words, such as `finished on or after 2026-10-01`. */
+	range: string,
+	groups: ChangelogGroup_Deserialize[],
+	/**  Task files in the terminal column without a valid `completed` date; not in the draft. */
+	skipped: string[],
+	/**  The markdown added to the file; empty when there are no entries. */
+	section: string,
+	/**  The file as read; `None` when it does not exist yet. */
+	existing?: string | null,
+	/**  The whole file after the write. */
+	text: string,
+};
+
+/**  What writing the changelog would do. Nothing is written until `write_changelog`. */
+export type ChangelogDraft_Serialize = {
+	/**  The changelog file, relative to the repository root. */
+	path: string,
+	/**  Which tasks count, in words, such as `finished on or after 2026-10-01`. */
+	range: string,
+	groups: ChangelogGroup_Serialize[],
+	/**  Task files in the terminal column without a valid `completed` date; not in the draft. */
+	skipped: string[],
+	/**  The markdown added to the file; empty when there are no entries. */
+	section: string,
+	/**  The file as read; `None` when it does not exist yet. */
+	existing: string | null,
+	/**  The whole file after the write. */
+	text: string,
+};
+
+/**  One finished task in the draft. */
+export type ChangelogEntry = ChangelogEntry_Serialize | ChangelogEntry_Deserialize;
+
+/**  One finished task in the draft. */
+export type ChangelogEntry_Deserialize = {
+	id?: string | null,
+	title: string,
+	completed: string,
+	/**  The task file, relative to the repository root. */
+	path: string,
+};
+
+/**  One finished task in the draft. */
+export type ChangelogEntry_Serialize = {
+	id: string | null,
+	title: string,
+	completed: string,
+	/**  The task file, relative to the repository root. */
+	path: string,
+};
+
+/**  The entries under one tag: the first tag of each task, or `Other` for tasks without tags. */
+export type ChangelogGroup = ChangelogGroup_Serialize | ChangelogGroup_Deserialize;
+
+/**  The entries under one tag: the first tag of each task, or `Other` for tasks without tags. */
+export type ChangelogGroup_Deserialize = {
+	tag: string,
+	entries: ChangelogEntry_Deserialize[],
+};
+
+/**  The entries under one tag: the first tag of each task, or `Other` for tasks without tags. */
+export type ChangelogGroup_Serialize = {
+	tag: string,
+	entries: ChangelogEntry_Serialize[],
 };
 
 /**  The contents of `docs/planner.yml`. Paths are relative to the repository root. */
@@ -425,6 +513,13 @@ export type GateStatus_Serialize = {
 	met: boolean,
 	/**  Every failing item of the enabled checks, in spec order per check. */
 	failures: GateFailure_Serialize[],
+};
+
+/**  A tag of the repository with the committer date of its commit. */
+export type GitTag = {
+	name: string,
+	/**  `YYYY-MM-DD`. */
+	date: string,
 };
 
 /**  A glossary entry: `- Term: definition`. */
@@ -663,6 +758,13 @@ export type Section = {
 /**  The sections of a spec. `Other` is a section with an unknown heading. */
 export type SectionKind = "vision" | "scope" | "constraints" | "domain" | "structure" | "questions" | "decisions" | "glossary" | "other";
 
+/**  Where the changelog starts: tasks finished on or after a date, or after the date of a tag. */
+export type Since = 
+/**  `YYYY-MM-DD`; tasks completed on this day count. */
+{ kind: "date"; date: string } | 
+/**  A git tag; tasks completed after the day of its commit count. */
+{ kind: "tag"; tag: string };
+
 /**
  *  The files besides tasks that text is usually selected in, as absolute paths; `None` when the
  *  file does not exist. A spec split into a folder has no single file.
@@ -890,6 +992,29 @@ export type SplitReport_Serialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error: string | null,
+};
+
+/**  The tags the changelog can start from. */
+export type TagList = TagList_Serialize | TagList_Deserialize;
+
+/**  The tags the changelog can start from. */
+export type TagList_Deserialize = {
+	/**  Whether git could be read here; `false` without git or outside a repository. */
+	available: boolean,
+	/**  Why git could not be read, when it could not. */
+	reason?: string | null,
+	/**  Newest commit first. */
+	tags: GitTag[],
+};
+
+/**  The tags the changelog can start from. */
+export type TagList_Serialize = {
+	/**  Whether git could be read here; `false` without git or outside a repository. */
+	available: boolean,
+	/**  Why git could not be read, when it could not. */
+	reason: string | null,
+	/**  Newest commit first. */
+	tags: GitTag[],
 };
 
 /**  One task file as read from disk. */
