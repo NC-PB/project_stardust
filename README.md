@@ -14,3 +14,4 @@ This repository plans itself with its own format.
 - `docs/planner.yml`: configuration of the tool, for this repository.
 - `templates/`: the files the tool generates in a user's repository (spec, task, config, planner block, prompts).
 - `AGENTS.md`: conventions for coding agents working in this repository.
+- `docs/release.md`: signed release builds in CI and the secrets they need.
