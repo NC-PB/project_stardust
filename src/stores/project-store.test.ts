@@ -125,6 +125,7 @@ describe("useProjectStore", () => {
       links: null,
       repair: null,
       repositoryWatchError: null,
+      opening: false,
     });
   });
 
@@ -275,6 +276,79 @@ describe("useProjectStore", () => {
 
     await useProjectStore.getState().openRepository("/repo");
     expect(useProjectStore.getState().repositoryWatchError).toBeNull();
+  });
+
+  it("says the project is opening while it is watched, also when the watch fails", async () => {
+    loadConfig.mockResolvedValue({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    let finish: (value: unknown) => void = () => {};
+    watchProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const opened = useProjectStore.getState().openRepository("/repo");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledWith("/repo"));
+    expect(useProjectStore.getState().opening).toBe(true);
+    expect(loadBoard).not.toHaveBeenCalled();
+    finish({ status: "error", error: "no access" });
+    await opened;
+    expect(useProjectStore.getState().opening).toBe(false);
+  });
+
+  it("keeps saying opening until the latest open is watched", async () => {
+    loadConfig.mockResolvedValue({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    let finishFirst: (value: unknown) => void = () => {};
+    let finishSecond: (value: unknown) => void = () => {};
+    watchProject
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSecond = resolve;
+        }),
+      );
+    const first = useProjectStore.getState().openRepository("/slow");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledTimes(1));
+    const second = useProjectStore.getState().openRepository("/repo");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledTimes(2));
+    finishFirst({ status: "ok", data: OPENED });
+    await first;
+    expect(useProjectStore.getState().opening).toBe(true);
+    finishSecond({ status: "ok", data: OPENED });
+    await second;
+    expect(useProjectStore.getState().opening).toBe(false);
+  });
+
+  it("stops saying opening when a repository without config opens meanwhile", async () => {
+    loadConfig.mockResolvedValueOnce({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    let finish: (value: unknown) => void = () => {};
+    watchProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const first = useProjectStore.getState().openRepository("/slow");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledTimes(1));
+    await useProjectStore.getState().openRepository("/empty");
+    expect(useProjectStore.getState().opening).toBe(false);
+    finish({ status: "ok", data: OPENED });
+    await first;
+    expect(useProjectStore.getState().opening).toBe(false);
   });
 
   it("starts watching after init", async () => {
