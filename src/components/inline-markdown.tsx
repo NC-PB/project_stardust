@@ -44,9 +44,9 @@ function InlineCode({ children }: ComponentProps<"code">) {
 }
 
 /**
- * A link to a planning file opens it in the editor and not the row it sits in. Other links
- * never navigate the window: they show as text with the address on hover, and a click on
- * them opens the row like the rest of the text.
+ * A link to a planning file opens it in the editor. Other links never navigate the window:
+ * they show as text with the address on hover, and a click does nothing. The text around a
+ * link is never a button; the row opens through its own control (D-20261031-013555-1ofs).
  */
 function SpecLink({
   href,

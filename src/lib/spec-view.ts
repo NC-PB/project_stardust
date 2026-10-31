@@ -88,3 +88,13 @@ export function questionById(
 export function sourceLabel(at: SourceLine): string {
   return `${at.file}:${at.line}`;
 }
+
+/**
+ * The name of the control that opens a row of the spec view in the editor, such as
+ * `Open S-nodes at spec.md:191`. Rows are text, so this control is how they open (`S-nodes`).
+ */
+export function openLabel(at: SourceLine, name?: string | null): string {
+  return name
+    ? `Open ${name} at ${sourceLabel(at)}`
+    : `Open ${sourceLabel(at)}`;
+}

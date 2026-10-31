@@ -15,6 +15,7 @@ import {
   hasDetails,
   isExpanded,
   nodeKey,
+  openLabel,
   questionById,
   sourceLabel,
   specPathOf,
@@ -235,12 +236,8 @@ function NodeItem({
             {node.ticked && "✓"}
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => openAt(node.at)}
-          title={`Open ${sourceLabel(node.at)}`}
+        <span
           className={cn(
-            "text-left hover:underline",
             depth === 0 && "font-semibold",
             node.ticked === false && "text-muted-foreground",
           )}
@@ -250,7 +247,8 @@ function NodeItem({
           ) : (
             "(untitled)"
           )}
-        </button>
+        </span>
+        <OpenButton at={node.at} name={node.id} openAt={openAt} />
         {node.id ? (
           <code className="rounded bg-muted px-1 text-xs">{node.id}</code>
         ) : (
@@ -281,18 +279,21 @@ function NodeItem({
           {node.criteria.length > 0 && (
             <ul className="flex flex-col gap-0.5 text-xs">
               {node.criteria.map((criterion) => (
-                <li key={sourceLabel(criterion.at)}>
-                  <button
-                    type="button"
-                    onClick={() => openAt(criterion.at)}
-                    title={`Open ${sourceLabel(criterion.at)}`}
-                    className="whitespace-pre-line text-left text-muted-foreground hover:text-foreground"
-                  >
+                <li
+                  key={sourceLabel(criterion.at)}
+                  className="flex items-start gap-1"
+                >
+                  <OpenButton
+                    at={criterion.at}
+                    name="criterion"
+                    openAt={openAt}
+                  />
+                  <span className="whitespace-pre-line text-muted-foreground">
                     <InlineMarkdown
                       text={criterion.text}
                       file={criterion.at.file}
                     />
-                  </button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -313,6 +314,33 @@ function NodeItem({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * The control that opens a row of the tree in the editor at its line. Titles and criteria are
+ * text beside it, so links in them are never nested in a button (D-20261031-013555-1ofs).
+ */
+function OpenButton({
+  at,
+  name,
+  openAt,
+}: {
+  at: SourceLine;
+  name?: string | null;
+  openAt: (at: SourceLine) => void;
+}) {
+  const label = openLabel(at, name);
+  return (
+    <button
+      type="button"
+      onClick={() => openAt(at)}
+      title={label}
+      aria-label={label}
+      className="shrink-0 rounded px-0.5 text-xs leading-none text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      ↗
+    </button>
   );
 }
 
