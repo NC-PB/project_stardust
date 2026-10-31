@@ -11,6 +11,7 @@ pub mod files;
 pub mod gate;
 pub mod ids;
 pub mod init;
+pub mod links;
 pub mod make_task;
 pub mod prompts;
 pub mod proposals;

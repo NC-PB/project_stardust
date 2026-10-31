@@ -3,7 +3,7 @@
 //! The text of `spec.md` is cut at its `## ` headings into the files of [`FOLDER_FILES`], as
 //! the folder form expects (D-20261031-010617-ryfp). Links in markdown files anywhere in the
 //! repository that point into `spec.md` are rewritten to the file that now holds their heading
-//! (see [`SKIPPED`] for what is not searched), and so are the links in the moved text itself. `spec.md` goes to the OS trash only after the folder was written,
+//! (see [`links::SKIPPED`] for what is not searched), and so are the links in the moved text itself. `spec.md` goes to the OS trash only after the folder was written,
 //! read back and found to give the same model (`R-no-destroy`).
 //!
 //! The order keeps every text on disk at every step: the folder is created first, never over
@@ -18,11 +18,11 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 use specta::Type;
-use walkdir::WalkDir;
 
 use super::agents_block::{self, START_MARKER};
 use super::config::{Config, SpecLocation};
 use super::files::{self, SaveOutcome, has_scheme, percent_decode};
+use super::links::{self, FileLinks, LineKind, classify, contains, markdown_files, rewrite_links};
 use super::spec::{
     FOLDER_FILES, SPEC_FILE, SPEC_FOLDER, SectionKind, Spec, SpecForm, parse_spec, parse_spec_text,
     read_spec,
@@ -53,23 +53,6 @@ pub struct SplitFile {
     pub first_line: String,
 }
 
-/// The links rewritten in one file.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
-pub struct FileLinks {
-    /// Relative to the repository root.
-    pub file: String,
-    pub changes: Vec<LinkChange>,
-}
-
-/// One rewritten link target.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
-pub struct LinkChange {
-    /// 1-based line in the file.
-    pub line: u32,
-    pub old: String,
-    pub new: String,
-}
-
 /// What a split did.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct SplitReport {
@@ -86,10 +69,6 @@ pub struct SplitReport {
     /// Why the planner block could not be regenerated, if it could not.
     pub block_error: Option<String>,
 }
-
-/// Folder names never searched for links to `spec.md`, besides hidden names (starting with
-/// `.`): installed dependencies and build output (D-20261031-015930-k4vn).
-pub const SKIPPED: [&str; 2] = ["node_modules", "target"];
 
 /// What a split of the spec in the repository at `repo_root` would do. Writes nothing.
 pub fn plan_split(repo_root: &Path, config: &Config) -> SplitPlan {
@@ -208,21 +187,12 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
             _ => None,
         })
         .collect();
-    for entry in WalkDir::new(repo_root)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|entry| entry.depth() == 0 || searched(entry.path(), &planning))
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        let Ok(relative) = path.strip_prefix(repo_root) else {
-            continue;
-        };
-        if path == planning.join(SPEC_FILE) || relative.extension().is_none_or(|ext| ext != "md") {
+    for (path, file) in markdown_files(repo_root, &planning) {
+        if path == planning.join(SPEC_FILE) {
             continue;
         }
-        let file = relative.to_string_lossy().replace('\\', "/");
+        let path = path.as_path();
+        let relative = Path::new(&file);
         let old = match std::fs::read(path).map(String::from_utf8) {
             Ok(Ok(old)) => old,
             // Text that is no UTF-8 is only a problem when it might link to the spec.
@@ -259,19 +229,6 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
     }
     prepared.text = text;
     prepared
-}
-
-/// Whether the walk for links goes into `path`: not into hidden names or [`SKIPPED`] folders,
-/// except on the way to the planning root.
-fn searched(path: &Path, planning: &Path) -> bool {
-    let name = path.file_name().unwrap_or_default().to_string_lossy();
-    planning.starts_with(path) || !(name.starts_with('.') || SKIPPED.contains(&name.as_ref()))
-}
-
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|window| window == needle)
 }
 
 /// [`split_spec`] with the trash passed in, so tests need not use the OS trash.
@@ -624,17 +581,14 @@ fn into_spec<'t>(
     if path.is_empty() || path.contains('?') || path.starts_with('/') || has_scheme(path) {
         return None;
     }
-    let mut resolved: Vec<String> = Vec::new();
-    for part in dir.join(percent_decode(path)).components() {
-        match part {
-            Component::Normal(name) => resolved.push(name.to_string_lossy().into_owned()),
-            Component::ParentDir => {
-                resolved.pop()?;
-            }
-            Component::CurDir => {}
-            Component::RootDir | Component::Prefix(_) => return None,
-        }
-    }
+    let dir: Vec<String> = dir
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    let resolved = links::resolve(&dir, path)?;
     (resolved == spec).then(|| (&path[..path.rfind('/').map_or(0, |i| i + 1)], anchor))
 }
 
@@ -664,145 +618,6 @@ fn spec_link(
     // Every other relative link now starts one folder deeper.
     let local = !target.is_empty() && !target.starts_with('/') && !has_scheme(target);
     local.then(|| format!("../{target}"))
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LineKind {
-    Text,
-    /// Frontmatter, code fences and the lines inside them.
-    Literal,
-}
-
-/// The lines of `text`, line endings kept, with whether they are markdown text.
-fn classify(text: &str) -> Vec<(&str, LineKind)> {
-    let mut lines = Vec::new();
-    let mut frontmatter = text.starts_with("---\n") || text.starts_with("---\r\n");
-    let mut fence: Option<&str> = None;
-    for (number, line) in text.split_inclusive('\n').enumerate() {
-        let trimmed = line.trim_start_matches(' ');
-        let kind = if frontmatter {
-            if number > 0 && matches!(line.trim_end(), "---" | "...") {
-                frontmatter = false;
-            }
-            LineKind::Literal
-        } else if let Some(open) = fence {
-            if trimmed.trim_end().starts_with(open)
-                && trimmed.trim_end().trim_start_matches(&open[..1]).is_empty()
-            {
-                fence = None;
-            }
-            LineKind::Literal
-        } else if line.len() - trimmed.len() <= 3
-            && (trimmed.starts_with("```") || trimmed.starts_with("~~~"))
-        {
-            let mark = &trimmed[..1];
-            let run = trimmed.len() - trimmed.trim_start_matches(mark).len();
-            fence = Some(&trimmed[..run]);
-            LineKind::Literal
-        } else {
-            LineKind::Text
-        };
-        lines.push((line, kind));
-    }
-    lines
-}
-
-/// `text` with the target of every inline link, image and link reference definition replaced
-/// where `map` returns a new one. Code spans, code fences and frontmatter are left alone.
-fn rewrite_links(text: &str, map: impl Fn(&str) -> Option<String>) -> (String, Vec<LinkChange>) {
-    let mut out = String::with_capacity(text.len());
-    let mut changes = Vec::new();
-    for (number, (line, kind)) in classify(text).into_iter().enumerate() {
-        if kind == LineKind::Literal {
-            out.push_str(line);
-            continue;
-        }
-        let mut done = 0;
-        for (start, end) in link_targets(line) {
-            let old = &line[start..end];
-            if let Some(new) = map(old).filter(|new| new != old) {
-                out.push_str(&line[done..start]);
-                out.push_str(&new);
-                done = end;
-                changes.push(LinkChange {
-                    line: number as u32 + 1,
-                    old: old.to_string(),
-                    new,
-                });
-            }
-        }
-        out.push_str(&line[done..]);
-    }
-    (out, changes)
-}
-
-/// Byte ranges of the link targets in `line`, outside code spans.
-fn link_targets(line: &str) -> Vec<(usize, usize)> {
-    let bytes = line.as_bytes();
-    let mut targets = Vec::new();
-
-    // A link reference definition: `[label]: target`.
-    let indent = line.len() - line.trim_start_matches(' ').len();
-    if indent <= 3
-        && line[indent..].starts_with('[')
-        && let Some(close) = line[indent..].find("]:")
-    {
-        let after = indent + close + 2;
-        let start = after + (line[after..].len() - line[after..].trim_start().len());
-        if let Some(range) = target_at(line, start) {
-            targets.push(range);
-        }
-        return targets;
-    }
-
-    let mut code = 0;
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'`' {
-            let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
-            if code == 0 {
-                code = run;
-            } else if code == run {
-                code = 0;
-            }
-            i += run;
-            continue;
-        }
-        if code == 0
-            && bytes[i] == b']'
-            && bytes.get(i + 1) == Some(&b'(')
-            && let Some(range) = target_at(line, i + 2)
-        {
-            targets.push(range);
-            i = range.1;
-            continue;
-        }
-        i += 1;
-    }
-    // A code span left open at the end of the line is no code span; such lines are rare enough
-    // that their links are left alone.
-    targets
-}
-
-/// The range of a link target starting at `start`: `<...>`, or up to a space or the `)` that
-/// closes the link.
-fn target_at(line: &str, start: usize) -> Option<(usize, usize)> {
-    let rest = &line[start..];
-    if let Some(inner) = rest.strip_prefix('<') {
-        let end = inner.find('>')?;
-        return Some((start + 1, start + 1 + end));
-    }
-    let mut depth = 0usize;
-    for (offset, c) in rest.char_indices() {
-        match c {
-            '(' => depth += 1,
-            ')' if depth == 0 => return (offset > 0).then_some((start, start + offset)),
-            ')' => depth -= 1,
-            c if c.is_whitespace() => return (offset > 0).then_some((start, start + offset)),
-            _ => {}
-        }
-    }
-    (!rest.is_empty()).then_some((start, line.len()))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -858,6 +673,7 @@ fn comparable(spec: &Spec) -> serde_json::Value {
 mod tests {
     use super::*;
     use crate::domain::ids::random_suffix;
+    use crate::domain::links::LinkChange;
 
     fn repo_root() -> &'static Path {
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()

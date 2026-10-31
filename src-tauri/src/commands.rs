@@ -12,7 +12,7 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts,
+    agents_block, append_only, board, config, files, gate, ids, init, links, make_task, prompts,
     questions, search, spec, spec_split, task, templates, terminal, watch,
 };
 
@@ -381,10 +381,14 @@ pub struct PlanningChanged {
     pub block_written: Vec<String>,
     /// Why the planner block could not be regenerated, if it could not.
     pub block_error: Option<String>,
+    /// Links rewritten because files in the batch moved (`S-links`). The rewritten files come
+    /// back in a later batch as modified.
+    pub links: links::MoveLinks,
 }
 
 /// Watches the planning root and the config of the repository at `repo_root`, sending
-/// `PlanningChanged` events. A config change regenerates the planner block first. Stops the
+/// `PlanningChanged` events. Moved files get their links rewritten, and a config change
+/// regenerates the planner block, before the event is sent. Stops the
 /// previous watcher; call again after the planning root changed.
 #[tauri::command]
 #[specta::specta]
@@ -398,10 +402,13 @@ pub fn watch_project(
     *current = None;
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
+    let planning_root = config.planning_root.clone();
     let index = Arc::clone(&search_state.0);
     *index.lock().map_err(|err| err.to_string())? =
         Some(search::SearchIndex::build(&root, &config.planning_root));
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
+        // Every move is seen here once, whether the board or an agent made it.
+        let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
         // The index is current before the app hears of the batch.
         if let Ok(mut index) = index.lock()
             && let Some(index) = index.as_mut()
@@ -421,6 +428,7 @@ pub fn watch_project(
             batch,
             block_written,
             block_error,
+            links,
         }
         .emit(&app);
     })?;

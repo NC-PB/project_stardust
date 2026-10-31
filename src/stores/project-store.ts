@@ -6,10 +6,11 @@ import {
   commands,
   events,
   type InitReport,
+  type MoveLinks,
   type PlanningChanged_Serialize,
   type SourceFiles,
 } from "@/bindings";
-import { type Offer, offersOf } from "@/lib/project";
+import { hasLinkNotice, type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
 import { useEditorStore } from "./editor-store";
 import { useProposalStore } from "./proposal-store";
@@ -33,6 +34,12 @@ interface ProjectState {
   lastChange: PlanningChanged_Serialize | null;
   /** Counts bursts of changes, so views can reload when it grows. */
   revision: number;
+  /**
+   * The last links rewritten after files moved, or the problems doing so (`S-links`). Kept
+   * until dismissed or another repository opens, since the rewrites bring a batch of their own.
+   */
+  links: MoveLinks | null;
+  dismissLinks: () => void;
   /** Subscribes to changes on disk; returns the function that unsubscribes. */
   listen: () => Promise<UnlistenFn>;
   receive: (change: PlanningChanged_Serialize) => Promise<void>;
@@ -82,6 +89,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     sources: null,
     lastChange: null,
     revision: 0,
+    links: null,
 
     listen: () =>
       events.planningChanged.listen((event) => get().receive(event.payload)),
@@ -91,6 +99,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         lastChange: change,
         revision: state.revision + 1,
         error: change.block_error,
+        links: hasLinkNotice(change.links) ? change.links : state.links,
       }));
       const { repoRoot } = get();
       // The planning root may have moved, so the watcher restarts with the new config.
@@ -106,6 +115,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
           useProposalStore.getState().apply(change.batch),
         ]);
     },
+
+    dismissLinks: () => set({ links: null }),
 
     restore: async () => {
       const repoRoot = await readSetting<string>(REPO_ROOT_SETTING);
@@ -128,6 +139,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         error: null,
         sources: null,
         lastChange: null,
+        links: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);

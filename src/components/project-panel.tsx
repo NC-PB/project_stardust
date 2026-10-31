@@ -1,6 +1,11 @@
 import { SplitSpecButton, SplitSpecPanel } from "@/components/spec-split";
 import { Button } from "@/components/ui/button";
-import { describeBatch, offerLabel, projectStatus } from "@/lib/project";
+import {
+  describeBatch,
+  describeLinks,
+  offerLabel,
+  projectStatus,
+} from "@/lib/project";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useTerminalStore } from "@/stores/terminal-store";
@@ -14,6 +19,8 @@ export function ProjectPanel() {
     offers,
     error,
     lastChange,
+    links,
+    dismissLinks,
     sources,
     choose,
     initialize,
@@ -129,6 +136,24 @@ export function ProjectPanel() {
           {lastChange.block_written.length > 0 &&
             `; planner block rewritten in ${lastChange.block_written.join(", ")}`}
         </p>
+      )}
+
+      {links && (
+        <div className="flex items-start justify-between gap-2 text-sm">
+          <div>
+            {describeLinks(links) && (
+              <p className="text-muted-foreground">{describeLinks(links)}</p>
+            )}
+            {links.problems.map((problem) => (
+              <p key={problem} className="text-destructive">
+                Links not rewritten: {problem}
+              </p>
+            ))}
+          </div>
+          <Button variant="ghost" size="xs" onClick={dismissLinks}>
+            Dismiss
+          </Button>
+        </div>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
