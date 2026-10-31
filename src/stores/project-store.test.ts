@@ -14,6 +14,7 @@ const loadProposals = vi.fn();
 const applyProposals = vi.fn();
 const loadLinks = vi.fn();
 const applyLinks = vi.fn();
+const applyOutsideLinks = vi.fn();
 const sources = {
   braindump: "/repo/docs/planning/braindump.md",
   spec: "/repo/docs/planning/spec.md",
@@ -28,7 +29,10 @@ vi.mock("@/bindings", () => ({
     watchProject: (...args: unknown[]) => watchProject(...args),
     sourceFiles: async () => sources,
   },
-  events: { planningChanged: { listen: vi.fn() } },
+  events: {
+    planningChanged: { listen: vi.fn() },
+    repositoryChanged: { listen: vi.fn() },
+  },
 }));
 vi.mock("./spec-store", () => ({
   useSpecStore: {
@@ -53,15 +57,18 @@ vi.mock("./link-store", () => ({
     getState: () => ({
       load: loadLinks,
       apply: applyLinks,
+      applyOutside: applyOutsideLinks,
       clear: () => {},
     }),
   },
 }));
+const applyOutsideStaleness = vi.fn();
 vi.mock("./staleness-store", () => ({
   useStalenessStore: {
     getState: () => ({
       load: async () => {},
       apply: async () => {},
+      applyOutside: applyOutsideStaleness,
       clear: () => {},
     }),
   },
@@ -220,6 +227,29 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().sources).toBeNull();
   });
 
+  it("drops an open that another open overtook while it was watched", async () => {
+    loadConfig.mockResolvedValue({
+      found: true,
+      config: {},
+      missing_columns: [],
+    });
+    let finishFirst: (value: unknown) => void = () => {};
+    watchProject.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    const first = useProjectStore.getState().openRepository("/slow");
+    await vi.waitFor(() => expect(watchProject).toHaveBeenCalledWith("/slow"));
+    await useProjectStore.getState().openRepository("/repo");
+    loadBoard.mockClear();
+    finishFirst({ status: "error", error: "superseded" });
+    await first;
+    expect(useProjectStore.getState().repoRoot).toBe("/repo");
+    expect(useProjectStore.getState().error).toBeNull();
+    expect(loadBoard).not.toHaveBeenCalled();
+  });
+
   it("starts watching after init", async () => {
     await useProjectStore.getState().openRepository("/repo");
     initProject.mockResolvedValue({ status: "ok", data: initReport });
@@ -264,6 +294,14 @@ describe("useProjectStore", () => {
     expect(useProjectStore.getState().revision).toBe(2);
     expect(loadConfig).toHaveBeenCalledWith("/repo");
     expect(watchProject).toHaveBeenCalledWith("/repo");
+  });
+
+  it("passes changes outside the planning root to the stores reading the disk", async () => {
+    const change = { files_added_or_removed: true, markdown: false };
+    await useProjectStore.getState().receiveOutside(change);
+    expect(applyOutsideStaleness).toHaveBeenCalledWith(change);
+    expect(applyOutsideLinks).toHaveBeenCalledWith(change);
+    expect(useProjectStore.getState().revision).toBe(0);
   });
 
   it("shows why the planner block could not be regenerated", async () => {

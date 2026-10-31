@@ -8,6 +8,7 @@ import {
   type InitReport,
   type LinkRepair,
   type MoveLinks,
+  type OutsideChange,
   type PlanningChanged_Serialize,
   type SourceFiles,
 } from "@/bindings";
@@ -58,6 +59,8 @@ interface ProjectState {
   /** Subscribes to changes on disk; returns the function that unsubscribes. */
   listen: () => Promise<UnlistenFn>;
   receive: (change: PlanningChanged_Serialize) => Promise<void>;
+  /** Passes a change outside the planning root to the views that read the disk for it. */
+  receiveOutside: (change: OutsideChange) => Promise<void>;
   /** Opens the repository remembered in the app settings, if any. */
   restore: () => Promise<void>;
   /** Lets the user pick a repository folder and opens it. */
@@ -85,7 +88,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       return;
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
+    // Runs off the main thread and can take a while on a large repository (`S-watcher`).
     const watched = await commands.watchProject(repoRoot);
+    // Another repository was opened meanwhile; its own load fills the stores.
+    if (get().repoRoot !== repoRoot) return;
     if (watched.status === "error") set({ error: watched.error });
     else if (hasRepairNotice(watched.data)) set({ repair: watched.data });
     await Promise.all([
@@ -114,8 +120,24 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     links: null,
     repair: null,
 
-    listen: () =>
-      events.planningChanged.listen((event) => get().receive(event.payload)),
+    listen: async () => {
+      const stops = await Promise.all([
+        events.planningChanged.listen((event) => get().receive(event.payload)),
+        events.repositoryChanged.listen((event) =>
+          get().receiveOutside(event.payload.change),
+        ),
+      ]);
+      return () => {
+        for (const stop of stops) stop();
+      };
+    },
+
+    receiveOutside: async (change) => {
+      await Promise.all([
+        useStalenessStore.getState().applyOutside(change),
+        useLinkStore.getState().applyOutside(change),
+      ]);
+    },
 
     receive: async (change) => {
       set((state) => ({

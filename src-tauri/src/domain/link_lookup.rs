@@ -1,6 +1,8 @@
 //! Finding files to link to and the files that link to a file (`S-links`).
 //!
-//! Link candidates are the files of the search index, so they follow watcher batches with it.
+//! Link candidates are the files of the search index, so they follow watcher batches with it,
+//! and the markdown files outside the planning root from the walk of [`links::markdown_files`],
+//! read again when the repository watcher reports markdown changes (`S-watcher`).
 //! Backlinks are found per request by walking the repository's markdown files the way
 //! [`links::rewrite_after_moves`] does (D-20261031-015930-k4vn): links count wherever they
 //! are, also outside the planning root, which the watcher does not see. Only files holding
@@ -48,6 +50,27 @@ pub fn link_candidates(index: &SearchIndex) -> Vec<LinkCandidate> {
         .collect();
     candidates.sort_by(|a, b| a.path.cmp(&b.path));
     candidates
+}
+
+/// The markdown files of the repository at `repo_root` outside its planning root that a link
+/// can be made to, sorted by path: the files the link walk searches ([`links::markdown_files`]:
+/// no hidden, `node_modules` or `target` folders), with the title read as for task files.
+/// Files that cannot be read are left out.
+pub fn outside_candidates(repo_root: &Path, planning_root: &str) -> Vec<LinkCandidate> {
+    let planning = repo_root.join(planning_root.trim_matches('/'));
+    links::markdown_files(repo_root, &planning)
+        .into_iter()
+        .filter(|(path, _)| !path.starts_with(&planning))
+        .filter_map(|(path, relative)| {
+            let text = std::fs::read_to_string(&path).ok()?;
+            let file_name = relative.rsplit('/').next().unwrap_or(&relative);
+            Some(LinkCandidate {
+                title: task::parse_task(file_name, &text).title,
+                id: parse_task_filename(file_name).map(|name| name.id),
+                path: relative,
+            })
+        })
+        .collect()
 }
 
 /// The markdown files of the repository at `repo_root` with a relative link to `file`
@@ -206,6 +229,34 @@ mod tests {
         assert_eq!(
             found.iter().map(|b| b.file.as_str()).collect::<Vec<_>>(),
             vec!["docs/planning/braindump.md", "docs/planning/inbox/b.md"]
+        );
+    }
+
+    #[test]
+    fn outside_candidates_are_the_searched_markdown_files_outside_the_planning_root() {
+        let root = repo(&[
+            (TASK, "---\ntitle: One\n---\n"),
+            ("README.md", "# Readme\n"),
+            ("docs/guide.md", "---\ntitle: \"Guide: start\"\n---\n"),
+            ("docs/notes.txt", "not markdown"),
+            ("node_modules/pkg/README.md", "# Package\n"),
+            (".github/ISSUE.md", "# Issue\n"),
+            ("src-tauri/target/doc.md", "# Built\n"),
+        ]);
+        assert_eq!(
+            outside_candidates(&root, "docs/planning/"),
+            vec![
+                LinkCandidate {
+                    path: "README.md".into(),
+                    title: "README".into(),
+                    id: None,
+                },
+                LinkCandidate {
+                    path: "docs/guide.md".into(),
+                    title: "Guide: start".into(),
+                    id: None,
+                },
+            ]
         );
     }
 

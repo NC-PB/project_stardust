@@ -170,6 +170,11 @@ export const commands = {
 	 */
 	linkCandidates: () => typedError<LinkCandidate_Serialize[], string>(__TAURI_INVOKE("link_candidates")),
 	/**
+	 *  The markdown files of the repository at `repo_root` outside its planning root that a link
+	 *  can be made to (`S-links`). Read again when `RepositoryChanged` says markdown changed.
+	 */
+	outsideLinkCandidates: (repoRoot: string) => __TAURI_INVOKE<LinkCandidate_Serialize[]>("outside_link_candidates", { repoRoot }),
+	/**
 	 *  The markdown files of the repository at `repo_root` that link to the file at `path`
 	 *  (absolute), by path relative to the repository root, with their lines (`S-links`).
 	 */
@@ -203,11 +208,17 @@ export const commands = {
 	addImagesToGitignore: (repoRoot: string) => typedError<boolean, string>(__TAURI_INVOKE("add_images_to_gitignore", { repoRoot })),
 	/**
 	 *  Watches the planning root and the config of the repository at `repo_root`, sending
-	 *  `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+	 *  `PlanningChanged` events, and the rest of the repository coarsely, sending
+	 *  `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 	 *  watcher did not pair are repaired by id, and a config change regenerates the planner
 	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
 	 *  root changed. First repairs broken links in the whole repository by id and returns what
 	 *  it did.
+	 * 
+	 *  Async, and the walks run on a blocking thread, so a large repository does not freeze the
+	 *  window (`S-watcher`). The repair and the search index are done before the watcher starts,
+	 *  so they come before its first batch. An open superseded by a later `watch_project` or by
+	 *  `unwatch_project` while it walks installs nothing.
 	 */
 	watchProject: (repoRoot: string) => typedError<LinkRepair, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
 	/**  Stops watching and forgets the search index. */
@@ -222,6 +233,7 @@ export const commands = {
 /** Events */
 export const events = {
 	planningChanged: makeEvent<PlanningChanged_Serialize, PlanningChanged_Deserialize>("planning-changed"),
+	repositoryChanged: makeEvent<RepositoryChanged, RepositoryChanged>("repository-changed"),
 };
 
 /* Types */
@@ -938,6 +950,20 @@ export type Node_Serialize = {
 	end_line: number,
 };
 
+/**
+ *  What one burst of events outside the planning root touched. Paths are not sent: whoever
+ *  listens reads the disk again.
+ */
+export type OutsideChange = {
+	/**  A file or folder was created, removed or renamed (missing code paths may change). */
+	files_added_or_removed: boolean,
+	/**
+	 *  A markdown file was created, changed, removed or renamed, or a folder that may hold
+	 *  some (backlinks and link candidates may change).
+	 */
+	markdown: boolean,
+};
+
 /**  Sent once per burst of changes under the planning root or to the config. */
 export type PlanningChanged = PlanningChanged_Serialize | PlanningChanged_Deserialize;
 
@@ -1058,6 +1084,14 @@ export type Question_Serialize = {
 	decision: string | null,
 	at: SourceLine,
 	end_line: number,
+};
+
+/**
+ *  Sent once per burst of changes outside the planning root, in folders that are not hidden,
+ *  `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
+ */
+export type RepositoryChanged = {
+	change: OutsideChange,
 };
 
 /**  A rule: ``- `R-slug` · text``. */

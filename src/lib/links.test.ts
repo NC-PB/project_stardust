@@ -6,6 +6,7 @@ import {
   linkInsertion,
   linkQueryAt,
   matchCandidates,
+  mergeCandidates,
   relativeLink,
   repoRelative,
 } from "./links";
@@ -137,5 +138,19 @@ describe("paths and labels", () => {
     expect(backlinksLabel(0)).toBe("No files link here");
     expect(backlinksLabel(1)).toBe("Linked from 1 file");
     expect(backlinksLabel(2)).toBe("Linked from 2 files");
+  });
+});
+
+describe("mergeCandidates", () => {
+  it("sorts the files inside and outside the planning root by path, each once", () => {
+    const readme = { path: "README.md", title: "README", id: null };
+    const spec = { path: "docs/planning/spec.md", title: "Spec", id: null };
+    const guide = { path: "docs/guide.md", title: "Guide", id: null };
+    const stale = { ...spec, title: "Old" };
+    expect(mergeCandidates([spec], [guide, readme, stale])).toEqual([
+      readme,
+      guide,
+      spec,
+    ]);
   });
 });

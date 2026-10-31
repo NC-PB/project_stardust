@@ -13,8 +13,8 @@ use tauri_specta::Event;
 use crate::domain;
 use crate::domain::{
     agents_block, append_only, archive, board, changelog, config, files, gate, gitattributes, ids,
-    images, init, link_lookup, link_repair, links, make_task, prompts, questions, search, spec,
-    spec_split, task, templates, terminal, watch,
+    images, init, link_lookup, link_repair, links, make_task, prompts, questions, repo_watch,
+    search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -518,6 +518,16 @@ pub fn link_candidates(
         .unwrap_or_default())
 }
 
+/// The markdown files of the repository at `repo_root` outside its planning root that a link
+/// can be made to (`S-links`). Read again when `RepositoryChanged` says markdown changed.
+#[tauri::command]
+#[specta::specta]
+pub fn outside_link_candidates(repo_root: String) -> Vec<link_lookup::LinkCandidate> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    link_lookup::outside_candidates(repo_root, &config.planning_root)
+}
+
 /// The markdown files of the repository at `repo_root` that link to the file at `path`
 /// (absolute), by path relative to the repository root, with their lines (`S-links`).
 #[tauri::command]
@@ -532,9 +542,30 @@ pub fn backlinks(repo_root: String, path: String) -> Vec<link_lookup::Backlink> 
     link_lookup::backlinks(repo_root, &config.planning_root, &relative)
 }
 
-/// The watcher of the open repository; replaced by every `watch_project` call.
+/// The watcher of the open repository; replaced by every `watch_project` call. Locked only
+/// briefly, never during a walk of the repository, so `unwatch_project` does not wait for an
+/// open in progress.
 #[derive(Default)]
-pub struct WatchState(Mutex<Option<watch::PlanningWatcher>>);
+pub struct WatchState {
+    current: Arc<Mutex<Option<Watchers>>>,
+    /// Counts opens and closes; an open installs its watcher only while it is the latest.
+    opens: Arc<watch::Generations>,
+}
+
+/// The watchers of the open repository: the planning root and the config in detail, the rest
+/// of the repository coarsely. Both stop when dropped.
+struct Watchers {
+    _planning: watch::PlanningWatcher,
+    /// `None` when the repository could not be watched; the planning watcher still runs.
+    _repository: Option<repo_watch::RepositoryWatcher>,
+}
+
+/// Sent once per burst of changes outside the planning root, in folders that are not hidden,
+/// `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct RepositoryChanged {
+    pub change: repo_watch::OutsideChange,
+}
 
 /// Sent once per burst of changes under the planning root or to the config.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -553,29 +584,70 @@ pub struct PlanningChanged {
 }
 
 /// Watches the planning root and the config of the repository at `repo_root`, sending
-/// `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+/// `PlanningChanged` events, and the rest of the repository coarsely, sending
+/// `RepositoryChanged` events. Moved files get their links rewritten, links broken by moves the
 /// watcher did not pair are repaired by id, and a config change regenerates the planner
 /// block, before the event is sent. Stops the previous watcher; call again after the planning
 /// root changed. First repairs broken links in the whole repository by id and returns what
 /// it did.
+///
+/// Async, and the walks run on a blocking thread, so a large repository does not freeze the
+/// window (`S-watcher`). The repair and the search index are done before the watcher starts,
+/// so they come before its first batch. An open superseded by a later `watch_project` or by
+/// `unwatch_project` while it walks installs nothing.
 #[tauri::command]
 #[specta::specta]
-pub fn watch_project(
+pub async fn watch_project(
     app: AppHandle,
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
     repo_root: String,
 ) -> Result<link_repair::LinkRepair, String> {
-    let mut current = state.0.lock().map_err(|err| err.to_string())?;
-    *current = None;
+    let open = state.opens.next();
+    let opens = Arc::clone(&state.opens);
+    let current = Arc::clone(&state.current);
+    let index = Arc::clone(&search_state.0);
+    tauri::async_runtime::spawn_blocking(move || {
+        open_project(app, &current, &opens, open, &index, repo_root)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+fn open_project(
+    app: AppHandle,
+    current: &Mutex<Option<Watchers>>,
+    opens: &watch::Generations,
+    open: u64,
+    index: &Arc<Mutex<Option<search::SearchIndex>>>,
+    repo_root: String,
+) -> Result<link_repair::LinkRepair, String> {
+    {
+        // The previous watcher stops first, so it does not report the repairs below.
+        let mut current = current.lock().map_err(|err| err.to_string())?;
+        if !opens.is_current(open) {
+            return Ok(link_repair::LinkRepair::default());
+        }
+        *current = None;
+        *index.lock().map_err(|err| err.to_string())? = None;
+    }
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
     let planning_root = config.planning_root.clone();
     // Moves made while the app was closed are found by id before anything else reads files.
     let repair = link_repair::repair_links(&root, &planning_root, &link_repair::RepairScope::All);
-    let index = Arc::clone(&search_state.0);
-    *index.lock().map_err(|err| err.to_string())? =
-        Some(search::SearchIndex::build(&root, &config.planning_root));
+    let built = search::SearchIndex::build(&root, &config.planning_root);
+    if !opens.is_current(open) {
+        return Ok(repair);
+    }
+    let batch_index = Arc::clone(index);
+    let outside_app = app.clone();
+    // Code files and markdown outside the planning root (`S-staleness`, `S-links`). Without it
+    // the planning watcher still runs; those views then follow only planning batches.
+    let repository = repo_watch::watch(&root, &planning_root, move |change| {
+        let _ = RepositoryChanged { change }.emit(&outside_app);
+    })
+    .ok();
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
         // Every move is seen here once, whether the board or an agent made it.
         let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
@@ -586,7 +658,7 @@ pub fn watch_project(
             &link_repair::RepairScope::of_batch(&batch),
         );
         // The index is current before the app hears of the batch.
-        if let Ok(mut index) = index.lock()
+        if let Ok(mut index) = batch_index.lock()
             && let Some(index) = index.as_mut()
         {
             index.apply(&batch);
@@ -609,7 +681,15 @@ pub fn watch_project(
         }
         .emit(&app);
     })?;
-    *current = Some(watcher);
+    let mut current = current.lock().map_err(|err| err.to_string())?;
+    // Checked again under the lock: an unwatch or a later open may have come meanwhile.
+    if opens.is_current(open) {
+        *index.lock().map_err(|err| err.to_string())? = Some(built);
+        *current = Some(Watchers {
+            _planning: watcher,
+            _repository: repository,
+        });
+    }
     Ok(repair)
 }
 
@@ -630,7 +710,8 @@ pub fn unwatch_project(
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
-    *state.0.lock().map_err(|err| err.to_string())? = None;
+    state.opens.next();
+    *state.current.lock().map_err(|err| err.to_string())? = None;
     *search_state.0.lock().map_err(|err| err.to_string())? = None;
     Ok(())
 }
