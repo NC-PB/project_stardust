@@ -12,6 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { cn } from "cn";
 import { useEffect, useState } from "react";
+import type { TaskCommits } from "@/bindings";
 import { StaleBadges, useStaleFlags } from "@/components/stale-flags";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +23,11 @@ import {
   columnDir,
   filterCards,
 } from "@/lib/board";
+import { commitLabel } from "@/lib/commit-info";
 import { PROMPT_LABELS } from "@/lib/prompts";
 import type { StaleFlag } from "@/lib/staleness";
 import { useBoardStore } from "@/stores/board-store";
+import { useCommitStore } from "@/stores/commit-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePromptStore } from "@/stores/prompt-store";
 
@@ -65,6 +68,7 @@ export function Board() {
   const [now, setNow] = useState(Date.now);
   const [dragged, setDragged] = useState<Card | null>(null);
   const staleFlags = useStaleFlags();
+  const commits = useCommitStore((state) => state.byId);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: DRAG_DISTANCE_PX },
@@ -149,6 +153,7 @@ export function Board() {
               openPath={openPath}
               pathOf={pathOf}
               staleFlags={staleFlags}
+              commits={commits}
               onOpen={(path) => void openFile(repoRoot, path)}
             />
           ))}
@@ -177,6 +182,7 @@ function Column({
   openPath,
   pathOf,
   staleFlags,
+  commits,
   onOpen,
   triage,
 }: {
@@ -189,6 +195,8 @@ function Column({
   pathOf: (column: string, card: Card) => string;
   /** Staleness flags by file path (`S-staleness`). */
   staleFlags: Map<string, StaleFlag[]>;
+  /** Commits mentioning each task id (`S-commit-info`). */
+  commits: Map<string, TaskCommits>;
   onOpen: (path: string) => void;
   /** Copies the Triage inbox prompt; given for the first column (`S-prompts`). */
   triage?: () => void;
@@ -239,6 +247,7 @@ function Column({
             onToggleTag={onToggleTag}
             isOpen={path === openPath}
             flags={staleFlags.get(path) ?? NO_FLAGS}
+            commits={card.id === null ? undefined : commits.get(card.id)}
             onOpen={() => onOpen(path)}
           />
         );
@@ -255,6 +264,7 @@ function DraggableCard({
   onToggleTag,
   isOpen,
   flags,
+  commits,
   onOpen,
 }: {
   column: string;
@@ -263,6 +273,7 @@ function DraggableCard({
   onToggleTag: (tag: string) => void;
   isOpen: boolean;
   flags: StaleFlag[];
+  commits: TaskCommits | undefined;
   onOpen: () => void;
 }) {
   const data: DragData = { column, card };
@@ -288,6 +299,7 @@ function DraggableCard({
         onToggleTag={onToggleTag}
         isOpen={isOpen}
         flags={flags}
+        commits={commits}
         onOpen={onOpen}
       />
     </div>
@@ -358,6 +370,7 @@ function TaskCard({
   onToggleTag,
   isOpen = false,
   flags = NO_FLAGS,
+  commits,
   onOpen,
 }: {
   card: Card;
@@ -366,8 +379,11 @@ function TaskCard({
   isOpen?: boolean;
   /** Staleness flags of the card's file; reasons on hover. */
   flags?: StaleFlag[];
+  /** Commits mentioning the task id; information only (`S-commit-info`). */
+  commits?: TaskCommits;
   onOpen?: () => void;
 }) {
+  const commitInfo = commitLabel(commits);
   return (
     <article
       className={cn(
@@ -402,7 +418,7 @@ function TaskCard({
           ))}
         </div>
       )}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
         {card.age && (
           <span title="Since the file last changed">{card.age}</span>
         )}
@@ -419,6 +435,7 @@ function TaskCard({
             Blocked
           </span>
         )}
+        {commitInfo && <span title={commitInfo.title}>{commitInfo.label}</span>}
         <StaleBadges flags={flags} />
       </div>
     </article>

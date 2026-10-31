@@ -12,6 +12,7 @@ import {
 } from "@/bindings";
 import { hasLinkNotice, type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
+import { useCommitStore } from "./commit-store";
 import { useEditorStore } from "./editor-store";
 import { useProposalStore } from "./proposal-store";
 import { useSearchStore } from "./search-store";
@@ -66,6 +67,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       useSpecStore.getState().clear();
       useProposalStore.getState().clear();
       useStalenessStore.getState().clear();
+      useCommitStore.getState().clear();
       return;
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
@@ -78,6 +80,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       useSpecStore.getState().load(repoRoot, config.config),
       useProposalStore.getState().load(repoRoot, config.config),
       useStalenessStore.getState().load(repoRoot, config.config),
+      useCommitStore.getState().load(repoRoot),
     ]);
   };
   const without = (offer: Offer) =>
