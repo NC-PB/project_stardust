@@ -55,6 +55,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::add_images_to_gitignore,
             commands::watch_project,
             commands::unwatch_project,
+            commands::broken_links,
         ])
         .events(collect_events![commands::PlanningChanged])
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   describeBatch,
   describeLinks,
+  describeRepair,
   offerLabel,
   projectStatus,
 } from "@/lib/project";
@@ -25,6 +26,7 @@ export function ProjectPanel() {
     error,
     lastChange,
     links,
+    repair,
     dismissLinks,
     sources,
     choose,
@@ -151,15 +153,26 @@ export function ProjectPanel() {
         </p>
       )}
 
-      {links && (
+      {(links || repair) && (
         <div className="flex items-start justify-between gap-2 text-sm">
           <div>
-            {describeLinks(links) && (
+            {links && describeLinks(links) && (
               <p className="text-muted-foreground">{describeLinks(links)}</p>
             )}
-            {links.problems.map((problem) => (
+            {links?.problems.map((problem) => (
               <p key={problem} className="text-destructive">
                 Links not rewritten: {problem}
+              </p>
+            ))}
+            {repair &&
+              describeRepair(repair).map((line) => (
+                <p key={line} className="text-muted-foreground">
+                  {line}
+                </p>
+              ))}
+            {repair?.problems.map((problem) => (
+              <p key={problem} className="text-destructive">
+                Links not repaired: {problem}
               </p>
             ))}
           </div>

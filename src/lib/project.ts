@@ -3,6 +3,7 @@ import type {
   Config,
   ConfigReport_Serialize,
   InitReport,
+  LinkRepair,
   MoveLinks,
 } from "@/bindings";
 
@@ -64,4 +65,22 @@ export function describeLinks(links: MoveLinks): string | null {
 /** Whether a link report has anything to show. */
 export function hasLinkNotice(links: MoveLinks): boolean {
   return links.rewritten.length > 0 || links.problems.length > 0;
+}
+
+/**
+ * One line per link repaired by the id in its target's filename (`S-links`), naming the file
+ * and the new target, such as "Link repaired in a.md, line 3: ../next/x.md → ../done/x.md".
+ */
+export function describeRepair(repair: LinkRepair): string[] {
+  return repair.repaired.flatMap((file) =>
+    file.changes.map(
+      (change) =>
+        `Link repaired in ${file.file}, line ${change.line}: ${change.old} → ${change.new}`,
+    ),
+  );
+}
+
+/** Whether a repair has anything to show. Unresolved links are left to the doctor. */
+export function hasRepairNotice(repair: LinkRepair): boolean {
+  return repair.repaired.length > 0 || repair.problems.length > 0;
 }

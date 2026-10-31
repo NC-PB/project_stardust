@@ -187,13 +187,20 @@ export const commands = {
 	addImagesToGitignore: (repoRoot: string) => typedError<boolean, string>(__TAURI_INVOKE("add_images_to_gitignore", { repoRoot })),
 	/**
 	 *  Watches the planning root and the config of the repository at `repo_root`, sending
-	 *  `PlanningChanged` events. Moved files get their links rewritten, and a config change
-	 *  regenerates the planner block, before the event is sent. Stops the
-	 *  previous watcher; call again after the planning root changed.
+	 *  `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+	 *  watcher did not pair are repaired by id, and a config change regenerates the planner
+	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
+	 *  root changed. First repairs broken links in the whole repository by id and returns what
+	 *  it did.
 	 */
-	watchProject: (repoRoot: string) => typedError<null, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
+	watchProject: (repoRoot: string) => typedError<LinkRepair, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
 	/**  Stops watching and forgets the search index. */
 	unwatchProject: () => typedError<null, string>(__TAURI_INVOKE("unwatch_project")),
+	/**
+	 *  The relative links in the repository at `repo_root` that do not resolve and cannot be
+	 *  repaired by id (`S-links`), for the doctor (`S-doctor`). Writes nothing.
+	 */
+	brokenLinks: (repoRoot: string) => __TAURI_INVOKE<BrokenLink[]>("broken_links", { repoRoot }),
 };
 
 /** Events */
@@ -275,6 +282,29 @@ export type BlockReport = {
 	/**  Files that were created or changed; unchanged files are not written. */
 	written: string[],
 };
+
+/**  A relative link that does not resolve and was not repaired. */
+export type BrokenLink = {
+	/**  The file holding the link, relative to the repository root. */
+	file: string,
+	/**  1-based line in the file. */
+	line: number,
+	/**  The link target as written. */
+	target: string,
+	reason: BrokenReason,
+};
+
+/**  Why a broken link could not be repaired. */
+export type BrokenReason = 
+/**  The target's filename holds no id. */
+{ kind: "no_id" } | 
+/**  No task file under the planning root carries the id. */
+{ kind: "unknown_id"; id: string } | 
+/**
+ *  Several task files carry the id (`R-unique-ids` broken); paths relative to the
+ *  repository root.
+ */
+{ kind: "ambiguous_id"; id: string; files: string[] };
 
 /**  Everything that changed during one burst of events. */
 export type ChangeBatch = {
@@ -692,6 +722,16 @@ export type LinkChange = {
 	new: string,
 };
 
+/**  What a repair did. */
+export type LinkRepair = {
+	/**  The files whose links were repaired by id, with each change, in walk order. */
+	repaired: FileLinks[],
+	/**  Broken links in the checked files that were left as they are. */
+	unresolved: BrokenLink[],
+	/**  Files that could not be checked or written, and why. */
+	problems: string[],
+};
+
 /**  A code path in a task that names nothing in the repository. */
 export type MissingCodePath = {
 	/**  The column folder of the task. */
@@ -770,6 +810,11 @@ export type PlanningChanged_Deserialize = {
 	 *  back in a later batch as modified.
 	 */
 	links: MoveLinks,
+	/**
+	 *  Links repaired by id after the batch, in the files naming the ids of the task files it
+	 *  created, removed or moved (`S-links`), and the broken links left in those files.
+	 */
+	repair: LinkRepair,
 };
 
 /**  Sent once per burst of changes under the planning root or to the config. */
@@ -784,6 +829,11 @@ export type PlanningChanged_Serialize = {
 	 *  back in a later batch as modified.
 	 */
 	links: MoveLinks,
+	/**
+	 *  Links repaired by id after the batch, in the files naming the ids of the task files it
+	 *  created, removed or moved (`S-links`), and the broken links left in those files.
+	 */
+	repair: LinkRepair,
 };
 
 /**  A prompt of `templates/prompts.md`, named after its `## ` heading. */

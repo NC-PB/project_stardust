@@ -18,6 +18,7 @@ pub mod ids;
 pub mod images;
 pub mod init;
 pub mod link_lookup;
+pub mod link_repair;
 pub mod links;
 pub mod make_task;
 pub mod prompts;

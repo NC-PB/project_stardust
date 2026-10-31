@@ -13,8 +13,8 @@ use tauri_specta::Event;
 use crate::domain;
 use crate::domain::{
     agents_block, append_only, board, changelog, config, files, gate, gitattributes, ids, images,
-    init, link_lookup, links, make_task, prompts, questions, search, spec, spec_split, task,
-    templates, terminal, watch,
+    init, link_lookup, link_repair, links, make_task, prompts, questions, search, spec, spec_split,
+    task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -513,12 +513,17 @@ pub struct PlanningChanged {
     /// Links rewritten because files in the batch moved (`S-links`). The rewritten files come
     /// back in a later batch as modified.
     pub links: links::MoveLinks,
+    /// Links repaired by id after the batch, in the files naming the ids of the task files it
+    /// created, removed or moved (`S-links`), and the broken links left in those files.
+    pub repair: link_repair::LinkRepair,
 }
 
 /// Watches the planning root and the config of the repository at `repo_root`, sending
-/// `PlanningChanged` events. Moved files get their links rewritten, and a config change
-/// regenerates the planner block, before the event is sent. Stops the
-/// previous watcher; call again after the planning root changed.
+/// `PlanningChanged` events. Moved files get their links rewritten, links broken by moves the
+/// watcher did not pair are repaired by id, and a config change regenerates the planner
+/// block, before the event is sent. Stops the previous watcher; call again after the planning
+/// root changed. First repairs broken links in the whole repository by id and returns what
+/// it did.
 #[tauri::command]
 #[specta::specta]
 pub fn watch_project(
@@ -526,18 +531,26 @@ pub fn watch_project(
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
     repo_root: String,
-) -> Result<(), String> {
+) -> Result<link_repair::LinkRepair, String> {
     let mut current = state.0.lock().map_err(|err| err.to_string())?;
     *current = None;
     let root = Path::new(&repo_root).to_path_buf();
     let config = config::load_config(&root).config;
     let planning_root = config.planning_root.clone();
+    // Moves made while the app was closed are found by id before anything else reads files.
+    let repair = link_repair::repair_links(&root, &planning_root, &link_repair::RepairScope::All);
     let index = Arc::clone(&search_state.0);
     *index.lock().map_err(|err| err.to_string())? =
         Some(search::SearchIndex::build(&root, &config.planning_root));
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
         // Every move is seen here once, whether the board or an agent made it.
         let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
+        // Then whatever the batch made repairable by id, such as the second half of a move.
+        let repair = link_repair::repair_links(
+            &root,
+            &planning_root,
+            &link_repair::RepairScope::of_batch(&batch),
+        );
         // The index is current before the app hears of the batch.
         if let Ok(mut index) = index.lock()
             && let Some(index) = index.as_mut()
@@ -558,11 +571,22 @@ pub fn watch_project(
             block_written,
             block_error,
             links,
+            repair,
         }
         .emit(&app);
     })?;
     *current = Some(watcher);
-    Ok(())
+    Ok(repair)
+}
+
+/// The relative links in the repository at `repo_root` that do not resolve and cannot be
+/// repaired by id (`S-links`), for the doctor (`S-doctor`). Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn broken_links(repo_root: String) -> Vec<link_repair::BrokenLink> {
+    let root = Path::new(&repo_root);
+    let config = config::load_config(root).config;
+    link_repair::broken_links(root, &config.planning_root)
 }
 
 /// Stops watching and forgets the search index.

@@ -98,13 +98,14 @@ const initReport = {
 };
 
 const NO_LINKS = { rewritten: [], problems: [] };
+const NO_REPAIR = { repaired: [], unresolved: [], problems: [] };
 
 describe("useProjectStore", () => {
   beforeEach(() => {
     settings.clear();
     vi.clearAllMocks();
     loadConfig.mockResolvedValue({ found: false });
-    watchProject.mockResolvedValue({ status: "ok", data: null });
+    watchProject.mockResolvedValue({ status: "ok", data: NO_REPAIR });
     useProjectStore.setState({
       repoRoot: null,
       config: null,
@@ -114,6 +115,7 @@ describe("useProjectStore", () => {
       lastChange: null,
       revision: 0,
       links: null,
+      repair: null,
     });
   });
 
@@ -242,6 +244,7 @@ describe("useProjectStore", () => {
       block_written: [],
       block_error: null,
       links: NO_LINKS,
+      repair: NO_REPAIR,
     };
     await useProjectStore.getState().receive(fileChange);
     expect(useProjectStore.getState().revision).toBe(1);
@@ -256,6 +259,7 @@ describe("useProjectStore", () => {
       block_written: ["AGENTS.md"],
       block_error: null,
       links: NO_LINKS,
+      repair: NO_REPAIR,
     });
     expect(useProjectStore.getState().revision).toBe(2);
     expect(loadConfig).toHaveBeenCalledWith("/repo");
@@ -268,6 +272,7 @@ describe("useProjectStore", () => {
       block_written: [],
       block_error: "AGENTS.md: markers out of order",
       links: NO_LINKS,
+      repair: NO_REPAIR,
     });
     expect(useProjectStore.getState().error).toBe(
       "AGENTS.md: markers out of order",
@@ -292,6 +297,7 @@ describe("useProjectStore", () => {
       block_written: [],
       block_error: null,
       links,
+      repair: NO_REPAIR,
     });
     expect(useProjectStore.getState().links).toEqual(links);
 
@@ -304,10 +310,63 @@ describe("useProjectStore", () => {
       block_written: [],
       block_error: null,
       links: NO_LINKS,
+      repair: NO_REPAIR,
     });
     expect(useProjectStore.getState().links).toEqual(links);
 
     useProjectStore.getState().dismissLinks();
     expect(useProjectStore.getState().links).toBeNull();
+  });
+
+  it("shows the links repaired by id when the project is watched and after a batch", async () => {
+    const atOpen = {
+      repaired: [
+        {
+          file: "README.md",
+          changes: [
+            {
+              line: 2,
+              old: "docs/planning/next/a.md",
+              new: "docs/planning/done/a.md",
+            },
+          ],
+        },
+      ],
+      unresolved: [],
+      problems: [],
+    };
+    loadConfig.mockResolvedValue({ found: true });
+    watchProject.mockResolvedValue({ status: "ok", data: atOpen });
+    await useProjectStore.getState().openRepository("/repo");
+    expect(useProjectStore.getState().repair).toEqual(atOpen);
+
+    const afterBatch = { ...atOpen, problems: ["b.md changed"] };
+    await useProjectStore.getState().receive({
+      batch: {
+        changes: [{ kind: "created", path: "docs/planning/done/a.md" }],
+        config_changed: false,
+      },
+      block_written: [],
+      block_error: null,
+      links: NO_LINKS,
+      repair: afterBatch,
+    });
+    expect(useProjectStore.getState().repair).toEqual(afterBatch);
+
+    // The repaired files come back as a batch of their own, which does not hide the notice.
+    await useProjectStore.getState().receive({
+      batch: {
+        changes: [{ kind: "modified", path: "README.md" }],
+        config_changed: false,
+      },
+      block_written: [],
+      block_error: null,
+      links: NO_LINKS,
+      repair: NO_REPAIR,
+    });
+    expect(useProjectStore.getState().repair).toEqual(afterBatch);
+
+    useProjectStore.getState().dismissLinks();
+    expect(useProjectStore.getState().repair).toBeNull();
   });
 });
