@@ -1,9 +1,9 @@
 //! Splitting `spec.md` into the folder form (`S-spec-split`).
 //!
 //! The text of `spec.md` is cut at its `## ` headings into the files of [`FOLDER_FILES`], as
-//! the folder form expects (D-20261031-010617-ryfp). Links in planning files that point into
-//! `spec.md` are rewritten to the file that now holds their heading, and so are the links in
-//! the moved text itself. `spec.md` goes to the OS trash only after the folder was written,
+//! the folder form expects (D-20261031-010617-ryfp). Links in markdown files anywhere in the
+//! repository that point into `spec.md` are rewritten to the file that now holds their heading
+//! (see [`SKIPPED`] for what is not searched), and so are the links in the moved text itself. `spec.md` goes to the OS trash only after the folder was written,
 //! read back and found to give the same model (`R-no-destroy`).
 //!
 //! The order keeps every text on disk at every step: the folder is created first, never over
@@ -56,7 +56,7 @@ pub struct SplitFile {
 /// The links rewritten in one file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct FileLinks {
-    /// Relative to the planning root.
+    /// Relative to the repository root.
     pub file: String,
     pub changes: Vec<LinkChange>,
 }
@@ -70,13 +70,15 @@ pub struct LinkChange {
     pub new: String,
 }
 
-/// What a split did. Paths are relative to the planning root, except `block_written`.
+/// What a split did.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct SplitReport {
+    /// Relative to the planning root, `spec/<name>.md`.
     pub created: Vec<String>,
-    /// Files whose links were rewritten, the new spec files not included.
+    /// Files whose links were rewritten, the new spec files not included, relative to the
+    /// repository root.
     pub rewritten: Vec<String>,
-    /// `spec.md`, now in the OS trash.
+    /// `spec.md`, now in the OS trash, relative to the planning root.
     pub trashed: String,
     /// Files rewritten because the planner block now points to `spec/`, relative to the
     /// repository root.
@@ -84,6 +86,10 @@ pub struct SplitReport {
     /// Why the planner block could not be regenerated, if it could not.
     pub block_error: Option<String>,
 }
+
+/// Folder names never searched for links to `spec.md`, besides hidden names (starting with
+/// `.`): installed dependencies and build output (D-20261031-015930-k4vn).
+pub const SKIPPED: [&str; 2] = ["node_modules", "target"];
 
 /// What a split of the spec in the repository at `repo_root` would do. Writes nothing.
 pub fn plan_split(repo_root: &Path, config: &Config) -> SplitPlan {
@@ -107,7 +113,7 @@ struct Prepared {
     before: Option<Spec>,
     /// (name in `spec/`, text with its links rewritten).
     parts: Vec<(&'static str, String)>,
-    /// (planning file, text as read, text with its links rewritten).
+    /// (markdown file, text as read, text with its links rewritten).
     rewrites: Vec<(PathBuf, String, String)>,
 }
 
@@ -159,7 +165,7 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
         let file = format!("{SPEC_FOLDER}/{name}");
         if !changes.is_empty() {
             prepared.plan.links.push(FileLinks {
-                file: file.clone(),
+                file: format!("{root}/{file}"),
                 changes,
             });
         }
@@ -193,36 +199,52 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
     }
     prepared.before = Some(before);
 
-    for entry in WalkDir::new(&planning)
+    // `spec.md` as seen from the repository root, to resolve links in any file against.
+    let spec_path: Vec<String> = Path::new(root.as_str())
+        .join(SPEC_FILE)
+        .components()
+        .filter_map(|part| match part {
+            Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    for entry in WalkDir::new(repo_root)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|entry| {
-            entry.depth() == 0 || !entry.file_name().to_string_lossy().starts_with('.')
-        })
+        .filter_entry(|entry| entry.depth() == 0 || searched(entry.path(), &planning))
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_file())
     {
         let path = entry.path();
-        let Ok(relative) = path.strip_prefix(&planning) else {
+        let Ok(relative) = path.strip_prefix(repo_root) else {
             continue;
         };
-        if relative == Path::new(SPEC_FILE) || relative.extension().is_none_or(|ext| ext != "md") {
+        if path == planning.join(SPEC_FILE) || relative.extension().is_none_or(|ext| ext != "md") {
             continue;
         }
         let file = relative.to_string_lossy().replace('\\', "/");
-        let old = match std::fs::read_to_string(path) {
-            Ok(old) => old,
+        let old = match std::fs::read(path).map(String::from_utf8) {
+            Ok(Ok(old)) => old,
+            // Text that is no UTF-8 is only a problem when it might link to the spec.
+            Ok(Err(err)) if !contains(err.as_bytes(), SPEC_FILE.as_bytes()) => continue,
+            Ok(Err(_)) => {
+                prepared
+                    .plan
+                    .blockers
+                    .push(format!("could not read {file}: it is not UTF-8 text"));
+                continue;
+            }
             Err(err) => {
                 prepared
                     .plan
                     .blockers
-                    .push(format!("could not read {root}/{file}: {err}"));
+                    .push(format!("could not read {file}: {err}"));
                 continue;
             }
         };
         let dir = relative.parent().unwrap_or(Path::new(""));
         let (new, changes) = rewrite_links(&old, |target| {
-            let (prefix, anchor) = into_spec(target, dir)?;
+            let (prefix, anchor) = into_spec(target, dir, &spec_path)?;
             let (index, anchor) = locate(anchor, &anchors);
             Some(format!(
                 "{prefix}{SPEC_FOLDER}/{}{}",
@@ -239,6 +261,19 @@ fn prepare(repo_root: &Path, config: &Config) -> Prepared {
     prepared
 }
 
+/// Whether the walk for links goes into `path`: not into hidden names or [`SKIPPED`] folders,
+/// except on the way to the planning root.
+fn searched(path: &Path, planning: &Path) -> bool {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    planning.starts_with(path) || !(name.starts_with('.') || SKIPPED.contains(&name.as_ref()))
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 /// [`split_spec`] with the trash passed in, so tests need not use the OS trash.
 fn split_spec_with(
     repo_root: &Path,
@@ -253,7 +288,7 @@ fn split_spec_with(
     let folder = planning.join(SPEC_FOLDER);
     let spec_path = planning.join(SPEC_FILE);
     let relative = |path: &Path| {
-        path.strip_prefix(&planning)
+        path.strip_prefix(repo_root)
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/")
@@ -319,7 +354,16 @@ fn split_spec_with(
 
     let (block_written, block_error) = regenerate_block(repo_root, config);
     Ok(SplitReport {
-        created: undo.created.iter().map(|path| relative(path)).collect(),
+        created: undo
+            .created
+            .iter()
+            .map(|path| {
+                format!(
+                    "{SPEC_FOLDER}/{}",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                )
+            })
+            .collect(),
         rewritten: undo
             .rewritten
             .iter()
@@ -565,9 +609,14 @@ fn with_hash(anchor: Option<&str>) -> String {
 // ---------------------------------------------------------------------------------------------
 // Links
 
-/// When `target`, a link in a file in the folder `dir` (relative to the planning root), points
-/// to `spec.md`: the part of the target before the file name and the anchor.
-fn into_spec<'t>(target: &'t str, dir: &Path) -> Option<(&'t str, Option<&'t str>)> {
+/// When `target`, a link in a file in the folder `dir`, points to `spec`, the path of
+/// `spec.md` from the same root as `dir`: the part of the target before the file name and the
+/// anchor.
+fn into_spec<'t>(
+    target: &'t str,
+    dir: &Path,
+    spec: &[String],
+) -> Option<(&'t str, Option<&'t str>)> {
     let (path, anchor) = match target.split_once('#') {
         Some((path, anchor)) => (path, Some(anchor)),
         None => (target, None),
@@ -586,7 +635,7 @@ fn into_spec<'t>(target: &'t str, dir: &Path) -> Option<(&'t str, Option<&'t str
             Component::RootDir | Component::Prefix(_) => return None,
         }
     }
-    (resolved == [SPEC_FILE]).then(|| (&path[..path.rfind('/').map_or(0, |i| i + 1)], anchor))
+    (resolved == spec).then(|| (&path[..path.rfind('/').map_or(0, |i| i + 1)], anchor))
 }
 
 /// The new target of `target`, a link in the moved text of file `index`.
@@ -609,7 +658,7 @@ fn spec_link(
             .contains_key(&percent_decode(anchor).to_lowercase())
             .then(|| in_spec(Some(anchor)));
     }
-    if let Some((_, anchor)) = into_spec(target, Path::new("")) {
+    if let Some((_, anchor)) = into_spec(target, Path::new(""), &[SPEC_FILE.to_string()]) {
         return Some(in_spec(anchor));
     }
     // Every other relative link now starts one folder deeper.
@@ -890,7 +939,10 @@ mod tests {
         let linked: Vec<&str> = plan.links.iter().map(|l| l.file.as_str()).collect();
         assert_eq!(
             linked,
-            ["braindump.md", "next/20261031-000000-aaaa-task.md"]
+            [
+                "docs/planning/braindump.md",
+                "docs/planning/next/20261031-000000-aaaa-task.md"
+            ]
         );
 
         let trash = fake_trash(&root);
@@ -1035,6 +1087,135 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    #[test]
+    fn links_anywhere_in_the_repository_are_rewritten() {
+        let root = temp_repo(SMALL, &[("next/t.md", "[spec](../spec.md)\n")]);
+        let write = |file: &str, text: &[u8]| {
+            let path = root.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        let link = "[spec](docs/planning/spec.md#decisions)\n";
+        write(
+            "ARCHITECTURE.md",
+            b"See the [spec](docs/planning/spec.md#vision) and [here](./docs/planning/spec.md).\n\
+              Not [this](spec.md) or [web](https://x.org/docs/planning/spec.md).\n",
+        );
+        write(
+            "docs/guide/intro.md",
+            b"[Glossary](../planning/spec.md#glossary)\n\n[s]: <../planning/spec.md>\n",
+        );
+        write("docs/notes.txt", link.as_bytes());
+        // Hidden, installed and built folders are not searched.
+        for skipped in [
+            ".github/x.md",
+            "node_modules/p/x.md",
+            "src-tauri/target/x.md",
+        ] {
+            write(skipped, link.as_bytes());
+        }
+        // Text that is no UTF-8 is skipped unless it names the spec.
+        write("docs/latin.md", b"caf\xe9\n");
+        let config = Config::default();
+
+        let plan = plan_split(&root, &config);
+        assert_eq!(plan.blockers, Vec::<String>::new());
+        // Without the moved text of SMALL.
+        let linked: Vec<&str> = plan
+            .links
+            .iter()
+            .map(|l| l.file.as_str())
+            .filter(|file| !file.contains("/spec/"))
+            .collect();
+        assert_eq!(
+            linked,
+            [
+                "ARCHITECTURE.md",
+                "docs/guide/intro.md",
+                "docs/planning/next/t.md"
+            ]
+        );
+        assert_eq!(
+            plan.links[2].changes,
+            [
+                LinkChange {
+                    line: 1,
+                    old: "docs/planning/spec.md#vision".to_string(),
+                    new: "docs/planning/spec/vision.md#vision".to_string(),
+                },
+                LinkChange {
+                    line: 1,
+                    old: "./docs/planning/spec.md".to_string(),
+                    new: "./docs/planning/spec/README.md".to_string(),
+                },
+            ]
+        );
+
+        let trash = fake_trash(&root);
+        let report = split_spec_with(&root, &config, &trash).unwrap();
+        assert_eq!(report.rewritten, linked);
+        assert_eq!(
+            std::fs::read_to_string(root.join("ARCHITECTURE.md")).unwrap(),
+            "See the [spec](docs/planning/spec/vision.md#vision) and [here](./docs/planning/spec/README.md).\n\
+             Not [this](spec.md) or [web](https://x.org/docs/planning/spec.md).\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("docs/guide/intro.md")).unwrap(),
+            "[Glossary](../planning/spec/README.md#glossary)\n\n[s]: <../planning/spec/README.md>\n"
+        );
+        for unchanged in [
+            "docs/notes.txt",
+            ".github/x.md",
+            "node_modules/p/x.md",
+            "src-tauri/target/x.md",
+        ] {
+            assert_eq!(
+                std::fs::read_to_string(root.join(unchanged)).unwrap(),
+                link,
+                "{unchanged}"
+            );
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+
+        let root = temp_repo(SMALL, &[]);
+        std::fs::write(
+            root.join("README.md"),
+            b"[spec](docs/planning/spec.md) caf\xe9\n",
+        )
+        .unwrap();
+        let plan = plan_split(&root, &config);
+        assert_eq!(
+            plan.blockers,
+            ["could not read README.md: it is not UTF-8 text"]
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_planning_root_in_a_hidden_folder_is_still_searched() {
+        let config = Config {
+            planning_root: ".plan".to_string(),
+            ..Config::default()
+        };
+        let root = std::env::temp_dir().join(format!("stardust-split-{}", random_suffix()));
+        std::fs::create_dir_all(root.join(".plan/next")).unwrap();
+        std::fs::write(root.join(".plan/spec.md"), SMALL).unwrap();
+        std::fs::write(root.join(".plan/next/t.md"), "[spec](../spec.md)\n").unwrap();
+        std::fs::write(root.join("README.md"), "[spec](.plan/spec.md#vision)\n").unwrap();
+        let plan = plan_split(&root, &config);
+        assert_eq!(plan.blockers, Vec::<String>::new());
+        // Without the moved text of SMALL.
+        let linked: Vec<&str> = plan
+            .links
+            .iter()
+            .map(|l| l.file.as_str())
+            .filter(|file| !file.contains("/spec/"))
+            .collect();
+        assert_eq!(linked, [".plan/next/t.md", "README.md"]);
+        assert_eq!(plan.links[3].changes[0].new, ".plan/spec/vision.md#vision");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_failed_link_rewrite_undoes_the_split() {
@@ -1046,15 +1227,41 @@ mod tests {
                 ("next/b.md", "[spec](../spec.md#vision)\n"),
             ],
         );
+        // Outside the planning root, and rewritten before the locked file.
+        let architecture = "[spec](docs/planning/spec.md)\n";
+        std::fs::write(root.join("ARCHITECTURE.md"), architecture).unwrap();
         let locked = root.join("docs/planning/next/b.md");
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o444)).unwrap();
         let config = Config::default();
         let trash = fake_trash(&root);
+        let plan = plan_split(&root, &config);
+        // Without the moved text of SMALL.
+        let linked: Vec<&str> = plan
+            .links
+            .iter()
+            .map(|l| l.file.as_str())
+            .filter(|file| !file.contains("/spec/"))
+            .collect();
+        assert_eq!(
+            linked,
+            [
+                "ARCHITECTURE.md",
+                "docs/planning/inbox/a.md",
+                "docs/planning/next/b.md"
+            ]
+        );
         let err = split_spec_with(&root, &config, &trash).unwrap_err();
-        assert!(err.starts_with("could not rewrite next/b.md"), "{err}");
+        assert!(
+            err.starts_with("could not rewrite docs/planning/next/b.md"),
+            "{err}"
+        );
         assert!(err.ends_with("nothing was changed, spec.md stays"), "{err}");
         assert_eq!(read(&root, SPEC_FILE), SMALL);
         assert_eq!(read(&root, "inbox/a.md"), "[spec](../spec.md)\n");
+        assert_eq!(
+            std::fs::read_to_string(root.join("ARCHITECTURE.md")).unwrap(),
+            architecture
+        );
         assert!(!root.join("docs/planning/spec").exists());
         assert_eq!(std::fs::read_dir(root.join(".trash")).unwrap().count(), 4);
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();

@@ -18,7 +18,7 @@ interface SplitState {
   preview: (repoRoot: string) => Promise<void>;
   /**
    * Splits the spec as previewed. The open file is saved first, since the split rewrites
-   * links in planning files; refused while it has a conflict.
+   * links in markdown files of the repository; refused while it has a conflict.
    */
   confirm: () => Promise<void>;
   cancel: () => void;
