@@ -14,25 +14,37 @@ export const PROMPT_LABELS: Record<Prompt, string> = {
 };
 
 /** The prompts offered for an open task. */
-export const TASK_PROMPTS: Prompt[] = [
+export const TASK_PROMPTS = [
   "work-on-task",
   "verify-task",
   "handoff",
-];
+] as const satisfies readonly Prompt[];
 
 /** The prompts offered while the braindump is open. */
-export const BRAINDUMP_PROMPTS: Prompt[] = ["structure-this"];
+export const BRAINDUMP_PROMPTS = [
+  "structure-this",
+] as const satisfies readonly Prompt[];
 
 /** The prompts in the spec view header; each works on the whole spec. */
-export const SPEC_PROMPTS: Prompt[] = [
+export const SPEC_PROMPTS = [
   "interview-me",
   "integrate-answers",
   "generate-tasks",
-];
+] as const satisfies readonly Prompt[];
+
+/** The prompts that work on a whole file, the board or the spec; Verify area needs a node. */
+export const FILE_PROMPTS = [
+  ...TASK_PROMPTS,
+  ...BRAINDUMP_PROMPTS,
+  "triage-inbox",
+  ...SPEC_PROMPTS,
+] as const satisfies readonly Prompt[];
+
+export type FilePrompt = (typeof FILE_PROMPTS)[number];
 
 /** The prompts of the editor's "Copy prompt" row and what they are filled with. */
 export interface EditorPrompts {
-  prompts: Prompt[];
+  prompts: readonly FilePrompt[];
   input: PromptInput;
 }
 

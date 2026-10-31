@@ -39,7 +39,6 @@ import {
   fileNameOf,
   formValue,
   frontmatterLineCount,
-  isShortcut,
   resolveLink,
 } from "@/lib/editor";
 import { remarkGlossary } from "@/lib/glossary";
@@ -52,9 +51,10 @@ import {
   setProtectedLines,
 } from "@/lib/protected-lines";
 import { useBoardStore } from "@/stores/board-store";
+import { runCommand } from "@/stores/command-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useLinkStore } from "@/stores/link-store";
-import { usePromptStore } from "@/stores/prompt-store";
+import { useMenuStore } from "@/stores/menu-store";
 import { useSpecStore } from "@/stores/spec-store";
 import { useThemeStore } from "@/stores/theme-store";
 
@@ -172,18 +172,15 @@ export function Editor() {
     modes,
     error,
     edit,
-    save,
-    close,
-    toggleMode,
     selection,
     setSelection,
-    makeTask,
     trash,
     reveal,
     revealed,
     violations,
   } = useEditorStore();
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const confirmDelete = useMenuStore((state) => state.confirmTrash);
+  const setConfirmDelete = useMenuStore((state) => state.setConfirmTrash);
   const [view, setView] = useState<EditorView | null>(null);
   const isTask = useIsTask(path);
   const theme = useThemeStore((state) => state.theme);
@@ -194,20 +191,6 @@ export function Editor() {
     view,
   );
   const staleFlags = useStaleFlagsOf(path);
-
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (isShortcut(event, "s")) {
-        event.preventDefault();
-        void save();
-      } else if (isShortcut(event, "e")) {
-        event.preventDefault();
-        toggleMode();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [save, toggleMode]);
 
   // A line asked for by `open` (the spec view, for example) is shown once the source view has
   // the text; CodeMirror takes a new value in its own effect, which runs before this one.
@@ -252,7 +235,7 @@ export function Editor() {
           variant="outline"
           size="xs"
           disabled={selection.trim() === ""}
-          onClick={() => void makeTask()}
+          onClick={() => runCommand("editor.make-task")}
           title="Select text first; the task goes to the first column"
         >
           Make task
@@ -260,7 +243,7 @@ export function Editor() {
         <Button
           variant="outline"
           size="xs"
-          onClick={toggleMode}
+          onClick={() => runCommand("editor.toggle-mode")}
           title="Ctrl/⌘+E"
         >
           {mode === "source" ? "Read" : "Source"}
@@ -269,13 +252,17 @@ export function Editor() {
           <Button
             variant="ghost"
             size="xs"
-            onClick={() => setConfirmDelete(path)}
+            onClick={() => runCommand("editor.delete")}
             title="Moves the file to the trash"
           >
             Delete
           </Button>
         )}
-        <Button variant="ghost" size="xs" onClick={() => void close()}>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => runCommand("editor.close")}
+        >
           Close
         </Button>
       </header>
@@ -460,7 +447,6 @@ function useIsTask(path: string | null): boolean {
  */
 function PromptBar({ path }: { path: string }) {
   const { repoRoot, config } = useBoardStore();
-  const copy = usePromptStore((state) => state.copy);
   if (repoRoot === null || config === null) return null;
   const offered = editorPromptsOf(
     path,
@@ -477,7 +463,7 @@ function PromptBar({ path }: { path: string }) {
           key={prompt}
           variant="secondary"
           size="xs"
-          onClick={() => void copy(repoRoot, prompt, offered.input)}
+          onClick={() => runCommand(`prompt.${prompt}`)}
         >
           {PROMPT_LABELS[prompt]}
         </Button>

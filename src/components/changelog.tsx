@@ -2,15 +2,15 @@ import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { entriesLabel, entryCount } from "@/lib/changelog";
 import { useChangelogStore } from "@/stores/changelog-store";
+import { runCommand } from "@/stores/command-store";
 
 /** Opens the changelog form for `repoRoot` (`S-changelog`). */
-export function ChangelogButton({ repoRoot }: { repoRoot: string }) {
-  const start = useChangelogStore((state) => state.start);
+export function ChangelogButton() {
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void start(repoRoot)}
+      onClick={() => runCommand("project.changelog")}
       title="Drafts CHANGELOG.md entries from the finished tasks, after a preview"
     >
       Changelog

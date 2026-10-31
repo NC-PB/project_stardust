@@ -1,15 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { movesByMonth, tasksLabel } from "@/lib/archive";
 import { useArchiveStore } from "@/stores/archive-store";
+import { runCommand } from "@/stores/command-store";
 
 /** Previews which finished tasks move into month folders (`S-archive`). */
-export function ArchiveButton({ repoRoot }: { repoRoot: string }) {
-  const preview = useArchiveStore((state) => state.preview);
+export function ArchiveButton() {
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void preview(repoRoot)}
+      onClick={() => runCommand("project.archive")}
       title="Moves finished tasks of earlier months into month folders, after a preview"
     >
       Archive

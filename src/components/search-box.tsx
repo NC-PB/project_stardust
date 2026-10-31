@@ -1,8 +1,9 @@
 import { cn } from "cn";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { SearchHit } from "@/bindings";
 import { highlight, hitLocation } from "@/lib/search";
 import { useEditorStore } from "@/stores/editor-store";
+import { useMenuStore } from "@/stores/menu-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSearchStore } from "@/stores/search-store";
 
@@ -16,6 +17,13 @@ export function SearchBox() {
   const { query, hits, error, setQuery, clear } = useSearchStore();
   const openFile = useEditorStore((state) => state.open);
   const [chosen, setChosen] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const searchFocus = useMenuStore((state) => state.searchFocus);
+
+  // "Search planning files" from the palette puts the focus here (`S-palette`).
+  useEffect(() => {
+    if (searchFocus > 0) input.current?.focus();
+  }, [searchFocus]);
 
   if (repoRoot === null) return null;
   const open = (hit: SearchHit) => {
@@ -37,6 +45,7 @@ export function SearchBox() {
   return (
     <div className="relative w-full max-w-xl">
       <input
+        ref={input}
         type="search"
         value={query}
         onChange={(event) => {

@@ -1,14 +1,14 @@
 import { Button } from "@/components/ui/button";
+import { runCommand } from "@/stores/command-store";
 import { useSplitStore } from "@/stores/split-store";
 
 /** Starts a split of the single spec file into `spec/` with a preview (`S-spec-split`). */
-export function SplitSpecButton({ repoRoot }: { repoRoot: string }) {
-  const preview = useSplitStore((state) => state.preview);
+export function SplitSpecButton() {
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void preview(repoRoot)}
+      onClick={() => runCommand("project.split-spec")}
       title="Moves each section of spec.md into its own file under spec/, after a preview"
     >
       Split spec

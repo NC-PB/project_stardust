@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import type { MainView } from "@/lib/spec-view";
+import { runCommand } from "@/stores/command-store";
 import { useSpecStore } from "@/stores/spec-store";
 import { useViewStore } from "@/stores/view-store";
 
@@ -11,7 +12,7 @@ const VIEWS: { view: MainView; label: string }[] = [
 
 /** Switches the main area between the board, the spec view and the Stale view; shown once a project is open. */
 export function ViewSwitch() {
-  const { view, show } = useViewStore();
+  const view = useViewStore((state) => state.view);
   const ready = useSpecStore((state) => state.spec !== null);
   if (!ready) return null;
   return (
@@ -23,7 +24,7 @@ export function ViewSwitch() {
           aria-selected={view === option.view}
           variant={view === option.view ? "secondary" : "ghost"}
           size="sm"
-          onClick={() => show(option.view)}
+          onClick={() => runCommand(`view.${option.view}`)}
         >
           {option.label}
         </Button>

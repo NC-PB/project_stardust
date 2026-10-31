@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { type SessionEntry, sessionBrief } from "@/lib/session";
 import { useBoardStore } from "@/stores/board-store";
+import { runCommand } from "@/stores/command-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useSessionStore } from "@/stores/session-store";
 import { useSpecStore } from "@/stores/spec-store";
@@ -18,13 +19,17 @@ export function SessionPanel() {
     state.repoRoot === repoRoot ? state.spec : null,
   );
   const openFile = useEditorStore((state) => state.open);
-  const { hiddenFor, hide, show } = useSessionStore();
+  const hiddenFor = useSessionStore((state) => state.hiddenFor);
 
   if (repoRoot === null || config === null) return null;
   if (hiddenFor === repoRoot)
     return (
       <div className="flex w-full justify-end">
-        <Button variant="ghost" size="xs" onClick={show}>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => runCommand("session.show")}
+        >
           Show session
         </Button>
       </div>
@@ -46,7 +51,7 @@ export function SessionPanel() {
           variant="ghost"
           size="xs"
           className="ml-auto"
-          onClick={() => hide(repoRoot)}
+          onClick={() => runCommand("session.hide")}
         >
           Hide
         </Button>

@@ -6,17 +6,17 @@ import {
   fixLabel,
   reportSummary,
 } from "@/lib/doctor";
+import { runCommand } from "@/stores/command-store";
 import { useDoctorStore } from "@/stores/doctor-store";
 import { useEditorStore } from "@/stores/editor-store";
 
 /** Runs the doctor over the planning files (`S-doctor`). */
-export function DoctorButton({ repoRoot }: { repoRoot: string }) {
-  const check = useDoctorStore((state) => state.check);
+export function DoctorButton() {
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void check(repoRoot)}
+      onClick={() => runCommand("project.doctor")}
       title="Checks ids, links, images, frontmatter and trace of the planning files"
     >
       Doctor
