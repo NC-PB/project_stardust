@@ -90,8 +90,62 @@ export function isNewSince(
   return !Number.isNaN(time) && time > since;
 }
 
+/** `a` before `b` in the base order: priority 1 to 5, none last; created, none last; id, none last; file name. */
+function compareBase(a: Task_Serialize, b: Task_Serialize): number {
+  const rank = (task: Task_Serialize) =>
+    task.priority ?? Number.POSITIVE_INFINITY;
+  const byText = (x: string | null, y: string | null) =>
+    x === y ? 0 : x === null ? 1 : y === null ? -1 : x < y ? -1 : 1;
+  return (
+    rank(a) - rank(b) ||
+    byText(a.created, b.created) ||
+    byText(a.id, b.id) ||
+    byText(a.file_name, b.file_name)
+  );
+}
+
 /**
- * The cards of every column. A dependency blocks while its task is in a column other than
+ * The tasks of one column in board order (`S-board-sort`): the base order (priority 1 to 5, none
+ * last, then `created`, then id, then file name), with dependency order on top: a task comes
+ * after every task of the same column it depends on. Each place is filled by the first task in
+ * base order whose dependencies in the column are all placed. Dependencies on tasks in other
+ * columns or on unknown ids are ignored. When no task is free, there is a cycle: starting from the
+ * first remaining task in base order, its first unplaced dependency is followed until a task
+ * repeats; that task, which lies on the cycle, is placed next.
+ */
+export function sortTasks(tasks: Task_Serialize[]): Task_Serialize[] {
+  const remaining = [...tasks].sort(compareBase);
+  /** The first unplaced task of the column that `task` depends on, if any. */
+  const blocker = (task: Task_Serialize) => {
+    for (const id of task.depends_on) {
+      const found = remaining.find(
+        (other) => other !== task && other.id === id,
+      );
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  const sorted: Task_Serialize[] = [];
+  while (remaining.length > 0) {
+    let next = remaining.find((task) => blocker(task) === undefined);
+    if (next === undefined) {
+      const seen = new Set<Task_Serialize>();
+      let current = remaining[0];
+      while (!seen.has(current)) {
+        seen.add(current);
+        // Every remaining task has a blocker here, since none is free.
+        current = blocker(current) ?? current;
+      }
+      next = current;
+    }
+    remaining.splice(remaining.indexOf(next), 1);
+    sorted.push(next);
+  }
+  return sorted;
+}
+
+/**
+ * The cards of every column, each column in board order (`sortTasks`). A dependency blocks while its task is in a column other than
  * `terminal`; an id found in no column (archived or deleted) does not block.
  */
 export function cardsOf(
@@ -117,7 +171,7 @@ export function cardsOf(
   return new Map(
     columns.map((column) => [
       column.name,
-      column.tasks.map((task) => ({
+      sortTasks(column.tasks).map((task) => ({
         key: task.file_name,
         id: task.id,
         title: task.title,
@@ -154,9 +208,10 @@ export function filterCards(
 }
 
 /**
- * The board after moving the task `fileName` from column `from` to the end of column `to`
- * (`S-board-dnd`); unchanged when the task is not in `from` or the columns are the same. A
- * task already in `to` (re-read from disk meanwhile) is not added twice.
+ * The board after moving the task `fileName` from column `from` to column `to` (`S-board-dnd`);
+ * unchanged when the task is not in `from` or the columns are the same. A task already in `to`
+ * (re-read from disk meanwhile) is not added twice. The task is appended to the column's tasks;
+ * `cardsOf` puts it at its sorted place (`S-board-sort`).
  */
 export function moveCard(
   columns: BoardColumn[],

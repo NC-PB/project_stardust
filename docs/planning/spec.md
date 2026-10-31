@@ -137,7 +137,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - The filter lives in the app for the session only; it is kept across watcher batches and reloads of the same project and emptied when another project is opened. Nothing is written to the repository or the settings.
     - Implemented in `src/lib/board.ts` (`boardTags`, `filterCards`), `src/stores/board-store.ts` (`tagFilter`, `toggleTag`, `clearTagFilter`), `src/components/board.tsx`.
   - [x] Sort `S-board-sort`
-    - Per column: priority, created, dependency order.
+    - Per column: priority (1 first, none last), then `created` (none last), then id (none last), then file name.
+    - Dependency order on top: a task comes after every task of the same column it depends on. Each place goes to the first task in that order whose dependencies in the column are all placed. Dependencies on tasks in other columns, on unknown ids or on the task itself are ignored. A cycle is broken at a task on it: following first unplaced dependencies from the first remaining task until one repeats; every task is still shown (D-20261031-021102-jyia).
+    - A moved card takes its sorted place in the target column at once, before the watcher batch, and again when a failed move puts it back.
+    - Implemented in `src/lib/board.ts` (`sortTasks`, applied per column by `cardsOf`).
   - [x] Make task `S-make-task`
     - Selecting text in any file and choosing "Make task" creates a task file in `inbox/` with the selection as Description and a link back to the source file.
     - "Make task" is a button in the editor header, enabled while text is selected: the markdown in source mode, the rendered text in read mode. The task goes to the first column of `columns`; the new file opens in the editor.
@@ -800,6 +803,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: one file per prompt, named after the prompt heading in kebab case, filled from the config like the prompt buttons, with `{task_path}` and `{node_id}` replaced by `$ARGUMENTS`. The tool's own files carry the frontmatter line `planner: generated` (with a YAML comment saying how to keep edits); only those are rewritten, any other file at the path is skipped. The files are written inside `write_planner_block`, so every regeneration of the block writes them too. Removing an adapter leaves the files.
 - Rejected: an HTML comment marker in the body (Claude Code would send it to the agent with the prompt); short names like `/work` (less clear next to the headings and the button labels); a `.claude/commands/planner/` subfolder (commands would become `/planner:work-on-task`); Claude Code skills (`.claude/skills/`), which the docs recommend for new work but which need one folder per command; deleting files when the adapter is removed (`R-no-destroy`).
 - Consequences: `S-adapters` criteria. Skipped user files are not reported. If Claude Code drops `.claude/commands/`, the adapter moves to skills.
+
+### D-20261031-021102-jyia · Board sort: base order, then dependencies within the column
+- Context: `S-board-sort` names priority, created and dependency order per column but not how they combine, what happens with cycles or unknown ids, or where a moved card lands (D-20261030-232042-h9dm put it at the end until the sort exists).
+- Decision: the base order is priority 1 to 5 (none last), then `created` (none last), then id (none last), then file name. Dependency order is applied on top as a stable topological order within the column: each place goes to the first task in base order whose dependencies in the same column are all placed, so a dependent task moves down below its dependencies, not the dependency up. Dependencies on tasks in other columns, on ids found in no column and on the task itself are ignored. When no task is free there is a cycle: from the first remaining task in base order its first unplaced dependency is followed until a task repeats, and that task is placed next. The sort runs where cards are built (`cardsOf`), so an optimistic move and a move put back after a failure show at the sorted place without changing `moveCard`.
+- Rejected: pulling dependencies up above their dependents (a low priority dependency would jump over higher priority tasks); ordering across columns (a column only shows its own tasks); hiding or flagging tasks in a cycle (the order must not drop cards; cycles are a matter for `S-dependencies`); inserting at the sorted place in `moveCard` (the board would hold two orderings of the same tasks).
+- Consequences: `S-board-sort` criteria. The "lands at the end of the column" part of D-20261030-232042-h9dm no longer holds; `S-board-dnd` still says so. `BoardColumn.tasks` stays in the order read from disk; anything showing tasks in board order uses `sortTasks`.
 
 ## Glossary
 
