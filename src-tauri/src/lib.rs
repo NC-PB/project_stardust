@@ -21,6 +21,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::list_proposals,
             commands::plan_spec_split,
             commands::split_spec,
+            commands::plan_gitattributes,
+            commands::add_gitattributes,
             commands::read_column,
             commands::read_task,
             commands::set_task_field,

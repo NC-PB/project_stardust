@@ -9,6 +9,7 @@ pub mod columns;
 pub mod config;
 pub mod files;
 pub mod gate;
+pub mod gitattributes;
 pub mod ids;
 pub mod init;
 pub mod make_task;
