@@ -12,6 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { cn } from "cn";
 import { useEffect, useState } from "react";
+import { StaleBadges, useStaleFlags } from "@/components/stale-flags";
 import { Button } from "@/components/ui/button";
 import {
   type BoardColumn,
@@ -22,6 +23,7 @@ import {
   filterCards,
 } from "@/lib/board";
 import { PROMPT_LABELS } from "@/lib/prompts";
+import type { StaleFlag } from "@/lib/staleness";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePromptStore } from "@/stores/prompt-store";
@@ -30,6 +32,8 @@ import { usePromptStore } from "@/stores/prompt-store";
 const AGE_TICK_MS = 60_000;
 /** A press turns into a drag after this many pixels, so clicks on tags still work. */
 const DRAG_DISTANCE_PX = 5;
+
+const NO_FLAGS: StaleFlag[] = [];
 
 /** What a dragged card carries (`S-board-dnd`). */
 interface DragData {
@@ -60,6 +64,7 @@ export function Board() {
   const copyPrompt = usePromptStore((state) => state.copy);
   const [now, setNow] = useState(Date.now);
   const [dragged, setDragged] = useState<Card | null>(null);
+  const staleFlags = useStaleFlags();
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: DRAG_DISTANCE_PX },
@@ -143,6 +148,7 @@ export function Board() {
               onToggleTag={toggleTag}
               openPath={openPath}
               pathOf={pathOf}
+              staleFlags={staleFlags}
               onOpen={(path) => void openFile(repoRoot, path)}
             />
           ))}
@@ -170,6 +176,7 @@ function Column({
   onToggleTag,
   openPath,
   pathOf,
+  staleFlags,
   onOpen,
   triage,
 }: {
@@ -180,6 +187,8 @@ function Column({
   onToggleTag: (tag: string) => void;
   openPath: string | null;
   pathOf: (column: string, card: Card) => string;
+  /** Staleness flags by file path (`S-staleness`). */
+  staleFlags: Map<string, StaleFlag[]>;
   onOpen: (path: string) => void;
   /** Copies the Triage inbox prompt; given for the first column (`S-prompts`). */
   triage?: () => void;
@@ -229,6 +238,7 @@ function Column({
             selected={selected}
             onToggleTag={onToggleTag}
             isOpen={path === openPath}
+            flags={staleFlags.get(path) ?? NO_FLAGS}
             onOpen={() => onOpen(path)}
           />
         );
@@ -244,6 +254,7 @@ function DraggableCard({
   selected,
   onToggleTag,
   isOpen,
+  flags,
   onOpen,
 }: {
   column: string;
@@ -251,6 +262,7 @@ function DraggableCard({
   selected: string[];
   onToggleTag: (tag: string) => void;
   isOpen: boolean;
+  flags: StaleFlag[];
   onOpen: () => void;
 }) {
   const data: DragData = { column, card };
@@ -275,6 +287,7 @@ function DraggableCard({
         selected={selected}
         onToggleTag={onToggleTag}
         isOpen={isOpen}
+        flags={flags}
         onOpen={onOpen}
       />
     </div>
@@ -344,12 +357,15 @@ function TaskCard({
   selected,
   onToggleTag,
   isOpen = false,
+  flags = NO_FLAGS,
   onOpen,
 }: {
   card: Card;
   selected: string[];
   onToggleTag: (tag: string) => void;
   isOpen?: boolean;
+  /** Staleness flags of the card's file; reasons on hover. */
+  flags?: StaleFlag[];
   onOpen?: () => void;
 }) {
   return (
@@ -403,6 +419,7 @@ function TaskCard({
             Blocked
           </span>
         )}
+        <StaleBadges flags={flags} />
       </div>
     </article>
   );

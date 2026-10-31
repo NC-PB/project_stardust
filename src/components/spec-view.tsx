@@ -6,6 +6,7 @@ import { InlineMarkdown } from "@/components/inline-markdown";
 import { MindMap } from "@/components/mind-map";
 import { QuestionsForm } from "@/components/questions-form";
 import { SpecPrompts } from "@/components/spec-prompts";
+import { useStaleFlags } from "@/components/stale-flags";
 import { NodeTasks, TracePanel } from "@/components/trace";
 import { Button } from "@/components/ui/button";
 import { VerifyAreaButton } from "@/components/verify-area-button";
@@ -21,6 +22,7 @@ import {
   specPathOf,
   tickLabel,
 } from "@/lib/spec-view";
+import { repoRelative } from "@/lib/staleness";
 import { useEditorStore } from "@/stores/editor-store";
 import { useSpecStore } from "@/stores/spec-store";
 import { useViewStore } from "@/stores/view-store";
@@ -90,6 +92,7 @@ export function SpecView() {
         </p>
       ) : (
         <>
+          <ReviewFlags />
           <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
             <FogMeter onOpen={openAt} />
             <GateStatus onOpen={openAt} />
@@ -419,5 +422,35 @@ function IssueList({
         })}
       </ul>
     </details>
+  );
+}
+
+/** Spec files due for review (`S-staleness`), each opening in the editor. */
+function ReviewFlags() {
+  const repoRoot = useSpecStore((state) => state.repoRoot);
+  const open = useEditorStore((state) => state.open);
+  const flags = [...useStaleFlags().values()]
+    .flat()
+    .filter((flag) => flag.kind === "unreviewed-spec");
+  if (repoRoot === null || flags.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs">
+      {flags.map((flag) => (
+        <li key={flag.path} className="flex items-center gap-2">
+          <span className="font-medium text-amber-600 dark:text-amber-400">
+            Review due
+          </span>
+          <span className="font-mono">{repoRelative(repoRoot, flag.path)}</span>
+          <span className="min-w-0 flex-1">{flag.reason}</span>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => void open(repoRoot, flag.path)}
+          >
+            Open
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }

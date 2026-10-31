@@ -22,6 +22,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { commands, type GlossaryTerm } from "@/bindings";
 import { ProposalQuote, ProposalUndo } from "@/components/proposal-quote";
+import { StaleBadges, useStaleFlagsOf } from "@/components/stale-flags";
 import { Button } from "@/components/ui/button";
 import { APPEND_ONLY_EXPLANATION, violationText } from "@/lib/append-only";
 import {
@@ -165,6 +166,7 @@ export function Editor() {
   const [view, setView] = useState<EditorView | null>(null);
   const isTask = useIsTask(path);
   const theme = useThemeStore((state) => state.theme);
+  const staleFlags = useStaleFlagsOf(path);
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -207,6 +209,9 @@ export function Editor() {
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
           {fileNameOf(path)}
         </h2>
+        <span className="flex items-center gap-2 text-xs">
+          <StaleBadges flags={staleFlags} />
+        </span>
         <span className="text-xs text-muted-foreground">
           {unsaved ? "Unsaved" : "Saved"}
         </span>
