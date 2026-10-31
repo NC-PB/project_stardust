@@ -21,11 +21,13 @@ describe("doctor helpers", () => {
       finding("duplicate_id", "a.md"),
       finding("duplicate_id", "b.md"),
       finding("broken_link", "a.md", 9),
+      finding("dependency_error", "b.md", 5),
       finding("untraced", "c.md"),
     ]);
     expect(groups.map((g) => [g.label, g.findings.length])).toEqual([
       ["Duplicate ids", 2],
       ["Broken links", 1],
+      ["Dependency errors", 1],
       ["Untraced tasks", 1],
     ]);
     expect(findingGroups([])).toEqual([]);
@@ -59,6 +61,13 @@ describe("doctor helpers", () => {
     expect(fixLabel({ kind: "repair_links", file: "README.md" })).toContain(
       "README.md",
     );
+    expect(
+      fixLabel({
+        kind: "remove_dependency",
+        file: "docs/planning/next/x-self.md",
+        id: "x",
+      }),
+    ).toBe("Remove x, the task's own id, from depends_on of x-self.md");
     expect(
       fixResult({ file: "a.md", links: { rewritten: [], problems: [] } }),
     ).toBe("Fixed a.md.");

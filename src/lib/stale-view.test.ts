@@ -169,6 +169,32 @@ describe("staleViewEntries", () => {
       "Blocked docs/planning/next/a-x.md",
     ]);
   });
+
+  it("lists a dependency on the task itself as broken, not blocked", () => {
+    const columns = [
+      column("inbox", []),
+      column("next", [task("a", { depends_on: ["a"] })]),
+      column("done", []),
+    ];
+    const selfDependency: Finding_Serialize = {
+      kind: "dependency_error",
+      file: "docs/planning/next/a-x.md",
+      line: 5,
+      message: "`depends_on` names the task's own id `a`",
+      fix: {
+        kind: "remove_dependency",
+        file: "docs/planning/next/a-x.md",
+        id: "a",
+      },
+    };
+    const entries = staleViewEntries(
+      input({ columns, findings: [selfDependency] }),
+    );
+    expect(
+      entries.map((entry) => `${entry.group} ${entry.label} ${entry.location}`),
+    ).toEqual(["broken Dependency error docs/planning/next/a-x.md:5"]);
+    expect(entries[0].title).toBe("Task a");
+  });
 });
 
 describe("blockedEntries", () => {

@@ -16,6 +16,7 @@ export const KIND_LABELS: Record<FindingKind, string> = {
   broken_link: "Broken links",
   missing_image: "Missing images",
   frontmatter_error: "Frontmatter errors",
+  dependency_error: "Dependency errors",
   untraced: "Untraced tasks",
 };
 
@@ -58,6 +59,8 @@ export function fixLabel(fix: DoctorFix): string {
       return `Rename ${fileName(fix.file)} to ${fix.to} and write its id into the frontmatter; links to it follow`;
     case "repair_links":
       return `Repair the broken links of ${fileName(fix.file)} by the task id in their target`;
+    case "remove_dependency":
+      return `Remove ${fix.id}, the task's own id, from depends_on of ${fileName(fix.file)}`;
   }
 }
 

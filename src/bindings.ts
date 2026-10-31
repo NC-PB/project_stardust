@@ -684,7 +684,12 @@ export type DoctorFix =
  */
 { kind: "rename"; file: string; to: string; id: string } | 
 /**  Repairs the broken links of `file` by the id in their target's filename (`S-links`). */
-{ kind: "repair_links"; file: string };
+{ kind: "repair_links"; file: string } | 
+/**
+ *  Removes `id`, the task's own id, from the `depends_on` of `file`; the other entries stay
+ *  in their order.
+ */
+{ kind: "remove_dependency"; file: string; id: string };
 
 /**  Everything the doctor found. */
 export type DoctorReport = DoctorReport_Serialize | DoctorReport_Deserialize;
@@ -767,6 +772,8 @@ export type FindingKind =
 "missing_image" | 
 /**  Frontmatter that is not valid, or a field that is missing or has an invalid value. */
 "frontmatter_error" | 
+/**  A `depends_on` entry that cannot mean anything: the task's own id (`S-dependencies`). */
+"dependency_error" | 
 /**
  *  A task outside the terminal column without `implements`, or an `implements` entry
  *  naming no node of the Structure (`S-trace`).
