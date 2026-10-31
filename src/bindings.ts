@@ -111,9 +111,15 @@ export const commands = {
 	removeFieldInText: (text: string, key: string) => typedError<string, string>(__TAURI_INVOKE("remove_field_in_text", { text, key })),
 	/**
 	 *  The image `src` of the markdown file `file` as a `data:` URL, if it is a local image inside
-	 *  the repository at `repo_root`.
+	 *  the repository at `repo_root`; `missing` when no file is there (`S-images`).
 	 */
-	readImage: (repoRoot: string, file: string, src: string) => typedError<string, string>(__TAURI_INVOKE("read_image", { repoRoot, file, src })),
+	readImage: (repoRoot: string, file: string, src: string) => typedError<ImageRead, string>(__TAURI_INVOKE("read_image", { repoRoot, file, src })),
+	/**
+	 *  Copies the image at `source`, dropped into the editor, into the image root of the
+	 *  repository at `repo_root` and returns the markdown linking it from the open file `file`
+	 *  (`S-images`). Never overwrites a file.
+	 */
+	importImage: (repoRoot: string, file: string, source: string) => typedError<ImportedImage, string>(__TAURI_INVOKE("import_image", { repoRoot, file, source })),
 	/**
 	 *  A new task in the first column from `selection`, text selected in the file `source`
 	 *  (`S-make-task`). Returns the path of the new file.
@@ -568,6 +574,26 @@ export type GlossaryTerm = {
 
 /**  What an id is for; decides the prefix. */
 export type IdKind = "Task" | "Question" | "Decision";
+
+/**  What read mode gets for a local image (`S-images`). */
+export type ImageRead = 
+/**  The image as a `data:` URL. */
+{ kind: "shown"; url: string } | 
+/**
+ *  No file at the place the link points to, such as an image root not synced to this
+ *  machine (D-20260919-104200-9f03).
+ */
+{ kind: "missing" };
+
+/**  An image ready to be linked from the open file. */
+export type ImportedImage = {
+	/**  The markdown to insert, `![alt](relative/link.png)`. */
+	markdown: string,
+	/**  The image relative to the repository root, with `/` separators. */
+	path: string,
+	/**  False when the dropped file already was inside the image root and was linked as is. */
+	copied: boolean,
+};
 
 /**  What init did and what it can offer next. Paths are relative to the repository root. */
 export type InitReport = {

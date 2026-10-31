@@ -8,14 +8,18 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import CodeMirror from "@uiw/react-codemirror";
 import { cn } from "cn";
+import { ImageOff } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react";
 import Markdown from "react-markdown";
@@ -36,6 +40,7 @@ import {
   resolveLink,
 } from "@/lib/editor";
 import { remarkGlossary } from "@/lib/glossary";
+import { dropPoint, imageBadge } from "@/lib/images";
 import { editorPromptsOf, PROMPT_LABELS, taskPathOf } from "@/lib/prompts";
 import {
   protectedLinesField,
@@ -165,6 +170,12 @@ export function Editor() {
   const [view, setView] = useState<EditorView | null>(null);
   const isTask = useIsTask(path);
   const theme = useThemeStore((state) => state.theme);
+  const pane = useRef<HTMLElement>(null);
+  const dropping = useImageDrop(
+    pane,
+    path === null ? null : (modes[path] ?? "source"),
+    view,
+  );
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -202,7 +213,13 @@ export function Editor() {
   const unsaved = text !== saved;
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 rounded-lg border p-2">
+    <section
+      ref={pane}
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col gap-2 rounded-lg border p-2",
+        dropping && "ring-2 ring-primary",
+      )}
+    >
       <header className="flex items-center gap-2">
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
           {fileNameOf(path)}
@@ -447,6 +464,68 @@ function PromptBar({ path }: { path: string }) {
   );
 }
 
+/**
+ * Files dragged from the OS onto the editor pane are added as images (`S-images`). Tauri
+ * delivers OS drops as webview events with file paths; the DOM gets no files. In source mode
+ * the links go where the pointer is, over the form at the cursor; in read mode at the end.
+ * Returns whether files are dragged over the pane.
+ */
+function useImageDrop(
+  pane: RefObject<HTMLElement | null>,
+  mode: "source" | "read" | null,
+  view: EditorView | null,
+): boolean {
+  const dropImages = useEditorStore((state) => state.dropImages);
+  const [over, setOver] = useState(false);
+
+  useEffect(() => {
+    if (mode === null) return;
+    const hit = (position: { x: number; y: number }) => {
+      const point = dropPoint(position, window.devicePixelRatio);
+      const target = document.elementFromPoint(point.x, point.y);
+      return {
+        point,
+        target,
+        inside: !!target && !!pane.current?.contains(target),
+      };
+    };
+    let unlisten: (() => void) | undefined;
+    let active = true;
+    const listening = (() => {
+      try {
+        return getCurrentWebview().onDragDropEvent(({ payload }) => {
+          if (payload.type === "leave") return setOver(false);
+          const { point, target, inside } = hit(payload.position);
+          if (payload.type !== "drop") return setOver(inside);
+          setOver(false);
+          if (!inside) return;
+          const source =
+            mode === "source" && view !== null && view.dom.isConnected;
+          const at = !source
+            ? null
+            : target && view.dom.contains(target)
+              ? view.posAtCoords(point, false)
+              : view.state.selection.main.head;
+          void dropImages(payload.paths, at);
+        });
+      } catch {
+        // Outside Tauri, such as in a plain browser, there are no drop events.
+        return Promise.resolve(() => {});
+      }
+    })();
+    void listening.then((stop) => {
+      if (active) unlisten = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [pane, mode, view, dropImages]);
+
+  return over;
+}
+
 /** Puts the cursor at the start of `line` (1-based) and scrolls it to the top. */
 function revealLine(view: EditorView, line: number) {
   const { doc } = view.state;
@@ -591,10 +670,18 @@ function Link({ href, children }: ComponentProps<"a">) {
   );
 }
 
-/** An image from the repository, read through Rust; a missing one says why. */
+type ImageState =
+  | { kind: "shown"; url: string }
+  | { kind: "missing" }
+  | { kind: "refused"; reason: string };
+
+/**
+ * An image from the repository, read through Rust; a missing or refused one is a badge in the
+ * line instead (`S-images`).
+ */
 function LocalImage({ src, alt }: ComponentProps<"img">) {
   const { path, repoRoot } = useEditorStore();
-  const [image, setImage] = useState<{ url: string } | { error: string }>();
+  const [image, setImage] = useState<ImageState>();
 
   useEffect(() => {
     if (!path || !repoRoot || typeof src !== "string") return;
@@ -603,8 +690,8 @@ function LocalImage({ src, alt }: ComponentProps<"img">) {
       if (current)
         setImage(
           result.status === "ok"
-            ? { url: result.data }
-            : { error: result.error },
+            ? result.data
+            : { kind: "refused", reason: result.error },
         );
     });
     return () => {
@@ -612,13 +699,32 @@ function LocalImage({ src, alt }: ComponentProps<"img">) {
     };
   }, [path, repoRoot, src]);
 
-  if (image && "error" in image)
+  if (image === undefined) return null;
+  if (image.kind === "shown")
     return (
-      <span className="rounded bg-muted px-1 text-xs text-muted-foreground">
-        Image {alt ? `"${alt}" ` : ""}not shown: {image.error}
-      </span>
+      <img
+        src={image.url}
+        alt={alt}
+        onError={() =>
+          setImage({
+            kind: "refused",
+            reason: "the file is not a readable image",
+          })
+        }
+      />
     );
-  return image ? <img src={image.url} alt={alt} /> : null;
+  const badge = imageBadge(alt, src, image);
+  return (
+    <span
+      role="img"
+      aria-label={badge.label}
+      title={badge.title}
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 align-middle text-xs text-muted-foreground"
+    >
+      <ImageOff className="size-3.5 shrink-0" aria-hidden />
+      <span className="truncate">{badge.label}</span>
+    </span>
+  );
 }
 
 /** Fenced code; `mermaid` blocks are drawn as diagrams. */

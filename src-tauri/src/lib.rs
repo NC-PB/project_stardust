@@ -39,6 +39,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::set_field_in_text,
             commands::remove_field_in_text,
             commands::read_image,
+            commands::import_image,
             commands::make_task,
             commands::source_files,
             commands::fill_prompt,
