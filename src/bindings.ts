@@ -360,7 +360,7 @@ export type FileChange = { kind: "created"; path: string } | { kind: "modified";
 
 /**  The links rewritten in one file. */
 export type FileLinks = {
-	/**  Relative to the planning root. */
+	/**  Relative to the repository root. */
 	file: string,
 	changes: LinkChange[],
 };
@@ -849,15 +849,19 @@ export type SplitPlan = {
 	links: FileLinks[],
 };
 
-/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+/**  What a split did. */
 export type SplitReport = SplitReport_Serialize | SplitReport_Deserialize;
 
-/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+/**  What a split did. */
 export type SplitReport_Deserialize = {
+	/**  Relative to the planning root, `spec/<name>.md`. */
 	created: string[],
-	/**  Files whose links were rewritten, the new spec files not included. */
+	/**
+	 *  Files whose links were rewritten, the new spec files not included, relative to the
+	 *  repository root.
+	 */
 	rewritten: string[],
-	/**  `spec.md`, now in the OS trash. */
+	/**  `spec.md`, now in the OS trash, relative to the planning root. */
 	trashed: string,
 	/**
 	 *  Files rewritten because the planner block now points to `spec/`, relative to the
@@ -868,12 +872,16 @@ export type SplitReport_Deserialize = {
 	block_error?: string | null,
 };
 
-/**  What a split did. Paths are relative to the planning root, except `block_written`. */
+/**  What a split did. */
 export type SplitReport_Serialize = {
+	/**  Relative to the planning root, `spec/<name>.md`. */
 	created: string[],
-	/**  Files whose links were rewritten, the new spec files not included. */
+	/**
+	 *  Files whose links were rewritten, the new spec files not included, relative to the
+	 *  repository root.
+	 */
 	rewritten: string[],
-	/**  `spec.md`, now in the OS trash. */
+	/**  `spec.md`, now in the OS trash, relative to the planning root. */
 	trashed: string,
 	/**
 	 *  Files rewritten because the planner block now points to `spec/`, relative to the
