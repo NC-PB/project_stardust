@@ -998,6 +998,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: fixing all findings of a kind at once (one confirmation would cover many files the user has not looked at); quoting YAML values or adding `implements` automatically (not obvious; the right value is the user's); leaving rename links to the watcher (not a move for it; repair by id would point links of a renamed duplicate at the other copy); a main-area view next to Board and Spec (findings are worked through beside the board and the editor, and the Stale view will be the list view).
 - Consequences: `S-doctor` criteria. A renamed task that is open in the editor shows as removed there. If rewriting the links to a renamed duplicate fails for a file (changed meanwhile), the watcher's repair by id can later point that file's link at the other copy. The panel is a snapshot; it is not refreshed by watcher batches, only by "Check again" and after a fix.
 
+### D-20261031-032840-168k · The doctor checks `implements` of archived tasks, as the trace does
+- Context: the doctor (D-20261031-032416-q4dk) and the trace reading the archive (D-20261031-031457-vjn2) were built in parallel. The doctor skipped archived tasks for untraced findings, while the trace now checks their `implements` entries for unknown nodes.
+- Decision: the doctor checks the `implements` entries of archived tasks too, so its untraced findings follow the trace's task rules. Archived tasks sit in the terminal column, so they are never listed for a missing `implements`. Supersedes the part of D-20261031-032416-q4dk that left archived tasks out.
+- Rejected: keeping the difference (the trace panel and the doctor would disagree about the same task).
+- Consequences: `S-doctor` criterion. An archived task naming a node that was later removed from the Structure is a finding.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
