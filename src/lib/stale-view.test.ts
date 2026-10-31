@@ -195,6 +195,28 @@ describe("staleViewEntries", () => {
     ).toEqual(["broken Dependency error docs/planning/next/a-x.md:5"]);
     expect(entries[0].title).toBe("Task a");
   });
+
+  it("lists a parent the doctor reports as broken", () => {
+    const columns = [
+      column("inbox", []),
+      column("next", [task("a", { parent: "a" })]),
+      column("done", []),
+    ];
+    const selfParent: Finding_Serialize = {
+      kind: "parent_error",
+      file: "docs/planning/next/a-x.md",
+      line: 6,
+      message: "`parent` names the task's own id `a`",
+      fix: null,
+    };
+    const entries = staleViewEntries(
+      input({ columns, findings: [selfParent] }),
+    );
+    expect(
+      entries.map((entry) => `${entry.group} ${entry.label} ${entry.location}`),
+    ).toEqual(["broken Parent error docs/planning/next/a-x.md:6"]);
+    expect(entries[0].title).toBe("Task a");
+  });
 });
 
 describe("blockedEntries", () => {

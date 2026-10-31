@@ -17,6 +17,7 @@ export const KIND_LABELS: Record<FindingKind, string> = {
   missing_image: "Missing images",
   frontmatter_error: "Frontmatter errors",
   dependency_error: "Dependency errors",
+  parent_error: "Parent errors",
   untraced: "Untraced tasks",
 };
 

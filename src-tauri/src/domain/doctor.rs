@@ -43,6 +43,9 @@ pub enum FindingKind {
     /// A `depends_on` entry that cannot mean anything: the task's own id, or an id that no task
     /// file carries, in the columns or the archive (`S-dependencies`).
     DependencyError,
+    /// A `parent` that cannot mean anything: the task's own id, or an id that no task file
+    /// carries, in the columns or the archive (`S-subtasks`).
+    ParentError,
     /// A task outside the terminal column without `implements`, or an `implements` entry
     /// naming no node of the Structure (`S-trace`).
     Untraced,
@@ -142,11 +145,17 @@ pub fn doctor(repo_root: &Path, config: &Config) -> DoctorReport {
         .findings
         .extend(tasks.iter().filter_map(self_dependency));
     // A folder that could not be read hides the ids of its tasks, so no id is called unknown then.
-    if report.problems.is_empty() {
+    let known = report.problems.is_empty();
+    if known {
         for file in &tasks {
             report.findings.extend(unknown_dependencies(file, &by_id));
         }
     }
+    report.findings.extend(
+        tasks
+            .iter()
+            .filter_map(|file| parent_error(file, &by_id, known)),
+    );
     report.findings.extend(untraced(repo_root, config, &tasks));
     report
         .findings
@@ -441,6 +450,34 @@ fn unknown_dependencies(file: &TaskFile, by_id: &BTreeMap<&str, Vec<&TaskFile>>)
             fix: None,
         })
         .collect()
+}
+
+/// The finding for a task whose `parent` is its own id, or an id that no task file carries in
+/// the columns or the archive; the latter only when every folder was read (`known`). Such a
+/// task counts for no parent card (`S-subtasks`). No fix: the task was meant to be a child, and
+/// only the user knows of which task.
+fn parent_error(
+    file: &TaskFile,
+    by_id: &BTreeMap<&str, Vec<&TaskFile>>,
+    known: bool,
+) -> Option<Finding> {
+    let parent = file.task.parent.as_deref()?;
+    let message = if file.task.id.as_deref() == Some(parent) {
+        format!("`parent` names the task's own id `{parent}`")
+    } else if known && !by_id.contains_key(parent) {
+        format!(
+            "`parent` names `{parent}`, which no task file carries, in the columns or the archive"
+        )
+    } else {
+        return None;
+    };
+    Some(Finding {
+        kind: FindingKind::ParentError,
+        file: file.file.clone(),
+        line: field_line(file.text.as_deref(), "parent"),
+        message,
+        fix: None,
+    })
 }
 
 /// Tasks outside the terminal column without `implements`, and `implements` entries naming no
@@ -766,6 +803,9 @@ mod tests {
     const E: &str = "20261001-100000-eeee";
     const F: &str = "20261001-100000-ffff";
     const G: &str = "20261001-100000-gggg";
+    const H: &str = "20261001-100000-hhhh";
+    const I: &str = "20261001-100000-iiii";
+    const J: &str = "20261001-100000-jjjj";
 
     fn summary(report: &DoctorReport) -> Vec<(FindingKind, String, u32)> {
         report
@@ -826,6 +866,13 @@ mod tests {
             &root,
             &format!("{p}/next/{G}-untraced.md"),
             &task(G, "", ""),
+        );
+        put(
+            &root,
+            &format!("{p}/next/{I}-orphan.md"),
+            &format!(
+                "---\nid: {I}\ntitle: Orphan\ncreated: 2026-10-01\nimplements: [S-feature]\nparent: 20261001-100000-zzzz\n---\n"
+            ),
         );
         put(
             &root,
@@ -919,6 +966,7 @@ mod tests {
                     format!("{p}/inbox/{C}-self.md"),
                     5
                 ),
+                (FindingKind::ParentError, next(&format!("{I}-orphan.md")), 6),
                 (
                     FindingKind::Untraced,
                     format!("{p}/done/20261001-100000-hhhh-unknown.md"),
@@ -927,7 +975,7 @@ mod tests {
                 (FindingKind::Untraced, next(&format!("{G}-untraced.md")), 5),
             ]
         );
-        assert_eq!(report.task_files, 11);
+        assert_eq!(report.task_files, 12);
         assert!(report.problems.is_empty());
     }
 
@@ -1255,6 +1303,81 @@ mod tests {
     }
 
     #[test]
+    fn a_parent_on_itself_or_unknown_is_reported_without_a_fix() {
+        let (root, config) = scratch();
+        let p = "docs/planning";
+        put(&root, &format!("{p}/spec.md"), SPEC);
+        const Z: &str = "20261001-100000-zzzz";
+        let with_parent = |id: &str, parent: &str| {
+            format!(
+                "---\nid: {id}\ntitle: Child\ncreated: 2026-10-01\nimplements: [S-feature]\nparent: {parent}\n---\n"
+            )
+        };
+        // Parents in a column, in the archive and by a mismatched file's filename id are known.
+        put(
+            &root,
+            &format!("{p}/inbox/{B}-column.md"),
+            &task(B, "S-feature", ""),
+        );
+        put(
+            &root,
+            &format!("{p}/done/2026-09/{C}-archived.md"),
+            &task(C, "S-feature", ""),
+        );
+        put(
+            &root,
+            &format!("{p}/next/{D}-mismatch.md"),
+            &task(E, "S-feature", ""),
+        );
+        for (id, parent) in [(F, B), (G, C), (H, D)] {
+            put(
+                &root,
+                &format!("{p}/next/{id}-child.md"),
+                &with_parent(id, parent),
+            );
+        }
+        let unknown = format!("{p}/next/{A}-unknown.md");
+        put(&root, &unknown, &with_parent(A, Z));
+        // The mismatched frontmatter id is not the task's id.
+        let mismatched = format!("{p}/next/{I}-frontmatter-id.md");
+        put(&root, &mismatched, &with_parent(I, E));
+        let own = format!("{p}/inbox/{J}-own.md");
+        put(&root, &own, &with_parent(J, J));
+
+        let report = doctor(&root, &config);
+        let found: Vec<&Finding> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::ParentError)
+            .collect();
+        assert_eq!(found.len(), 3, "{:?}", report.findings);
+        assert_eq!((found[0].file.as_str(), found[0].line), (own.as_str(), 6));
+        assert!(found[0].message.contains("own id"), "{}", found[0].message);
+        assert_eq!(
+            (found[1].file.as_str(), found[1].line),
+            (unknown.as_str(), 6)
+        );
+        assert!(found[1].message.contains(Z), "{}", found[1].message);
+        assert_eq!(found[2].file, mismatched);
+        assert!(found[2].message.contains(E), "{}", found[2].message);
+        assert!(found.iter().all(|f| f.fix.is_none()));
+
+        // A column that cannot be read hides its ids: only the own id is reported then.
+        std::fs::remove_dir_all(root.join(p).join("done")).unwrap();
+        std::fs::write(root.join(p).join("done"), "not a folder").unwrap();
+        let unreadable = doctor(&root, &config);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(!unreadable.problems.is_empty());
+        let found: Vec<&str> = unreadable
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::ParentError)
+            .map(|f| f.file.as_str())
+            .collect();
+        assert_eq!(found, [own.as_str()]);
+    }
+
+    #[test]
     fn set_id_writes_the_filename_id_and_only_that_line() {
         let (root, config) = scratch();
         let file = format!("docs/planning/next/{B}-mismatch.md");
@@ -1426,7 +1549,8 @@ mod tests {
         let today = now.format("%Y-%m-%d").to_string();
 
         // A task in the first column linking to the spec, to the task made before it and,
-        // every tenth, to an image, and depending on the task made before it.
+        // every tenth, to an image, depending on the task made before it and, every odd one,
+        // its child.
         let make = |n: usize, previous: Option<&str>| -> String {
             let path = make_task::make_task(
                 &root,
@@ -1443,9 +1567,13 @@ mod tests {
                 &FieldValue::List(vec!["S-feature".into()]),
             )
             .unwrap();
-            // Each task depends on the one before, so some depend on archived tasks.
+            // Each task depends on the one before, so some depend on archived tasks; every
+            // odd one is also its child.
             if let Some(previous) = previous {
                 let id = ids::parse_task_filename(previous).unwrap().id;
+                if n % 2 == 1 {
+                    text = task::set_field(&text, "parent", &FieldValue::Text(id.clone())).unwrap();
+                }
                 text = task::set_field(&text, "depends_on", &FieldValue::List(vec![id])).unwrap();
             }
             text.push_str("\nSee the [spec](../spec.md).\n");
