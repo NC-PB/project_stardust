@@ -102,7 +102,7 @@ pub fn find_proposals(text: &str) -> Vec<(u32, String)> {
 }
 
 /// How many lines the frontmatter takes, both `---` lines included; 0 without one.
-fn frontmatter_lines(lines: &[&str]) -> usize {
+pub(crate) fn frontmatter_lines(lines: &[&str]) -> usize {
     if lines.first() != Some(&"---") {
         return 0;
     }
@@ -114,7 +114,7 @@ fn frontmatter_lines(lines: &[&str]) -> usize {
 }
 
 /// The opening run of three or more backticks or tildes of a fence line.
-fn fence_marker(line: &str) -> Option<&str> {
+pub(crate) fn fence_marker(line: &str) -> Option<&str> {
     let trimmed = line.trim_start_matches([' ', '\t']);
     let first = trimmed.chars().next().filter(|c| *c == '`' || *c == '~')?;
     let run = trimmed.len() - trimmed.trim_start_matches(first).len();

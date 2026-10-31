@@ -46,6 +46,11 @@ export const commands = {
 	 *  (`S-proposals`), by path and line.
 	 */
 	listProposals: (repoRoot: string) => __TAURI_INVOKE<ProposalRef[]>("list_proposals", { repoRoot }),
+	/**
+	 *  Every code path mentioned in a task outside the terminal column that names nothing in the
+	 *  repository at `repo_root` (`S-staleness`).
+	 */
+	missingCodePaths: (repoRoot: string) => __TAURI_INVOKE<MissingCodePath[]>("missing_code_paths", { repoRoot }),
 	/**  What splitting `spec.md` into the `spec/` folder would do (`S-spec-split`). Writes nothing. */
 	planSpecSplit: (repoRoot: string) => __TAURI_INVOKE<SplitPlan>("plan_spec_split", { repoRoot }),
 	/**
@@ -615,6 +620,16 @@ export type LinkChange = {
 	line: number,
 	old: string,
 	new: string,
+};
+
+/**  A code path in a task that names nothing in the repository. */
+export type MissingCodePath = {
+	/**  The column folder of the task. */
+	column: string,
+	file_name: string,
+	path: string,
+	/**  1-based line in the task file. */
+	line: number,
 };
 
 /**  A node of the Structure. */

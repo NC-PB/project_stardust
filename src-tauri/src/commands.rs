@@ -71,6 +71,16 @@ pub fn list_proposals(repo_root: String) -> Vec<domain::proposals::ProposalRef> 
     domain::proposals::list_proposals(repo_root, &config.planning_root)
 }
 
+/// Every code path mentioned in a task outside the terminal column that names nothing in the
+/// repository at `repo_root` (`S-staleness`).
+#[tauri::command]
+#[specta::specta]
+pub fn missing_code_paths(repo_root: String) -> Vec<domain::code_paths::MissingCodePath> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    domain::code_paths::missing_code_paths(repo_root, &config)
+}
+
 /// The spec in `text`, an unsaved version of the spec file `file` (relative to the planning
 /// root, `spec.md` or `spec/<name>.md`).
 #[tauri::command]

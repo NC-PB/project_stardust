@@ -46,6 +46,15 @@ vi.mock("./proposal-store", () => ({
     }),
   },
 }));
+vi.mock("./staleness-store", () => ({
+  useStalenessStore: {
+    getState: () => ({
+      load: async () => {},
+      apply: async () => {},
+      clear: () => {},
+    }),
+  },
+}));
 vi.mock("./board-store", () => ({
   useBoardStore: {
     getState: () => ({ load: loadBoard, apply: applyBatch, clear: clearBoard }),

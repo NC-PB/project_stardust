@@ -163,10 +163,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Archive `S-archive`
     - Moves terminal tasks older than the current month into `done/YYYY-MM/`, after showing the list.
   - [x] Staleness `S-staleness`
-    - Tasks in `next/` older than `stale_after_days` are flagged.
-    - Spec files with `reviewed` older than `review_after_days` are flagged.
-    - Code paths mentioned in tasks that do not exist are flagged.
+    - Tasks in the ready column (D-20261031-001850-0g9f) are flagged when the later of their `created` date and their file's last change is more than `stale_after_days` local days ago; a task with neither is not flagged (D-20261031-022756-w1ou).
+    - Spec files are flagged when their `reviewed` date is more than `review_after_days` days ago or is not a date. The first file (`spec.md`, or `spec/README.md` in the folder form) is also flagged without `reviewed`; other files without their own `reviewed` are covered by it (D-20261031-022757-x0wq).
+    - Code paths mentioned in tasks outside the terminal column are flagged when they name nothing under the repository root or the planning root. A code path is inline code outside the frontmatter and code fences that looks like a relative file path: a folder, a file extension, no spaces, placeholders, globs, `..` or URLs; a trailing `:line` is dropped (D-20261031-022758-5qen). They are checked when the project opens and after batches that touch a column.
+    - Flags show as markers on cards and in the editor header of the open file ("Stale", "Review due", "Missing path"), with the reasons on hover; the spec view lists spec files due for review with an Open button (D-20261031-022759-xsxl).
     - A Stale view lists everything flagged, blocked or broken.
+    - Implemented in `src-tauri/src/domain/code_paths.rs` (command `missing_code_paths(repo_root)`), `src/lib/staleness.ts` (`stalenessFlags`, the one list of flags), `src/stores/staleness-store.ts`, `src/components/stale-flags.tsx`, `src/components/board.tsx`, `src/components/editor.tsx`, `src/components/spec-view.tsx`. The Stale view is not built yet.
   - [x] Commit info `S-commit-info`
     - Cards show how many commits mention the task id and the date of the last one, from read-only `git log` (`R-no-git-writes`).
     - This is information only. A mention never moves a card or marks it done.
@@ -856,6 +858,30 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: an entry under every tag of a task (the same change listed several times); the first line of the Result in each entry (Results are written for the next session, long and technical); including tasks completed on the tag's day (they were usually in the tagged release); inserting directly under the title (the entries would land above an intro paragraph); `tauri-plugin-shell` for git (D-20261031-003519-cfn5 starts processes from Rust; no frontend scope needed); `git tag` or `git for-each-ref` for the tag list (the Constraints allow only `git log`); building the draft again on confirm (could differ from what was previewed).
 - Consequences: `S-changelog` criteria. Tasks finished on a tag's day after the tag are left out; a date catches them. The entries carry no version number; the `## <today>` heading can be edited after writing. Links break when a task file moves, until `S-links` rewrites them. `S-commit-info` can reuse the read-only `git log` helper in `changelog.rs`.
 
+### D-20261031-022756-w1ou · Age of a ready task: the later of `created` and the last file change
+- Context: `S-staleness` flags tasks in the ready column "older than" `stale_after_days`, but not what age means. Time in the column cannot be known: a task has no field for it and there are no tool-only state files (D-20260920-093000-6f8e). Card ages already use the file time (D-20261030-231221-spj4).
+- Decision: a task's age is the number of local calendar days since the later of its `created` date and the local day of its file's last change (`modified`). It is flagged when that is more than `stale_after_days`. With neither date it is not flagged. Only the ready column is checked.
+- Rejected: `created` alone (a task edited yesterday would be flagged); the file time alone (lost on every clone or checkout, and a task without one would never age); a new frontmatter field such as `ready_since` (one more field agents must keep; moves between other columns do not touch the text, D-20261030-232042-h9dm); counting hours instead of days (the threshold is in days and the flag would flip during the day).
+- Consequences: `S-staleness` criteria. A fresh clone gives every task a new file time, so nothing is stale for `stale_after_days` after a clone unless `created` is older and the file time was kept. A task created and last edited long ago and only now moved to the ready column is flagged at once. Any save of the file, also by an agent writing notes, resets the age.
+
+### D-20261031-022757-x0wq · A spec file without `reviewed` is covered by the first spec file
+- Context: `S-staleness` flags spec files whose `reviewed` is too old. `spec.md` and the spec template carry `reviewed` in the frontmatter, but a split leaves only `spec/README.md` with frontmatter (D-20261031-012140-ol0p), so the other files of the folder form have no date.
+- Decision: every spec file with its own `reviewed` is flagged when the date is more than `review_after_days` days ago or is not a `YYYY-MM-DD` date. The first file read (`spec.md`, or `spec/README.md`) is also flagged when it has no `reviewed`. Any other file without `reviewed` is covered by the first one and never flagged on its own. No spec, no flags.
+- Rejected: flagging every file without `reviewed` (a split spec would show eight flags for one missing date); never flagging a missing date (a spec without the field would never ask for review); giving files without a date the first file's date and flagging each (the same date flagged up to nine times).
+- Consequences: `S-staleness` criteria. In the folder form one review date covers the whole spec until a file gets its own `reviewed`.
+
+### D-20261031-022758-5qen · Code paths: inline code that looks like a relative file path, in open tasks, checked in Rust
+- Context: `S-staleness` flags "code paths mentioned in tasks that do not exist", without saying what a code path is, which tasks count, or what a path is relative to. False positives would make the flag useless.
+- Decision: a code path is the text of an inline code span in a task body, outside the frontmatter and code fences, with at least one `/`, a last part with a file extension that holds a letter, only letters, digits and `. _ - + /`, no empty, `.` or `..` part and no leading `/`. A leading `./` and a trailing `:line` or `:line:column` are dropped. It exists when a file or folder of that name is found under the repository root or under the planning root. Only tasks outside the terminal column are checked. Rust reads the task files and checks the disk (`missing_code_paths`); the store reads it when the project opens and after batches that touch a column.
+- Rejected: paths in links or plain text (links are `S-links`, plain text gives too many false hits); paths without a folder such as `board.ts` (would need a search of the whole tree); finished tasks (they describe history, and files are renamed later on purpose); checking from the frontend (the webview has no file access outside commands); honouring `.gitignore` (the tool works without git, D-20261031-015930-k4vn).
+- Consequences: `S-staleness` criteria. Paths of files a task is about to create are flagged until they exist, as are files that only exist elsewhere, such as on a CI runner. Placeholders, globs and URLs are never flagged. A code file created or removed outside the planning root is noticed only at the next batch that touches a column or when the project opens again (task 20261031-022800-5qen).
+
+### D-20261031-022759-xsxl · Staleness flags are one pure list, shown on cards, in the editor header and in the spec view
+- Context: `S-staleness` says flags show "on cards and files", and the Stale view (task 20261031-021022-nd3n) is to list everything flagged later.
+- Decision: `stalenessFlags` in `src/lib/staleness.ts` computes every flag from the board columns, the spec, the missing paths and the time; each flag has a kind, the file's absolute path, a line, the task id and a reason. Cards and the editor header show one marker per kind ("Stale", "Review due", "Missing path" or "2 missing paths") with the reasons on hover. The spec view lists spec files due for review above the fog meter, each with an Open button. Nothing is written to any file.
+- Rejected: a field on `Card` filled by `cardsOf` (spec files are not cards, and the Stale view needs the flags without the board's sort and filter); markers in the spec view's section list (sections and files do not match one to one in the single file form); flagging inside the file text (`R-plain-markdown`, and the tool would write to files only to show state).
+- Consequences: `S-staleness` criteria. The flags are recomputed every minute and whenever the board, the spec or the missing paths change; the Stale view can list `stalenessFlags` as it is.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -894,3 +920,5 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Trace: the index between tasks and the nodes they implement, and its gaps: tasks without `implements`, ticked nodes without any task, `implements` entries naming no node.
 - Changelog draft: the `CHANGELOG.md` entries for the tasks finished since a date or tag, shown before anything is written.
 - Image root: the folder dropped images are copied into, `images_root` in the config, `docs/images` by default; kept out of version control (D-20260919-104200-9f03).
+- Staleness flag: a note that a file needs attention: a task waiting too long in the ready column, a spec file due for review, or a task naming a code path that does not exist. Computed, never written to a file.
+- Code path: inline code in a task that looks like a relative file path, such as `src/lib/board.ts`.
