@@ -152,7 +152,8 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Sub-tasks `S-subtasks`
     - A task with `parent: <id>` is a child. The parent card shows the child count.
   - [x] Dependencies `S-dependencies`
-    - A task whose `depends_on` contains a task outside the terminal column is shown as blocked.
+    - A task whose `depends_on` contains a task outside the terminal column is shown as blocked. A dependency on the task's own id never blocks, as in the board sort (D-20261031-033553-2skc).
+    - Implemented in `src/lib/board.ts` (`cardsOf`, `Card.blockedBy`); the board's blocked marker and the Stale view's Blocked group read `blockedBy`.
   - [x] Traceability `S-trace`
     - Tasks reference nodes in `implements`. An entry repeated in one task counts once.
     - Each node of the spec view tree shows the tasks that implement it with their column, from every column including the terminal one and its archive (the month folders `YYYY-MM/`, after the terminal column's own tasks); each opens the task file in the editor, an archived one at its month folder path.
@@ -1028,6 +1029,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Decision: a third main-area view, "Stale", beside Board and Spec. `staleViewEntries` in `src/lib/stale-view.ts` maps `stalenessFlags`, the `blockedBy` of `cardsOf` and the doctor's findings into one list of entries (group, kind, path, line, title, reason), one entry per reason, without computing any of them again. Tasks in the terminal column are not listed as blocked: nothing waits on a finished task. The view keeps its own doctor report (`useStaleViewStore`), separate from the panel's: it runs the doctor when the view is shown, then 1 s after the last `planning-changed` event or `repository-changed` event with markdown changes while it is shown, and on "Check again"; a newer check wins. It listens to the events itself rather than being called from the project store.
 - Rejected: reusing `useDoctorStore` (its report opens the panel, and the panel is meant as a snapshot); running the doctor on every batch even while the view is hidden (a full walk of the repository for a list nobody looks at); computing broken links or blocked tasks again in the view (two sources for one rule); one entry per file with all reasons (the reasons point at different lines, and opening at a line needs one entry per line); a panel in the project bar like the doctor (the list is a place to work from, like the board).
 - Consequences: `S-staleness` criteria and the Stale view in the Glossary. While the view is shown, every burst of changes costs one doctor run. A task's dependency on itself shows as blocked, as on the board. The exit test covers the combination with doctor findings and missing paths given as data; the Rust checks have their own tests.
+
+### D-20261031-033553-2skc · A dependency on the task itself does not block
+- Context: `cardsOf` counted a task's own id in `depends_on` as blocking while the task was outside the terminal column, so the card and the Stale view showed the task as blocked by itself. The board sort already ignores such a dependency (D-20261031-021102-jyia). The task asked to either not block or have the doctor report it.
+- Decision: `blockedBy` leaves out the task's own id; the other dependencies of the task block as before. Whether the doctor should also report a self-dependency as a planning error is a separate change to the doctor, put in the inbox (task 20261031-033553-r4kd).
+- Rejected: keeping the blocked marker for a self-dependency as the only signal (a task can never become unblocked by itself, so the marker would stay until the frontmatter is edited, and it says "blocked" where the problem is a wrong entry); doing the doctor check in this task (a Rust change to another node, beyond the task's scope).
+- Consequences: `S-dependencies` criteria. The Stale view no longer lists a task as blocked by itself; the "A task's dependency on itself shows as blocked" consequence of D-20261031-033320-x1tn no longer holds. Until the doctor check exists, a self-dependency is shown nowhere.
 
 ## Glossary
 
