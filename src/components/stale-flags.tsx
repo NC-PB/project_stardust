@@ -15,38 +15,47 @@ const TICK_MS = 60_000;
 const NO_FLAGS: StaleFlag[] = [];
 
 /**
- * Every staleness flag of the open project, by the absolute path of its file (`S-staleness`).
- * Computed from the stores by `stalenessFlags`; nothing is kept.
+ * Every staleness flag of the open project, in the order of `stalenessFlags` (`S-staleness`).
+ * Computed from the stores; nothing is kept.
  */
-export function useStaleFlags(): Map<string, StaleFlag[]> {
+export function useStaleFlagList(): StaleFlag[] {
   const repoRoot = useBoardStore((state) => state.repoRoot);
   const config = useBoardStore((state) => state.config);
   const columns = useBoardStore((state) => state.columns);
   const spec = useSpecStore((state) => state.spec);
   const missingPaths = useStalenessStore((state) => state.missingPaths);
-  const [now, setNow] = useState(Date.now);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useNow();
 
   return useMemo(
     () =>
       repoRoot === null || config === null
-        ? new Map()
-        : flagsByPath(
-            stalenessFlags({
-              repoRoot,
-              config,
-              columns,
-              spec,
-              missingPaths,
-              now,
-            }),
-          ),
+        ? NO_FLAGS
+        : stalenessFlags({
+            repoRoot,
+            config,
+            columns,
+            spec,
+            missingPaths,
+            now,
+          }),
     [repoRoot, config, columns, spec, missingPaths, now],
   );
+}
+
+/** The time, updated every `TICK_MS`, so a day boundary is noticed. */
+export function useNow(): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return now;
+}
+
+/** Every staleness flag of the open project, by the absolute path of its file. */
+export function useStaleFlags(): Map<string, StaleFlag[]> {
+  const flags = useStaleFlagList();
+  return useMemo(() => flagsByPath(flags), [flags]);
 }
 
 /** The flags of the file at `path`. */
