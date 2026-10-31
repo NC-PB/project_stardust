@@ -1,4 +1,4 @@
-import type { Prompt } from "@/bindings";
+import type { Prompt, PromptInput } from "@/bindings";
 
 /** The button label of each prompt, as headed in `templates/prompts.md` (`S-prompts`). */
 export const PROMPT_LABELS: Record<Prompt, string> = {
@@ -13,12 +13,61 @@ export const PROMPT_LABELS: Record<Prompt, string> = {
   "generate-tasks": "Generate tasks",
 };
 
-/** The prompts offered for an open task in phase 1. */
+/** The prompts offered for an open task. */
 export const TASK_PROMPTS: Prompt[] = [
   "work-on-task",
   "verify-task",
   "handoff",
 ];
+
+/** The prompts offered while the braindump is open. */
+export const BRAINDUMP_PROMPTS: Prompt[] = ["structure-this"];
+
+/** The prompts in the spec view header; each works on the whole spec. */
+export const SPEC_PROMPTS: Prompt[] = [
+  "interview-me",
+  "integrate-answers",
+  "generate-tasks",
+];
+
+/** The prompts of the editor's "Copy prompt" row and what they are filled with. */
+export interface EditorPrompts {
+  prompts: Prompt[];
+  input: PromptInput;
+}
+
+/**
+ * The prompts for the file at `path` open in the editor: the task prompts for a task, Structure
+ * this for the braindump (`{planning_root}/braindump.md`, the file the prompt reads), otherwise
+ * `null`.
+ */
+export function editorPromptsOf(
+  path: string,
+  repoRoot: string,
+  planningRoot: string,
+  columns: string[],
+): EditorPrompts | null {
+  const taskPath = taskPathOf(path, repoRoot, planningRoot, columns);
+  if (taskPath !== null)
+    return {
+      prompts: TASK_PROMPTS,
+      input: { task_path: taskPath, node_id: null },
+    };
+  if (relativePathOf(path, repoRoot, planningRoot) === "braindump.md")
+    return {
+      prompts: BRAINDUMP_PROMPTS,
+      input: { task_path: null, node_id: null },
+    };
+  return null;
+}
+
+/** The input of Verify area for the node `nodeId`. */
+export function nodeInputOf(nodeId: string): PromptInput {
+  return { task_path: null, node_id: nodeId };
+}
+
+/** The input of the prompts that need neither a task nor a node. */
+export const NO_INPUT: PromptInput = { task_path: null, node_id: null };
 
 /**
  * The path of `path` relative to `repoRoot` when it is a markdown file directly in one of the
@@ -30,14 +79,26 @@ export function taskPathOf(
   planningRoot: string,
   columns: string[],
 ): string | null {
+  const inPlanning = relativePathOf(path, repoRoot, planningRoot);
+  if (inPlanning === null) return null;
+  const parts = inPlanning.split("/");
+  if (parts.length !== 2 || !columns.includes(parts[0])) return null;
+  if (!parts[1].toLowerCase().endsWith(".md")) return null;
+  const root = repoRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  return path.replace(/\\/g, "/").slice(root.length + 1);
+}
+
+/** The path of `path` relative to the planning root, with `/`; `null` outside it. */
+function relativePathOf(
+  path: string,
+  repoRoot: string,
+  planningRoot: string,
+): string | null {
   const root = repoRoot.replace(/\\/g, "/").replace(/\/+$/, "");
   const file = path.replace(/\\/g, "/");
   if (!file.startsWith(`${root}/`)) return null;
   const relative = file.slice(root.length + 1);
   const planning = planningRoot.replace(/^\/+|\/+$/g, "");
   const prefix = planning === "" ? "" : `${planning}/`;
-  if (!relative.startsWith(prefix)) return null;
-  const parts = relative.slice(prefix.length).split("/");
-  if (parts.length !== 2 || !columns.includes(parts[0])) return null;
-  return parts[1].toLowerCase().endsWith(".md") ? relative : null;
+  return relative.startsWith(prefix) ? relative.slice(prefix.length) : null;
 }

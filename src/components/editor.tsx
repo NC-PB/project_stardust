@@ -36,7 +36,12 @@ import {
   resolveLink,
 } from "@/lib/editor";
 import { remarkGlossary } from "@/lib/glossary";
-import { PROMPT_LABELS, TASK_PROMPTS, taskPathOf } from "@/lib/prompts";
+import { editorPromptsOf, PROMPT_LABELS, taskPathOf } from "@/lib/prompts";
+import {
+  protectedLinesField,
+  protectedLinesOf,
+  setProtectedLines,
+} from "@/lib/protected-lines";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { usePromptStore } from "@/stores/prompt-store";
@@ -98,6 +103,7 @@ const sourceExtensions = [
   markdown({ base: markdownLanguage }),
   syntaxHighlighting(sourceHighlight),
   frontmatterPlugin,
+  protectedLinesField,
   EditorView.lineWrapping,
 ];
 
@@ -115,6 +121,10 @@ const sourceStyle = {
     fontSize: "0.85em",
     backgroundColor: "var(--color-muted)",
     color: "var(--color-muted-foreground)",
+  },
+  ".cm-protected": {
+    backgroundColor:
+      "color-mix(in oklab, var(--color-destructive) 15%, transparent)",
   },
 };
 
@@ -149,6 +159,7 @@ export function Editor() {
     trash,
     reveal,
     revealed,
+    violations,
   } = useEditorStore();
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [view, setView] = useState<EditorView | null>(null);
@@ -176,6 +187,15 @@ export function Editor() {
     revealLine(view, reveal);
     revealed();
   }, [reveal, view, revealed]);
+
+  // Refused entries are marked until a check finds none; each check sets them anew, so a
+  // mark moved by a replaced text is corrected with the next autosave (`S-decisions`).
+  useEffect(() => {
+    if (view === null || !view.dom.isConnected) return;
+    view.dispatch({
+      effects: setProtectedLines.of(protectedLinesOf(violations)),
+    });
+  }, [view, violations]);
 
   if (path === null) return null;
   const mode = modes[path] ?? "source";
@@ -395,23 +415,30 @@ function useIsTask(path: string | null): boolean {
   return useTaskPath(path) !== null;
 }
 
-/** Prompts for the open task, copied to the clipboard (`S-prompts`); hidden for other files. */
+/**
+ * Prompts for the open task or the braindump, copied to the clipboard (`S-prompts`); hidden
+ * for other files.
+ */
 function PromptBar({ path }: { path: string }) {
-  const repoRoot = useBoardStore((state) => state.repoRoot);
+  const { repoRoot, config } = useBoardStore();
   const copy = usePromptStore((state) => state.copy);
-  const taskPath = useTaskPath(path);
-  if (repoRoot === null || taskPath === null) return null;
+  if (repoRoot === null || config === null) return null;
+  const offered = editorPromptsOf(
+    path,
+    repoRoot,
+    config.planning_root,
+    config.columns,
+  );
+  if (offered === null) return null;
   return (
     <div className="flex flex-wrap items-center gap-1">
       <span className="mr-1 text-xs text-muted-foreground">Copy prompt</span>
-      {TASK_PROMPTS.map((prompt) => (
+      {offered.prompts.map((prompt) => (
         <Button
           key={prompt}
           variant="secondary"
           size="xs"
-          onClick={() =>
-            void copy(repoRoot, prompt, { task_path: taskPath, node_id: null })
-          }
+          onClick={() => void copy(repoRoot, prompt, offered.input)}
         >
           {PROMPT_LABELS[prompt]}
         </Button>

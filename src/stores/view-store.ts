@@ -8,12 +8,15 @@ interface ViewState {
   expanded: Record<string, boolean>;
   /** Whether the spec view shows the Structure as a mind map instead of the tree (`S-mindmap`). */
   mindMap: boolean;
+  /** Whether the spec view shows the Questions form (`S-questions`). */
+  questions: boolean;
   show: (view: MainView) => void;
   /** Sets whether the node with `key` is expanded. */
   setExpanded: (key: string, expanded: boolean) => void;
   /** Expands or collapses every node with `keys` at once. */
   setAllExpanded: (keys: string[], expanded: boolean) => void;
   toggleMindMap: () => void;
+  toggleQuestions: () => void;
 }
 
 /** The view of the main area and the state of the spec view, for the session only. */
@@ -21,6 +24,7 @@ export const useViewStore = create<ViewState>()((set) => ({
   view: "board",
   expanded: {},
   mindMap: false,
+  questions: false,
 
   show: (view) => set({ view }),
 
@@ -33,4 +37,6 @@ export const useViewStore = create<ViewState>()((set) => ({
     }),
 
   toggleMindMap: () => set((state) => ({ mindMap: !state.mindMap })),
+
+  toggleQuestions: () => set((state) => ({ questions: !state.questions })),
 }));

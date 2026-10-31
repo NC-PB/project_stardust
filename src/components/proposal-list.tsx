@@ -4,29 +4,28 @@ import { useProjectStore } from "@/stores/project-store";
 import { useProposalStore } from "@/stores/proposal-store";
 
 /**
- * Every open proposal across the planning root (`S-proposals`), read again each time the
- * list opens; an entry opens its file in read mode.
+ * Every open proposal across the planning root (`S-proposals`), with the count on the
+ * button. The list follows changes on disk; an entry opens its file in read mode.
  */
 export function ProposalList() {
   const repoRoot = useProjectStore((state) => state.repoRoot);
-  const { proposals, load, open } = useProposalStore();
+  const { proposals, open } = useProposalStore();
   const [shown, setShown] = useState(false);
 
   if (repoRoot === null) return null;
-  const toggle = () => {
-    if (!shown) void load(repoRoot);
-    setShown(!shown);
-  };
 
   return (
     <div className="relative">
       <Button
         variant="outline"
         size="sm"
-        onClick={toggle}
+        onClick={() => setShown(!shown)}
         aria-expanded={shown}
       >
         Proposals
+        <span className="text-muted-foreground tabular-nums">
+          {proposals.length}
+        </span>
       </Button>
       {shown && (
         <div className="absolute top-full left-0 z-10 mt-1 max-h-96 w-96 overflow-y-auto rounded-md border bg-background shadow-md">

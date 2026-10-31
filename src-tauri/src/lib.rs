@@ -17,6 +17,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::parse_spec_text,
             commands::gate_status,
             commands::check_append_only,
+            commands::answer_question,
             commands::list_proposals,
             commands::plan_spec_split,
             commands::split_spec,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { findProposals, resolveProposal } from "./proposals";
+import type { ChangeBatch } from "@/bindings";
+import { findProposals, proposalsTouched, resolveProposal } from "./proposals";
 
 const file = [
   "---",
@@ -105,5 +106,62 @@ describe("resolveProposal", () => {
   it("returns null when no proposal starts at the line", () => {
     expect(resolveProposal(file, 9, "accept")).toBeNull();
     expect(resolveProposal(file, 11, "reject")).toBeNull();
+  });
+});
+
+describe("proposalsTouched", () => {
+  const batch = (...paths: string[]): ChangeBatch => ({
+    changes: paths.map((path) => ({ kind: "modified", path })),
+    config_changed: false,
+  });
+
+  it("sees markdown files and folders under the planning root", () => {
+    expect(
+      proposalsTouched(batch("docs/planning/spec.md"), "docs/planning"),
+    ).toBe(true);
+    expect(
+      proposalsTouched(batch("docs/planning/notes/A.MD"), "docs/planning/"),
+    ).toBe(true);
+    expect(
+      proposalsTouched(batch("docs/planning/inbox/"), "docs/planning"),
+    ).toBe(true);
+  });
+
+  it("sees the planning root and the folders that hold it", () => {
+    expect(proposalsTouched(batch("docs/planning"), "docs/planning")).toBe(
+      true,
+    );
+    expect(proposalsTouched(batch("docs"), "docs/planning")).toBe(true);
+  });
+
+  it("sees a task moved between columns", () => {
+    const moved: ChangeBatch = {
+      changes: [
+        {
+          kind: "moved",
+          id: "20261031-012422-4th5",
+          from: "docs/planning/next/a.md",
+          to: "docs/planning/done/a.md",
+        },
+      ],
+      config_changed: false,
+    };
+    expect(proposalsTouched(moved, "docs/planning")).toBe(true);
+  });
+
+  it("ignores hidden files, other file types and paths outside the root", () => {
+    expect(
+      proposalsTouched(
+        batch(
+          "docs/planning/.hidden/a.md",
+          "docs/planning/.a.md",
+          "docs/planning/spec.md~",
+          "docs/planning/images/a.png",
+          "docs/planning-old/a.md",
+          "README.md",
+        ),
+        "docs/planning",
+      ),
+    ).toBe(false);
   });
 });

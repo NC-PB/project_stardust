@@ -1,13 +1,15 @@
 import { cn } from "cn";
 import { type KeyboardEvent, useState } from "react";
-import { highlight } from "@/lib/search";
+import type { SearchHit } from "@/bindings";
+import { highlight, hitLocation } from "@/lib/search";
 import { useEditorStore } from "@/stores/editor-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSearchStore } from "@/stores/search-store";
 
 /**
  * Full text search over the planning root (`S-search-fulltext`): results while typing, a
- * result opens in the editor. Arrow keys choose, Enter opens, Escape clears.
+ * result opens in the editor in source mode at its matching line. Arrow keys choose, Enter
+ * opens, Escape clears.
  */
 export function SearchBox() {
   const repoRoot = useProjectStore((state) => state.repoRoot);
@@ -16,14 +18,14 @@ export function SearchBox() {
   const [chosen, setChosen] = useState(0);
 
   if (repoRoot === null) return null;
-  const root = repoRoot.replace(/[\\/]+$/, "");
-  const open = (path: string) => {
-    void openFile(repoRoot, `${root}/${path}`);
+  const open = (hit: SearchHit) => {
+    const { path, line } = hitLocation(repoRoot, hit);
+    void openFile(repoRoot, path, line);
     clear();
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") clear();
-    else if (event.key === "Enter" && hits[chosen]) open(hits[chosen].path);
+    else if (event.key === "Enter" && hits[chosen]) open(hits[chosen]);
     else if (event.key === "ArrowDown")
       setChosen((index) => Math.min(index + 1, hits.length - 1));
     else if (event.key === "ArrowUp")
@@ -57,7 +59,7 @@ export function SearchBox() {
               <li key={hit.path}>
                 <button
                   type="button"
-                  onClick={() => open(hit.path)}
+                  onClick={() => open(hit)}
                   onMouseEnter={() => setChosen(index)}
                   className={cn(
                     "flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left text-xs",

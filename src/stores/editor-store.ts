@@ -147,6 +147,8 @@ export const useEditorStore = create<EditorState>()((set, get) => {
   const writeNow = async () => {
     cancelAutosave();
     const { repoRoot, path, text, saved, conflict } = get();
+    // Edits undone by hand leave nothing refused.
+    if (text === saved) set({ violations: [] });
     if (path === null || text === saved || conflict !== null) return;
     // Questions and Decisions only grow; an edit that changes an entry is not written.
     if (repoRoot !== null) {

@@ -183,7 +183,15 @@
     @apply border px-2 py-1 text-left;
   }
   .markdown-read abbr.glossary-term {
-    @apply cursor-help underline decoration-muted-foreground decoration-dotted underline-offset-2;
+    @apply relative cursor-help underline decoration-muted-foreground decoration-dotted underline-offset-2;
+  }
+  /* Keyboard focus shows the definition; hover uses the native title tooltip. */
+  .markdown-read abbr.glossary-term:focus-visible {
+    @apply rounded-sm outline-2 outline-ring;
+  }
+  .markdown-read abbr.glossary-term:focus-visible::after {
+    content: attr(data-definition);
+    @apply absolute top-full left-0 z-10 mt-1 w-max max-w-64 rounded-md border bg-popover px-2 py-1 text-xs font-normal whitespace-normal text-popover-foreground no-underline shadow-md;
   }
   .markdown-read img {
     @apply max-w-full rounded;

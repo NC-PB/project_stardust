@@ -248,6 +248,23 @@ mod tests {
         ));
     }
 
+    /// `R-spec-is-truth`, `S-trace`: finishing a task updates the criteria of its nodes.
+    #[test]
+    fn the_block_keeps_the_rule_that_finishing_updates_node_criteria() {
+        let block = render_block(&Config::default(), Path::new("/nonexistent"));
+        let finishing = block
+            .split_once("### When finishing a task")
+            .map(|(_, rest)| rest.split("\n### ").next().unwrap_or(rest))
+            .expect("the block has a When finishing a task part");
+        assert!(
+            finishing.contains(
+                "Update the criteria of the nodes in `implements` so they describe what the code now does."
+            ),
+            "{finishing}"
+        );
+        assert!(block.contains("Tasks are changes that implement nodes."));
+    }
+
     #[test]
     fn auto_spec_location_follows_the_folder() {
         let root = scratch_repo();

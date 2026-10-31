@@ -172,6 +172,21 @@ describe("useEditorStore", () => {
     expect(state.violations).toEqual([]);
   });
 
+  it("forgets refused entries once the edits are undone by hand", async () => {
+    await useEditorStore.getState().open("/repo", A);
+    const saved = useEditorStore.getState().saved;
+    checkAppendOnly.mockResolvedValue([
+      { id: null, at: { file: "spec.md", line: 1 }, now: 1, message: "x" },
+    ]);
+    useEditorStore.getState().edit("edited");
+    await useEditorStore.getState().save();
+    expect(useEditorStore.getState().violations).toHaveLength(1);
+    useEditorStore.getState().edit(saved);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS);
+    expect(useEditorStore.getState().violations).toEqual([]);
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
   it("brings refused edits back after they were undone by a reload", async () => {
     await useEditorStore.getState().open("/repo", A);
     checkAppendOnly.mockResolvedValue([

@@ -13,6 +13,7 @@ pub mod init;
 pub mod make_task;
 pub mod prompts;
 pub mod proposals;
+pub mod questions;
 pub mod search;
 pub mod spec;
 pub mod spec_split;

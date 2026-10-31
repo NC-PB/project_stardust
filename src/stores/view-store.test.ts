@@ -3,7 +3,12 @@ import { useViewStore } from "./view-store";
 
 describe("useViewStore", () => {
   beforeEach(() =>
-    useViewStore.setState({ view: "board", expanded: {}, mindMap: false }),
+    useViewStore.setState({
+      view: "board",
+      expanded: {},
+      mindMap: false,
+      questions: false,
+    }),
   );
 
   it("switches the main view", () => {
@@ -26,5 +31,12 @@ describe("useViewStore", () => {
     expect(useViewStore.getState().mindMap).toBe(true);
     useViewStore.getState().toggleMindMap();
     expect(useViewStore.getState().mindMap).toBe(false);
+  });
+
+  it("toggles the Questions form", () => {
+    useViewStore.getState().toggleQuestions();
+    expect(useViewStore.getState().questions).toBe(true);
+    useViewStore.getState().toggleQuestions();
+    expect(useViewStore.getState().questions).toBe(false);
   });
 });

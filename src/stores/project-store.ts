@@ -12,6 +12,7 @@ import {
 import { type Offer, offersOf } from "@/lib/project";
 import { useBoardStore } from "./board-store";
 import { useEditorStore } from "./editor-store";
+import { useProposalStore } from "./proposal-store";
 import { useSearchStore } from "./search-store";
 import { readSetting, writeSetting } from "./settings";
 import { useSpecStore } from "./spec-store";
@@ -55,6 +56,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       set({ sources: null });
       useBoardStore.getState().clear();
       useSpecStore.getState().clear();
+      useProposalStore.getState().clear();
       return;
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
@@ -65,6 +67,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         .getState()
         .load(repoRoot, config.config, config.missing_columns),
       useSpecStore.getState().load(repoRoot, config.config),
+      useProposalStore.getState().load(repoRoot, config.config),
     ]);
   };
   const without = (offer: Offer) =>
@@ -100,6 +103,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         await Promise.all([
           useBoardStore.getState().apply(change.batch),
           useSpecStore.getState().apply(change.batch),
+          useProposalStore.getState().apply(change.batch),
         ]);
     },
 

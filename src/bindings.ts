@@ -36,6 +36,12 @@ export const commands = {
 	 */
 	checkAppendOnly: (repoRoot: string, path: string, saved: string, text: string) => __TAURI_INVOKE<AppendOnlyViolation_Serialize[]>("check_append_only", { repoRoot, path, saved, text }),
 	/**
+	 *  Answers the open question `id` of the spec of the repository at `repo_root` with `answer`
+	 *  and today's date, ticks it and moves it to Answered (`S-questions`, `R-append-only`).
+	 *  Writes only when the spec file still holds the text it was read with.
+	 */
+	answerQuestion: (repoRoot: string, id: string, answer: string) => typedError<AnsweredQuestion, string>(__TAURI_INVOKE("answer_question", { repoRoot, id, answer })),
+	/**
 	 *  Every open proposal in the planning files of the repository at `repo_root`
 	 *  (`S-proposals`), by path and line.
 	 */
@@ -145,6 +151,13 @@ export const events = {
 /* Types */
 /**  Agent command file generators (`S-adapters`). */
 export type Adapter = "claude-code";
+
+/**  Where an answered question is now. */
+export type AnsweredQuestion = {
+	id: string,
+	/**  The first line of the entry under `### Answered`. */
+	at: SourceLine,
+};
 
 /**  An existing question or decision that an edit changed or removed. */
 export type AppendOnlyViolation = AppendOnlyViolation_Serialize | AppendOnlyViolation_Deserialize;

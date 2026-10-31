@@ -12,8 +12,8 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts, search,
-    spec, spec_split, task, templates, terminal, watch,
+    agents_block, append_only, board, config, files, gate, ids, init, make_task, prompts,
+    questions, search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -105,6 +105,22 @@ pub fn check_append_only(
         Some(file) => append_only::append_only_violations(&file, &saved, &text),
         None => Vec::new(),
     }
+}
+
+/// Answers the open question `id` of the spec of the repository at `repo_root` with `answer`
+/// and today's date, ticks it and moves it to Answered (`S-questions`, `R-append-only`).
+/// Writes only when the spec file still holds the text it was read with.
+#[tauri::command]
+#[specta::specta]
+pub fn answer_question(
+    repo_root: String,
+    id: String,
+    answer: String,
+) -> Result<questions::AnsweredQuestion, String> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    questions::answer_question(repo_root, &config, &id, &answer, &today)
 }
 
 /// What splitting `spec.md` into the `spec/` folder would do (`S-spec-split`). Writes nothing.

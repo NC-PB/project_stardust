@@ -1,7 +1,21 @@
+import type { SearchHit } from "@/bindings";
+
 /** Results ask for this many files at most (`S-search-fulltext`). */
 export const SEARCH_LIMIT = 30;
 /** A query is sent this long after typing stops. */
 export const SEARCH_DEBOUNCE_MS = 120;
+
+/** Where a search result opens in the editor: the absolute file and the 1-based matching line. */
+export interface HitLocation {
+  path: string;
+  line: number;
+}
+
+/** The file of `hit` under `repoRoot` and the line of its first match (`S-search-fulltext`). */
+export function hitLocation(repoRoot: string, hit: SearchHit): HitLocation {
+  const root = repoRoot.replace(/[\\/]+$/, "");
+  return { path: `${root}/${hit.path}`, line: Math.max(1, hit.line) };
+}
 
 /** A piece of a snippet; `match` pieces contain a word of the query. */
 export interface Segment {

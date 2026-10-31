@@ -1,3 +1,4 @@
+import type { ChangeBatch } from "@/bindings";
 import { frontmatterLineCount } from "@/lib/editor";
 
 /**
@@ -114,4 +115,31 @@ export function resolveProposal(
   while (unwrapped.length > 0 && unwrapped[0].content === "") unwrapped.shift();
   const kept = unwrapped.map(({ content, ending }) => content + ending);
   return [...lines.slice(0, from), ...kept, ...lines.slice(to)].join("");
+}
+
+/**
+ * Whether a batch may have changed the proposals under the planning root (`S-proposals`):
+ * a markdown file in it, a folder in it (which may hold some), or a folder that holds it.
+ * Hidden files and folders are skipped, as `list_proposals` skips them, and so are files of
+ * other types such as editor backups. Paths are relative to the repository root.
+ */
+export function proposalsTouched(
+  batch: ChangeBatch,
+  planningRoot: string,
+): boolean {
+  const root = planningRoot.replace(/\/+$/, "");
+  const touches = (path: string) => {
+    const trimmed = path.replace(/\/+$/, "");
+    if (trimmed === root || root.startsWith(`${trimmed}/`)) return true;
+    if (!trimmed.startsWith(`${root}/`)) return false;
+    const names = trimmed.slice(root.length + 1).split("/");
+    if (names.some((name) => name.startsWith("."))) return false;
+    const last = names[names.length - 1] ?? "";
+    return last.toLowerCase().endsWith(".md") || !last.includes(".");
+  };
+  return batch.changes.some((change) =>
+    change.kind === "moved"
+      ? touches(change.from) || touches(change.to)
+      : touches(change.path),
+  );
 }

@@ -2,8 +2,13 @@ import { cn } from "cn";
 import type { Node, SourceLine, Spec } from "@/bindings";
 import { FogMeter } from "@/components/fog-meter";
 import { GateStatus } from "@/components/gate-status";
+import { InlineMarkdown } from "@/components/inline-markdown";
 import { MindMap } from "@/components/mind-map";
+import { QuestionsForm } from "@/components/questions-form";
+import { SpecPrompts } from "@/components/spec-prompts";
+import { NodeTasks, TracePanel } from "@/components/trace";
 import { Button } from "@/components/ui/button";
+import { VerifyAreaButton } from "@/components/verify-area-button";
 import {
   clarifiedCount,
   expandableKeys,
@@ -43,6 +48,8 @@ export function SpecView() {
   const openAt = useOpenAt();
   const mindMap = useViewStore((state) => state.mindMap);
   const toggleMindMap = useViewStore((state) => state.toggleMindMap);
+  const questions = useViewStore((state) => state.questions);
+  const toggleQuestions = useViewStore((state) => state.toggleQuestions);
   if (spec === null || openAt === null) return null;
 
   return (
@@ -53,9 +60,20 @@ export function SpecView() {
           {spec.location}
           {spec.form === "folder" && " (folder form)"}
         </span>
+        {spec.found && <SpecPrompts />}
         {spec.found && (
           <Button
             className="ml-auto"
+            variant={questions ? "secondary" : "outline"}
+            size="xs"
+            aria-pressed={questions}
+            onClick={toggleQuestions}
+          >
+            Questions
+          </Button>
+        )}
+        {spec.found && (
+          <Button
             variant={mindMap ? "secondary" : "outline"}
             size="xs"
             aria-pressed={mindMap}
@@ -76,6 +94,7 @@ export function SpecView() {
             <GateStatus onOpen={openAt} />
           </div>
           <SectionNav spec={spec} openAt={openAt} />
+          {questions && <QuestionsForm onOpen={openAt} />}
           {mindMap ? (
             <div className="h-[28rem] shrink-0 rounded-md border">
               <MindMap onOpen={openAt} />
@@ -83,6 +102,7 @@ export function SpecView() {
           ) : (
             <StructureTree spec={spec} openAt={openAt} />
           )}
+          <TracePanel openAt={openAt} />
         </>
       )}
       <IssueList spec={spec} openAt={openAt} />
@@ -225,7 +245,11 @@ function NodeItem({
             node.ticked === false && "text-muted-foreground",
           )}
         >
-          {node.title || "(untitled)"}
+          {node.title ? (
+            <InlineMarkdown text={node.title} file={node.at.file} />
+          ) : (
+            "(untitled)"
+          )}
         </button>
         {node.id ? (
           <code className="rounded bg-muted px-1 text-xs">{node.id}</code>
@@ -249,6 +273,8 @@ function NodeItem({
             {count.clarified}/{count.total} clarified
           </span>
         )}
+        {node.id && <VerifyAreaButton nodeId={node.id} />}
+        <NodeTasks id={node.id} />
       </div>
       {expandable && expanded && (
         <div className="ml-5 flex flex-col gap-0.5 border-l pl-3">
@@ -262,7 +288,10 @@ function NodeItem({
                     title={`Open ${sourceLabel(criterion.at)}`}
                     className="whitespace-pre-line text-left text-muted-foreground hover:text-foreground"
                   >
-                    {criterion.text}
+                    <InlineMarkdown
+                      text={criterion.text}
+                      file={criterion.at.file}
+                    />
                   </button>
                 </li>
               ))}

@@ -150,10 +150,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Dependencies `S-dependencies`
     - A task whose `depends_on` contains a task outside the terminal column is shown as blocked.
   - [x] Traceability `S-trace`
-    - Tasks reference nodes in `implements`.
-    - The tool lists tasks without `implements` and clarified nodes without any task.
-    - A node shows the tasks that implement it.
-    - Finishing a task updates the criteria of the nodes it implements (`R-spec-is-truth`).
+    - Tasks reference nodes in `implements`. An entry repeated in one task counts once.
+    - Each node of the spec view tree shows the tasks that implement it with their column, from every column including the terminal one; each opens the task file in the editor.
+    - A Trace section in the spec view lists tasks outside the terminal column without `implements`, ticked nodes without any task, and `implements` entries (in any column) that name no node. Tasks open in the editor, nodes at their line.
+    - A ticked node counts as having a task when a task implements it or a node below it. Areas (no checkbox) are not listed, and `#later` nodes are skipped with their subtree (D-20261031-013706-d7rx).
+    - Finishing a task updates the criteria of the nodes it implements (`R-spec-is-truth`); a test checks the generated planner block contains this rule.
+    - Implemented in `src/lib/trace.ts`, `src/components/trace.tsx` (shown by `src/components/spec-view.tsx`), test in `src-tauri/src/domain/agents_block.rs`.
   - [x] Archive `S-archive`
     - Moves terminal tasks older than the current month into `done/YYYY-MM/`, after showing the list.
   - [x] Staleness `S-staleness`
@@ -193,15 +195,20 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - A sub-item is a node when it has a checkbox, or when its first line ends with the `S-` id in inline code, followed only by a `Q-` link (plain or as a markdown link) and `#` tags. Every other sub-item is a criterion; its own sub-items become lines of its text.
     - The title is the text before the id. After the id, `#later` sets the later flag and the first `Q-` id is the blocking question. A node without id is kept and reported.
     - Each node lists the `R-` ids in inline code in its criteria, each once (`S-gate`).
-    - The spec view shows the Structure as a collapsible tree: areas expanded, nodes collapsed by default, with expand all and collapse all. Each node shows a read-only tick labelled clarified or not clarified (`R-tick-means-clear`), its id (or a "no id" marker), `#later`, the blocking question (open, answered, or not found), and for areas how many nodes below them are clarified. Expanded, a node shows its criteria and child nodes. Every node, criterion and question opens in the editor at its line. Expand state is kept per node id for the session. Implemented in `src/components/spec-view.tsx` and `src/lib/spec-view.ts`.
+    - The spec view shows the Structure as a collapsible tree: areas expanded, nodes collapsed by default, with expand all and collapse all. Each node shows a read-only tick labelled clarified or not clarified (`R-tick-means-clear`), its id (or a "no id" marker), `#later`, the blocking question (open, answered, or not found), and for areas how many nodes below them are clarified. Expanded, a node shows its criteria and child nodes. Node titles and criteria render inline markup only (inline code, emphasis, links); block markup stays text and a criterion's lines keep their breaks. A relative `.md` link opens that file in the editor instead of the row; other links show as text with the address on hover (D-20261031-013555-1ofs). Every node, criterion and question opens in the editor at its line. Expand state is kept per node id for the session. Implemented in `src/components/spec-view.tsx`, `src/components/inline-markdown.tsx`, `src/lib/spec-view.ts` and `src/lib/inline-markdown.ts`.
   - [x] Questions form `S-questions`
-    - Shows open questions with an answer field. Saving appends the answer and moves the entry to Answered (`R-append-only`).
+    - The spec view's Questions toggle shows the open questions, blocking ones first (marked `(blocking)` or linked by a node, as in `S-gate`), each group in file order. Each shows its question and id, opening the spec at its line, the nodes it blocks or concerns (the `S-` ids after its `→`, then the nodes linking it), each opening at its line, and an answer field. A question without a `Q-` id cannot be answered here.
+    - Save appends the answer on one line and today's date before the `→`, ticks the entry, moves it to the top of `### Answered` (replacing `- (none)`, or adding the heading at the end of Questions) and leaves `- (none)` in an emptied Open list. The rest of the file is kept line by line. Works in `spec.md` and `spec/questions.md` (`R-append-only`).
+    - The result is checked with the append-only guard and read back before writing; it is written only when the file still holds the text read. An empty answer or one containing `→` is refused. A refusal leaves the answer in the field with the reason.
+    - When the spec file is open in the editor, its unsaved edits are saved first; the answer is refused while they have a conflict or cannot be saved. The spec view and the editor follow from the watcher batch (D-20261031-013850-qf4m).
+    - Implemented in `src-tauri/src/domain/questions.rs` (`answer_question`, `answer_in_text`); command `answer_question(repo_root, id, answer)`; `src/lib/questions.ts` (`openQuestions`, `answerProblem`), `src/stores/questions-store.ts` (`useQuestionsStore`), `src/components/questions-form.tsx` (`QuestionsForm`, toggled by `questions` in `useViewStore`).
   - [x] Decisions log `S-decisions`
     - The editor allows appending entries and adding "Superseded by" lines only (`R-append-only`).
     - Applies to Questions and Decisions in `spec.md` and in every file of `spec/`, whichever form the config chooses. Entries of the saved and the edited text are read with the spec parser and matched by id; an entry without an id by its text or title.
     - Allowed on an existing question: ticking it, moving it between Open and Answered, appending text after its question (the answer and date) while open, adding links after the `→`. An answered question cannot be reopened and its text cannot change. Allowed on an existing decision: added `- Superseded by:` lines. Rewrapping lines is not a change. New entries and text outside entries are free.
     - A save that would change or remove an existing entry is refused; the text stays in the editor and a notice explains the rule and lists each entry with its message and line. "Undo my edits" goes back to the saved text and keeps the edits for Restore my edits (D-20261031-011923-a7q2).
-    - Implemented in `src-tauri/src/domain/append_only.rs` (`append_only_violations`, `spec_file_of`); command `check_append_only(repo_root, path, saved, text)`; checked in `src/stores/editor-store.ts` before every save, shown by `AppendOnlyBar` in `src/components/editor.tsx`, text in `src/lib/append-only.ts`.
+    - In source mode the first line of each refused entry is highlighted. The marks follow typing and are replaced by every check. They go away when a save succeeds, the file is reloaded, or the edits are undone back to the saved text. Removed entries are only listed in the notice.
+    - Implemented in `src-tauri/src/domain/append_only.rs` (`append_only_violations`, `spec_file_of`); command `check_append_only(repo_root, path, saved, text)`; checked in `src/stores/editor-store.ts` before every save, shown by `AppendOnlyBar` in `src/components/editor.tsx`, text in `src/lib/append-only.ts`, highlight in `src/lib/protected-lines.ts`.
   - [x] Fog meter `S-fog-meter`
     - Shows ticked versus unticked nodes and answered versus open questions. Domain areas (nodes without a checkbox) are not counted.
     - Nodes tagged `#later` are counted separately, ticked or not (D-20261031-011542-f7mq).
@@ -228,13 +235,15 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Accept removes one `>` marker and the space after it from each line, keeping the indentation. It drops the label and the spaces after it. A label alone on its line is removed, along with blank lines that would then open the text.
     - Reject removes the block and the blank line after it, or the one before it when there is none after it.
     - Both are one edit of the editor text, saved like typing (`S-editor-core`), and nothing outside these lines changes. An Undo bar and Ctrl/⌘+Z in read mode restore the text before, as long as it has not been edited since (D-20261031-012029-p7rq).
-    - A Proposals button in the header lists every proposal in the markdown files under the planning root (hidden files skipped), by path and line, with its first line of text. The list is read when it opens, and an entry opens its file in read mode.
-    - Implemented in `src/lib/proposals.ts`, `src/stores/editor-store.ts` (`resolveProposal`, `undoProposal`), `src/stores/proposal-store.ts`, `src/components/proposal-quote.tsx`, `src/components/proposal-list.tsx`; Rust `src-tauri/src/domain/proposals.rs`; command `list_proposals(repo_root)`.
+    - A Proposals button in the header shows the number of proposals and lists every proposal in the markdown files under the planning root (hidden files skipped), by path and line, with its first line of text. An entry opens its file in read mode.
+    - The list is read when the project opens and again after each watcher batch that touches a markdown file under the planning root, a folder in it, or a folder that holds it (D-20261031-013531-2k1u).
+    - Implemented in `src/lib/proposals.ts` (`proposalsTouched`), `src/stores/editor-store.ts` (`resolveProposal`, `undoProposal`), `src/stores/proposal-store.ts`, `src/components/proposal-quote.tsx`, `src/components/proposal-list.tsx`; Rust `src-tauri/src/domain/proposals.rs`; command `list_proposals(repo_root)`.
   - [x] Glossary `S-glossary`
     - In read mode, glossary terms show their definition on hover: the term is rendered as an `<abbr>` with a dotted underline whose title gives the term and its definition.
-    - Matching is case insensitive on whole words; multi-word terms match across any whitespace. Within each paragraph or table cell, the first occurrence of each term is marked.
-    - Longer terms win over shorter ones they contain ("Terminal column" over "Column"). Headings, code blocks, inline code and link text are not marked. Plurals and terms split by markup are not matched (D-20261031-011535-qgmp).
-    - The terms come from the spec's Glossary and follow it when the spec changes on disk. Implemented in `src/lib/glossary.ts` (`remarkGlossary`), used by the read view in `src/components/editor.tsx`.
+    - Each marked term is a tab stop; on keyboard focus (`:focus-visible`) a tooltip under the term shows the same text, taken from its `data-definition` attribute (D-20261031-013458-xysm).
+    - Matching is case insensitive on whole words; multi-word terms match across any whitespace. Simple English plurals made on the last word match as the term ("ies" after a consonant and y, "es" after s, x, z, ch, sh, else "s"; "Planning roots" for "Planning root"); a plural that is itself a term stays that term. Within each paragraph or table cell, the first occurrence of each term, singular or plural, is marked.
+    - Longer terms win over shorter ones they contain ("Terminal column" over "Column"). Headings, code blocks, inline code and link text are not marked. Irregular plurals and terms split by markup are not matched (D-20261031-011535-qgmp).
+    - The terms come from the spec's Glossary and follow it when the spec changes on disk. Implemented in `src/lib/glossary.ts` (`remarkGlossary`, `pluralOf`), used by the read view in `src/components/editor.tsx`; focus style in `src/index.css`.
 - Agent interface `S-agents`
   - [x] Planner block `S-agents-block`
     - Written into `AGENTS.md` between `<!-- planner:start -->` and `<!-- planner:end -->`; content outside is never touched.
@@ -249,10 +258,10 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/agents_block.rs`; command `write_planner_block(repo_root)` returns the files written. The watcher regenerates the block when `docs/planner.yml` changes (`S-watcher`, D-20261030-220523-8397).
   - [x] Prompt buttons `S-prompts`
     - Each copies a filled template from `templates/prompts.md` to the clipboard: Work on task, Verify task, Verify area, Handoff, Triage inbox, Structure this, Interview me, Integrate answers, Generate tasks.
-    - Built so far (phase 1): Work on task, Verify task and Handoff in a "Copy prompt" row of the editor while the open file is a task directly in a column; Triage inbox on the header of the first column. The other five are readable and fillable but have no button yet.
+    - Where the buttons are (D-20261031-001344-gumt, D-20261031-013434-mqvf): a "Copy prompt" row of the editor offers Work on task, Verify task and Handoff while the open file is a task directly in a column, and Structure this while it is `{planning_root}/braindump.md`. Triage inbox is on the header of the first column. Interview me, Integrate answers and Generate tasks are in the spec view header while the spec exists. Verify area is on every Structure node row that has an id, areas included, filled with that node.
     - Each prompt is the fenced block under its `## ` heading in the built in `templates/prompts.md`. Placeholders filled: `{planning_root}`, `{spec_location}` and the column names (`S-agents-block`) from the config, `{task_path}` (relative to the repository root) and `{node_id}` from the button. A placeholder without a value is an error and nothing is copied.
     - A notice confirms the copy for 2.5 s, or says why nothing was copied. The clipboard is written through the webview (D-20261031-001344-gumt).
-    - Implemented in `src-tauri/src/domain/prompts.rs` (`Prompt`, `fill_prompt`); command `fill_prompt(repo_root, prompt, input)`; `src/stores/prompt-store.ts`, `src/lib/prompts.ts`.
+    - Implemented in `src-tauri/src/domain/prompts.rs` (`Prompt`, `fill_prompt`); command `fill_prompt(repo_root, prompt, input)`; `src/stores/prompt-store.ts`; `src/lib/prompts.ts` (`editorPromptsOf`, `TASK_PROMPTS`, `BRAINDUMP_PROMPTS`, `SPEC_PROMPTS`); `src/components/spec-prompts.tsx`, `src/components/verify-area-button.tsx`.
   - [x] Adapters `S-adapters`
     - On request, generates agent command files that wrap the prompts, starting with Claude Code (`.claude/commands/`). Never required.
   - [x] Open terminal `S-terminal`
@@ -384,9 +393,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Index updated incrementally from watcher events. Thousands of files without noticeable lag.
     - Every `*.md` file under the planning root is searched, archive and notes folders included; hidden files and editor backups are not. The text is held in memory, read when the watcher starts and updated from each batch before the app receives it; nothing is written to disk (D-20261031-002734-fwvh).
     - A file matches when it contains every word of the query, ignoring case, as a substring of its text, title or path, so ids and node slugs match as typed. Matches in title or path rank first, then the number of matches, then the path. At most 30 results, each with title, path, line and a snippet of the first matching line with the words marked.
-    - The search box above the board sends the query 120 ms after typing stops and drops answers to older queries; results refresh after every batch. A result opens in the editor; arrow keys choose, Enter opens, Escape clears.
+    - The search box above the board sends the query 120 ms after typing stops and drops answers to older queries; results refresh after every batch. A result opens in the editor in source mode at the line of its first match (D-20261031-011800-v3sk); arrow keys choose, Enter opens, Escape clears.
     - Measured on 5,000 generated task files (14 MB): building the index 113 ms, the slowest query 11 ms, one update under 1 ms in a release build; 197 ms, 77 ms and under 1 ms in a debug build.
-    - Implemented in `src-tauri/src/domain/search.rs` (`SearchIndex`); command `search(query, limit)`, index built by `watch_project` and dropped by `unwatch_project`; `src/stores/search-store.ts`, `src/components/search-box.tsx`.
+    - Implemented in `src-tauri/src/domain/search.rs` (`SearchIndex`); command `search(query, limit)`, index built by `watch_project` and dropped by `unwatch_project`; `src/lib/search.ts` (`highlight`, `hitLocation`), `src/stores/search-store.ts`, `src/components/search-box.tsx`.
 
 ## Questions
 
@@ -732,6 +741,42 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: cutting unknown sections into extra files (they would read after the known ones and change the order); rewriting links repo-wide (that is `S-links`); writing `spec: auto` into the config on a `file` setting (the config is the user's); leaving the planner block naming `spec.md` (agents would read a trashed file).
 - Consequences: `S-spec-split` criteria. Links to `spec.md` from outside the planning root, such as `ARCHITECTURE.md`, break after a split.
 
+### D-20261031-013458-xysm · Glossary plurals by suffix rules, definitions on focus as a CSS tooltip
+- Context: `S-glossary` did not mark plural forms and showed definitions only on mouse hover (D-20261031-011535-qgmp). Task 20261031-012417-6wgq asks for simple plurals and keyboard focus.
+- Decision: each term also matches one plural made on its last word with the regular English suffix rules (s, es after s/x/z/ch/sh, ies after a consonant and y). A plural that is itself a term stays that term, and singular and plural count as one term per paragraph. Marked terms get `tabindex="0"` and a `data-definition` attribute; on `:focus-visible` a CSS `::after` tooltip shows it, while mouse hover keeps the native title.
+- Rejected: a stemming or inflection library (a dependency for little gain); matching any optional "s/es" (would mark words like "taskes"); `aria-describedby` with generated ids (needs unique ids across the rendered document, and the title already gives assistive tech the description); a roving tabindex or one focusable glossary list (more code; marking only the first occurrence per paragraph keeps tab stops few); a React tooltip component (see D-20261031-011535-qgmp).
+- Consequences: `S-glossary` criteria. Irregular plurals are still not matched. Read mode gets one tab stop per marked term. The focus tooltip can be clipped at the pane edge.
+
+### D-20261031-013434-mqvf · Where the ideation prompt buttons sit
+- Context: `S-prompts` lists the ideation prompts but not where their buttons go. Structure this reads the braindump, the three spec prompts work on the whole spec, and Verify area needs one node.
+- Decision: Structure this goes in the editor's existing "Copy prompt" row while `{planning_root}/braindump.md` is open; the row matches by path, the same file the prompt reads. Interview me, Integrate answers and Generate tasks go in the spec view header, only while the spec exists. Verify area is a small text button on every Structure node row with an id, in the tree only.
+- Rejected: all ideation prompts in the project bar (far from the file they act on); Verify area in the mind map too (crowds the nodes); hiding Structure this once a spec exists (the user may want to rebuild the spec).
+- Consequences: `S-prompts` criteria. Every prompt in `templates/prompts.md` now has a button.
+
+### D-20261031-013531-2k1u · The proposal list is read again in full after batches that touch planning markdown
+- Context: the list was read only when it opened. The button now shows a count, so the list has to be current all the time.
+- Decision: the proposal store reads `list_proposals` when the project opens and again after every batch for which `proposalsTouched` is true: a `.md` file under the planning root, a folder in it, or a folder that holds it, ignoring hidden names and other file types. The latest load wins.
+- Rejected: reloading only while the list is open (the count would go stale); an incremental per-file proposal index in Rust (more code, for a walk that costs about as much as building the search index); finding proposals in the frontend from batch contents (batches carry paths, not text).
+- Consequences: `S-proposals` criteria. Each save to a planning file costs one walk of the planning root. If that is too slow on large trees, the list moves into an incremental index next to `SearchIndex`.
+
+### D-20261031-013555-1ofs · Links in spec view texts
+- Context: node titles and criteria are buttons that open the editor at their line; links inside them must not navigate the window, and must not also open the row.
+- Decision: relative `.md` links open the linked file in the editor, resolved from the spec file the text is in, as in read mode; the click stops there. Every other link (web, anchor) shows as text with the address on hover, and a click opens the row. Block constructs are turned off in the parser rather than dropped after it, so sub-item lines keep their markers.
+- Rejected: every link as plain text (planning links are the useful ones); web links that do nothing on click, as in read mode (they would block the row's click target); unwrapping blocks after parsing (loses `- ` markers and line breaks).
+- Consequences: `S-nodes` criterion; a link is an `<a>` inside a `<button>`, which is invalid HTML (task 20261031-013556-iwh8).
+
+### D-20261031-013706-d7rx · Trace gaps: which tasks and nodes count
+- Context: `S-trace` lists tasks without `implements` and ticked nodes without any task, but does not say whether finished tasks, areas, `#later` nodes or parents of implemented nodes count.
+- Decision: tasks in every column implement nodes and are checked for unknown entries; only tasks outside the terminal column are listed for a missing `implements`. A ticked node is listed when no task implements it or any node below it. Areas have no checkbox and are never listed; `#later` nodes are skipped with their whole subtree, like the gate (D-20261031-011731-g8te). The index is a pure TypeScript module over the board and the spec stores.
+- Rejected: listing finished tasks without `implements` (they are history and predate the field); requiring a task on every parent node (container nodes would always be reported); a Rust command (both inputs already live in the frontend stores).
+- Consequences: `S-trace` criteria. A parent node can look traced through one child task while other children are listed on their own.
+
+### D-20261031-013850-qf4m · Answers are written by Rust as a checked text edit, the open spec file is saved first
+- Context: `S-questions` says saving appends the answer and moves the entry to Answered, but not where in Answered, what happens to an emptied Open list, how the write avoids overwriting changes on disk, or what happens when the spec file is open in the editor with unsaved edits.
+- Decision: one Rust function edits the file that holds the question, `spec.md` or `spec/questions.md`. It appends `Answer. (date)` before the `→`, ticks the entry and moves it to the top of `### Answered`, keeping newest first as in this spec. An emptied Open list gets `- (none)`. It checks its own result with `append_only_violations` and writes with `save_text` against the text it read. When that file is open in the editor, the editor saves first; the answer is refused while the editor has a conflict or edits it cannot save. An answer is one line and may not contain `→`. The form is toggled in the spec view like the mind map.
+- Rejected: building the new text in TypeScript (a second writer beside the Rust parser); writing the answer into the editor buffer (only works while the file is open, and mixes the answer with unrelated edits); refusing whenever the spec is open with any unsaved edits (most of them are harmless and save at once); appending at the end of Answered (this spec lists the newest first).
+- Consequences: `S-questions` criteria. Line breaks in an answer become spaces. A question without a `Q-` id is answered in the editor only. The form hides an answered question until the watcher batch reloads the spec.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -767,3 +812,4 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Session brief: what the session panel shows at the start of a session, computed from the board and the spec; never written to a file.
 - Violation: an existing question or decision that an unsaved edit changes or removes against `R-append-only`; such an edit is not saved.
 - Split: moving `spec.md` into the folder form, after a preview; the spec stays the same model.
+- Trace: the index between tasks and the nodes they implement, and its gaps: tasks without `implements`, ticked nodes without any task, `implements` entries naming no node.

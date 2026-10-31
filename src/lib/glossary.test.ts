@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   type GlossaryEntry,
   glossaryMatcher,
+  pluralOf,
   remarkGlossary,
 } from "./glossary";
 
@@ -26,7 +27,7 @@ const render = (markdown: string, entries: GlossaryEntry[] = terms) =>
   );
 
 const abbr = (text: string, term: string, definition: string) =>
-  `<abbr title="${term}: ${definition}" class="glossary-term">${text}</abbr>`;
+  `<abbr title="${term}: ${definition}" class="glossary-term" tabindex="0" data-definition="${term}: ${definition}">${text}</abbr>`;
 
 describe("remarkGlossary", () => {
   it("marks a term with its definition as hover text", () => {
@@ -43,8 +44,37 @@ describe("remarkGlossary", () => {
   });
 
   it("matches whole words only", () => {
-    expect(render("Tasks and multitask and task_x.")).toBe(
-      "<p>Tasks and multitask and task_x.</p>",
+    expect(render("Multitask and task_x and taskss.")).toBe(
+      "<p>Multitask and task_x and taskss.</p>",
+    );
+  });
+
+  it("marks simple plurals as the term", () => {
+    expect(render("Tasks in columns.")).toBe(
+      `<p>${abbr("Tasks", "Task", "one unit of work")} in ${abbr("columns", "Column", "a folder")}.</p>`,
+    );
+  });
+
+  it("makes the last word of a multi-word term plural", () => {
+    expect(render("Two planning roots, terminal columns.")).toBe(
+      `<p>Two ${abbr("planning roots", "Planning root", "the planning folder")}, ${abbr("terminal columns", "Terminal column", "the finished column")}.</p>`,
+    );
+  });
+
+  it("counts a plural and its singular as one term per paragraph", () => {
+    expect(render("Tasks and a task.")).toBe(
+      `<p>${abbr("Tasks", "Task", "one unit of work")} and a task.</p>`,
+    );
+  });
+
+  it("keeps a plural that is a term of its own", () => {
+    expect(
+      render("Notes and a note.", [
+        { term: "Note", definition: "one" },
+        { term: "Notes", definition: "many" },
+      ]),
+    ).toBe(
+      `<p>${abbr("Notes", "Notes", "many")} and a ${abbr("note", "Note", "one")}.</p>`,
     );
   });
 
@@ -78,6 +108,23 @@ describe("remarkGlossary", () => {
 
   it("leaves the text alone without terms", () => {
     expect(render("A task.", [])).toBe("<p>A task.</p>");
+  });
+});
+
+describe("pluralOf", () => {
+  it("adds s, es or ies", () => {
+    expect(pluralOf("task")).toBe("tasks");
+    expect(pluralOf("status")).toBe("statuses");
+    expect(pluralOf("box")).toBe("boxes");
+    expect(pluralOf("branch")).toBe("branches");
+    expect(pluralOf("summary")).toBe("summaries");
+    expect(pluralOf("key")).toBe("keys");
+    expect(pluralOf("planning root")).toBe("planning roots");
+  });
+
+  it("has none when the term does not end in a letter", () => {
+    expect(pluralOf("c++ (old)")).toBeNull();
+    expect(pluralOf("phase 1")).toBeNull();
   });
 });
 

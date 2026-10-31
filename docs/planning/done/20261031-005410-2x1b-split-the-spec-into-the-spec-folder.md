@@ -29,5 +29,5 @@ Implements `S-spec-split` in the [spec](../spec.md).
 - Links from outside the planning root, for example in `ARCHITECTURE.md`, are not rewritten (`S-links`).
 
 ### Next session
-- Wave 2 of phase 2 is done. Left in the inbox that is now unblocked: [Questions form](../inbox/20261031-005401-myb8-questions-form.md), [Traceability](../inbox/20261031-005404-dtp7-traceability-between-tasks-and-nodes.md), [Prompt buttons for ideation](../inbox/20261031-005405-oomn-prompt-buttons-for-ideation.md); then [Agent adapters](../inbox/20261031-005411-6h8i-agent-adapters-starting-with-claude-code.md). Signed release builds stay skipped.
+- Wave 2 of phase 2 is done. Left in the inbox that is now unblocked: [Questions form](../done/20261031-005401-myb8-questions-form.md), [Traceability](../done/20261031-005404-dtp7-traceability-between-tasks-and-nodes.md), [Prompt buttons for ideation](../done/20261031-005405-oomn-prompt-buttons-for-ideation.md); then [Agent adapters](../inbox/20261031-005411-6h8i-agent-adapters-starting-with-claude-code.md). Signed release builds stay skipped.
 - None of the phase 2 views has been tried by hand in `npm run tauri dev` yet.
