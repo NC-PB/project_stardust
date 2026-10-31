@@ -23,7 +23,7 @@ Implements `S-archive` in the [spec](../spec.md).
 - Checked against the code: board, session panel, trace and changelog read only the files directly in the terminal column (`read_column`); search, id uniqueness and the watcher walk the planning root recursively. Moves seen in one watcher batch get their links rewritten (`links::rewrite_after_moves`).
 - Done: `src-tauri/src/domain/archive.rs` (`plan_archive`, `archive`) with tests, commands `plan_archive` and `archive_tasks`, `src/stores/archive-store.ts`, `src/lib/archive.ts`, `src/components/archive.tsx`, an Archive button and panel in the project bar.
 - The archive only renames; links come from the watcher (D-20261031-023039-a9u7). A test starts the real watcher with the same callback as `watch_project` and archives 150 tasks linking to each other, to the spec and to an open task; it passed five runs in a row.
-- Archived tasks are not cards (D-20261031-030552-k3qa). Trace and changelog losing them is follow-up work: [inbox task](../inbox/20261031-030611-fac5-trace-and-changelog-read-the-archive.md).
+- Archived tasks are not cards (D-20261031-030552-k3qa). Trace and changelog losing them is follow-up work: [inbox task](../next/20261031-030611-fac5-trace-and-changelog-read-the-archive.md).
 - The archive was not run on this repository's own planning folder.
 
 ## Result
