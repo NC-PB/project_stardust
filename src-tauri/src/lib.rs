@@ -24,6 +24,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::split_spec,
             commands::plan_gitattributes,
             commands::add_gitattributes,
+            commands::plan_archive,
+            commands::archive_tasks,
             commands::changelog_tags,
             commands::commit_info,
             commands::draft_changelog,
