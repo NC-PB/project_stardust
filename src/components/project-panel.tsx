@@ -1,5 +1,6 @@
 import { ArchiveButton, ArchivePanel } from "@/components/archive";
 import { ChangelogButton, ChangelogPanel } from "@/components/changelog";
+import { DoctorButton, DoctorPanel } from "@/components/doctor";
 import {
   GitattributesButton,
   GitattributesPanel,
@@ -108,6 +109,7 @@ export function ProjectPanel() {
             {repoRoot !== null && <GitattributesButton repoRoot={repoRoot} />}
             {repoRoot !== null && <ChangelogButton repoRoot={repoRoot} />}
             {repoRoot !== null && <ArchiveButton repoRoot={repoRoot} />}
+            {repoRoot !== null && <DoctorButton repoRoot={repoRoot} />}
           </div>
         </div>
       )}
@@ -116,6 +118,7 @@ export function ProjectPanel() {
           <SplitSpecPanel repoRoot={repoRoot} />
           <GitattributesPanel repoRoot={repoRoot} />
           <ArchivePanel repoRoot={repoRoot} />
+          <DoctorPanel repoRoot={repoRoot} />
         </>
       )}
       {status === "ready" && repoRoot !== null && (

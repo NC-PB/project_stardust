@@ -145,6 +145,25 @@ pub fn broken_links(repo_root: &Path, planning_root: &str) -> Vec<BrokenLink> {
     plan_repair(repo_root, planning_root, &RepairScope::All).unresolved
 }
 
+/// What a repair over every searched markdown file would do, without writing anything:
+/// `repaired` holds the links a repair would change, `unresolved` the broken links it would
+/// leave. For the doctor (`S-doctor`), which lists both.
+pub fn check_links(repo_root: &Path, planning_root: &str) -> LinkRepair {
+    let plan = plan_repair(repo_root, planning_root, &RepairScope::All);
+    LinkRepair {
+        repaired: plan
+            .files
+            .into_iter()
+            .map(|planned| FileLinks {
+                file: planned.file,
+                changes: planned.changes,
+            })
+            .collect(),
+        unresolved: plan.unresolved,
+        problems: plan.problems,
+    }
+}
+
 /// One file a repair writes.
 struct Planned {
     path: PathBuf,

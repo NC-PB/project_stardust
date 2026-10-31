@@ -12,9 +12,9 @@ use tauri_specta::Event;
 
 use crate::domain;
 use crate::domain::{
-    agents_block, append_only, archive, board, changelog, config, files, gate, gitattributes, ids,
-    images, init, link_lookup, link_repair, links, make_task, prompts, questions, repo_watch,
-    search, spec, spec_split, task, templates, terminal, watch,
+    agents_block, append_only, archive, board, changelog, config, doctor, files, gate,
+    gitattributes, ids, images, init, link_lookup, link_repair, links, make_task, prompts,
+    questions, repo_watch, search, spec, spec_split, task, templates, terminal, watch,
 };
 
 #[tauri::command]
@@ -701,6 +701,28 @@ pub fn broken_links(repo_root: String) -> Vec<link_repair::BrokenLink> {
     let root = Path::new(&repo_root);
     let config = config::load_config(root).config;
     link_repair::broken_links(root, &config.planning_root)
+}
+
+/// Everything the doctor finds in the planning files of the repository at `repo_root`
+/// (`S-doctor`), each finding with file, line and its obvious fix. Writes nothing.
+#[tauri::command]
+#[specta::specta]
+pub fn doctor(repo_root: String) -> doctor::DoctorReport {
+    let root = Path::new(&repo_root);
+    let config = config::load_config(root).config;
+    doctor::doctor(root, &config)
+}
+
+/// Applies one doctor fix the user confirmed (`S-doctor`); refused when it no longer applies.
+#[tauri::command]
+#[specta::specta]
+pub fn apply_doctor_fix(
+    repo_root: String,
+    fix: doctor::DoctorFix,
+) -> Result<doctor::FixReport, String> {
+    let root = Path::new(&repo_root);
+    let config = config::load_config(root).config;
+    doctor::apply_fix(root, &config, &fix)
 }
 
 /// Stops watching and forgets the search index.
