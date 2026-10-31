@@ -13,7 +13,7 @@ import { useSpecStore } from "@/stores/spec-store";
  * hidden for the session on request.
  */
 export function SessionPanel() {
-  const { repoRoot, config, columns } = useBoardStore();
+  const { repoRoot, config, columns, archived } = useBoardStore();
   const spec = useSpecStore((state) =>
     state.repoRoot === repoRoot ? state.spec : null,
   );
@@ -30,7 +30,7 @@ export function SessionPanel() {
       </div>
     );
 
-  const brief = sessionBrief(repoRoot, config, columns, spec);
+  const brief = sessionBrief(repoRoot, config, columns, spec, archived);
   const open = (path: string, line?: number) =>
     void openFile(repoRoot, path, line);
   const last = brief.lastCompleted;
