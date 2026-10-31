@@ -79,7 +79,9 @@ function collectUntraced(
  * Builds the trace between the tasks on the board and the nodes of the Structure (`S-trace`).
  * Tasks in every column, the terminal one included, implement their nodes and are checked for
  * unknown entries; only tasks outside `terminal` are listed for a missing `implements`, since
- * finished tasks are history. An entry repeated in one task counts once.
+ * finished tasks are history. An entry repeated in one task counts once. The doctor
+ * (`src-tauri/src/domain/doctor.rs`, `untraced`) applies the same two task rules in Rust;
+ * change them together.
  */
 export function buildTrace(
   columns: BoardColumn[],

@@ -58,6 +58,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::watch_project,
             commands::unwatch_project,
             commands::broken_links,
+            commands::doctor,
+            commands::apply_doctor_fix,
         ])
         .events(collect_events![commands::PlanningChanged])
 }

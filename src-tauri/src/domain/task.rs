@@ -17,6 +17,9 @@ use crate::domain::ids::{is_task_id, parse_task_filename};
 const FALLBACK_FIELDS: [&str; 5] = ["id", "title", "created", "completed", "parent"];
 const DATE_FORMAT: &str = "%Y-%m-%d";
 
+/// The issue of a filename without a task id; the doctor reports it as a missing id.
+pub const NO_FILENAME_ID: &str = "the filename does not start with a task id (`<id>-<slug>.md`)";
+
 /// One task file as read from disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 pub struct Task {
@@ -125,9 +128,7 @@ pub fn parse_task(file_name: &str, text: &str) -> Task {
     let mut issues = Vec::new();
     let from_filename = parse_task_filename(file_name);
     if from_filename.is_none() {
-        issues.push(file_issue(
-            "the filename does not start with a task id (`<id>-<slug>.md`)".into(),
-        ));
+        issues.push(file_issue(NO_FILENAME_ID.into()));
     }
 
     let (fields, body) = match locate_frontmatter(text) {

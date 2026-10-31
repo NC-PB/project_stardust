@@ -11,6 +11,7 @@ pub mod code_paths;
 pub mod columns;
 pub mod commit_info;
 pub mod config;
+pub mod doctor;
 pub mod files;
 pub mod gate;
 pub mod git;

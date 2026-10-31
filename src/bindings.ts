@@ -212,6 +212,13 @@ export const commands = {
 	 *  repaired by id (`S-links`), for the doctor (`S-doctor`). Writes nothing.
 	 */
 	brokenLinks: (repoRoot: string) => __TAURI_INVOKE<BrokenLink[]>("broken_links", { repoRoot }),
+	/**
+	 *  Everything the doctor finds in the planning files of the repository at `repo_root`
+	 *  (`S-doctor`), each finding with file, line and its obvious fix. Writes nothing.
+	 */
+	doctor: (repoRoot: string) => __TAURI_INVOKE<DoctorReport_Serialize>("doctor", { repoRoot }),
+	/**  Applies one doctor fix the user confirmed (`S-doctor`); refused when it no longer applies. */
+	applyDoctorFix: (repoRoot: string, fix: DoctorFix) => typedError<FixReport, string>(__TAURI_INVOKE("apply_doctor_fix", { repoRoot, fix })),
 };
 
 /** Events */
@@ -618,6 +625,41 @@ export type Decision_Serialize = {
 	end_line: number,
 };
 
+/**  A fix the doctor offers; applied only by [`apply_fix`], after confirmation. */
+export type DoctorFix = 
+/**  Writes `id` as the frontmatter `id` of `file` (relative to the repository root). */
+{ kind: "set_id"; file: string; id: string } | 
+/**
+ *  Renames `file` to `to` in the same folder and writes `id`, the id at the start of `to`,
+ *  as its frontmatter `id`. Links to the file follow it.
+ */
+{ kind: "rename"; file: string; to: string; id: string } | 
+/**  Repairs the broken links of `file` by the id in their target's filename (`S-links`). */
+{ kind: "repair_links"; file: string };
+
+/**  Everything the doctor found. */
+export type DoctorReport = DoctorReport_Serialize | DoctorReport_Deserialize;
+
+/**  Everything the doctor found. */
+export type DoctorReport_Deserialize = {
+	/**  Ordered by kind, then file, then line. */
+	findings: Finding_Deserialize[],
+	/**  How many task files were checked, archive included. */
+	task_files: number,
+	/**  What could not be checked at all, such as a column folder that cannot be read. */
+	problems: string[],
+};
+
+/**  Everything the doctor found. */
+export type DoctorReport_Serialize = {
+	/**  Ordered by kind, then file, then line. */
+	findings: Finding_Serialize[],
+	/**  How many task files were checked, archive included. */
+	task_files: number,
+	/**  What could not be checked at all, such as a column folder that cannot be read. */
+	problems: string[],
+};
+
 /**  The Domain section. */
 export type Domain = Domain_Serialize | Domain_Deserialize;
 
@@ -657,6 +699,63 @@ export type FileLinks = {
 	/**  Relative to the repository root. */
 	file: string,
 	changes: LinkChange[],
+};
+
+/**  One problem found by the doctor. */
+export type Finding = Finding_Serialize | Finding_Deserialize;
+
+/**  What a finding is about, in the order the doctor lists them. */
+export type FindingKind = 
+/**  Several task files carry the same id (`R-unique-ids`). */
+"duplicate_id" | 
+/**  A task file without an id in its filename, or without `id` in its frontmatter. */
+"missing_id" | 
+/**  The frontmatter id differs from the filename id, which wins (`R-filename-truth`). */
+"id_mismatch" | 
+/**  A relative link that does not resolve; repairable by id or not. */
+"broken_link" | 
+/**  A relative link to an image file that does not exist (`S-images`). */
+"missing_image" | 
+/**  Frontmatter that is not valid, or a field that is missing or has an invalid value. */
+"frontmatter_error" | 
+/**
+ *  A task outside the terminal column without `implements`, or an `implements` entry
+ *  naming no node of the Structure (`S-trace`).
+ */
+"untraced";
+
+/**  One problem found by the doctor. */
+export type Finding_Deserialize = {
+	kind: FindingKind,
+	/**  The file, relative to the repository root. */
+	file: string,
+	/**  1-based line in the file. */
+	line: number,
+	/**  What is wrong, in one sentence. */
+	message: string,
+	/**  The obvious fix, when there is one. */
+	fix?: DoctorFix | null,
+};
+
+/**  One problem found by the doctor. */
+export type Finding_Serialize = {
+	kind: FindingKind,
+	/**  The file, relative to the repository root. */
+	file: string,
+	/**  1-based line in the file. */
+	line: number,
+	/**  What is wrong, in one sentence. */
+	message: string,
+	/**  The obvious fix, when there is one. */
+	fix: DoctorFix | null,
+};
+
+/**  What applying a fix did. */
+export type FixReport = {
+	/**  The fixed file where it is now, relative to the repository root. */
+	file: string,
+	/**  The links rewritten to follow a renamed file. */
+	links: MoveLinks,
 };
 
 /**  Which checks the gate applies (`S-gate`). */
