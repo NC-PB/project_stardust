@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Node_Serialize, Task_Serialize } from "@/bindings";
 import type { BoardColumn } from "./board";
-import { buildTrace, tasksOfNode, tracedTaskLabel } from "./trace";
+import {
+  buildTrace,
+  tasksOfNode,
+  tracedTaskLabel,
+  tracedTaskPath,
+} from "./trace";
 
 function task(id: string, implementsIds: string[] = []): Task_Serialize {
   return {
@@ -152,6 +157,46 @@ describe("buildTrace", () => {
     ]);
   });
 
+  it("counts archived tasks after the terminal column, with their month", () => {
+    const structure = [
+      node(null, null, [
+        node("S-a", true),
+        node("S-only-archived", true),
+        node("S-parent", true, [node("S-child", true)]),
+      ]),
+    ];
+    const trace = buildTrace(
+      [
+        column("next", [task("1", ["S-a"])]),
+        column("done", [task("2", ["S-a"])]),
+        column("later", [task("3", ["S-a"])]),
+      ],
+      structure,
+      "done",
+      [
+        { month: "2026-08", task: task("4", ["S-a", "S-only-archived"]) },
+        { month: "2026-09", task: task("5", ["S-child", "S-gone"]) },
+        { month: "2026-09", task: task("6") },
+      ],
+    );
+    expect(
+      tasksOfNode(trace, "S-a").map((t) => [t.id, t.column, t.month]),
+    ).toEqual([
+      ["1", "next", null],
+      ["2", "done", null],
+      ["4", "done", "2026-08"],
+      ["3", "later", null],
+    ]);
+    expect(tasksOfNode(trace, "S-only-archived").map(tracedTaskPath)).toEqual([
+      "done/2026-08/4-x.md",
+    ]);
+    expect(trace.untracedNodes).toEqual([]);
+    expect(trace.withoutImplements).toEqual([]);
+    expect(
+      trace.unknownImplements.map((u) => [tracedTaskPath(u.task), u.nodeId]),
+    ).toEqual([["done/2026-09/5-x.md", "S-gone"]]);
+  });
+
   it("is empty for an empty board and Structure", () => {
     const trace = buildTrace([], [], "done");
     expect(trace.tasksByNode.size).toBe(0);
@@ -169,6 +214,7 @@ describe("tracedTaskLabel", () => {
         title: "Do it",
         fileName: "1.md",
         column: "next",
+        month: null,
       }),
     ).toBe("Do it");
     expect(
@@ -177,7 +223,18 @@ describe("tracedTaskLabel", () => {
         title: " ",
         fileName: "x.md",
         column: "next",
+        month: null,
       }),
     ).toBe("x.md");
+  });
+});
+
+describe("tracedTaskPath", () => {
+  it("puts the month folder of an archived task between column and file", () => {
+    const base = { id: "1", title: "", fileName: "1.md", column: "done" };
+    expect(tracedTaskPath({ ...base, month: null })).toBe("done/1.md");
+    expect(tracedTaskPath({ ...base, month: "2026-09" })).toBe(
+      "done/2026-09/1.md",
+    );
   });
 });

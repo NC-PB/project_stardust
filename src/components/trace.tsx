@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Node, SourceLine } from "@/bindings";
+import type { ArchivedTask_Serialize, Node, SourceLine } from "@/bindings";
 import { type BoardColumn, columnDir } from "@/lib/board";
 import { sourceLabel } from "@/lib/spec-view";
 import {
@@ -7,7 +7,9 @@ import {
   type Trace,
   type TracedTask,
   tasksOfNode,
+  tracedTaskFile,
   tracedTaskLabel,
+  tracedTaskPath,
 } from "@/lib/trace";
 import { useBoardStore } from "@/stores/board-store";
 import { useEditorStore } from "@/stores/editor-store";
@@ -18,12 +20,17 @@ let cached: {
   columns: BoardColumn[];
   structure: Node[];
   terminal: string;
+  archived: ArchivedTask_Serialize[];
   trace: Trace;
 } | null = null;
 
-/** The trace between the board and the Structure (`S-trace`); `null` until both are read. */
+/**
+ * The trace between the board, its archive and the Structure (`S-trace`); `null` until both
+ * are read.
+ */
 function useTrace(): Trace | null {
   const columns = useBoardStore((state) => state.columns);
+  const archived = useBoardStore((state) => state.archived);
   const terminal = useBoardStore((state) => state.config?.terminal ?? null);
   const structure = useSpecStore((state) => state.spec?.structure ?? null);
   if (terminal === null || structure === null) return null;
@@ -31,13 +38,15 @@ function useTrace(): Trace | null {
     cached === null ||
     cached.columns !== columns ||
     cached.structure !== structure ||
-    cached.terminal !== terminal
+    cached.terminal !== terminal ||
+    cached.archived !== archived
   )
     cached = {
       columns,
       structure,
       terminal,
-      trace: buildTrace(columns, structure, terminal),
+      archived,
+      trace: buildTrace(columns, structure, terminal, archived),
     };
   return cached.trace;
 }
@@ -51,7 +60,7 @@ function useOpenTask(): ((task: TracedTask) => void) | null {
   return (task) =>
     void open(
       repoRoot,
-      `${columnDir(repoRoot, config.planning_root, task.column)}/${task.fileName}`,
+      `${columnDir(repoRoot, config.planning_root, task.column)}/${tracedTaskFile(task)}`,
     );
 }
 
@@ -67,7 +76,7 @@ function TaskChip({
     <button
       type="button"
       onClick={() => onOpen(task)}
-      title={`Open ${task.column}/${task.fileName}`}
+      title={`Open ${tracedTaskPath(task)}`}
       className="flex max-w-64 items-center gap-1 rounded border px-1 text-xs hover:bg-muted"
     >
       <span className="shrink-0 text-muted-foreground">{task.column}</span>
@@ -89,11 +98,7 @@ export function NodeTasks({ id }: { id: string | null | undefined }) {
       title="Tasks implementing this node"
     >
       {tasks.map((task) => (
-        <TaskChip
-          key={`${task.column}/${task.fileName}`}
-          task={task}
-          onOpen={openTask}
-        />
+        <TaskChip key={tracedTaskPath(task)} task={task} onOpen={openTask} />
       ))}
     </span>
   );
@@ -125,7 +130,7 @@ export function TracePanel({ openAt }: { openAt: (at: SourceLine) => void }) {
           count={withoutImplements.length}
         >
           {withoutImplements.map((task) => (
-            <li key={`${task.column}/${task.fileName}`}>
+            <li key={tracedTaskPath(task)}>
               <TaskChip task={task} onOpen={openTask} />
             </li>
           ))}
@@ -156,7 +161,7 @@ export function TracePanel({ openAt }: { openAt: (at: SourceLine) => void }) {
         >
           {unknownImplements.map(({ task, nodeId }) => (
             <li
-              key={`${task.column}/${task.fileName}:${nodeId}`}
+              key={`${tracedTaskPath(task)}:${nodeId}`}
               className="flex items-center gap-2"
             >
               <code className="shrink-0 text-destructive">{nodeId}</code>

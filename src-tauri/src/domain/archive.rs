@@ -191,6 +191,46 @@ pub fn archive(
     Ok(report)
 }
 
+/// A task in a month folder of the archive (`S-archive`), read for trace and the changelog,
+/// never shown as a card (D-20261031-030552-k3qa).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct ArchivedTask {
+    /// The month folder, `YYYY-MM`.
+    pub month: String,
+    pub task: Task,
+}
+
+/// Every task file in the month folders `YYYY-MM/` directly inside the terminal column folder
+/// `dir`, by month, then file name. Other folders are not the archive and are left out; a month
+/// folder that cannot be read is skipped. Fails only when `dir` itself cannot be read.
+pub fn read_archive(dir: &Path) -> std::io::Result<Vec<ArchivedTask>> {
+    let mut months: Vec<String> = std::fs::read_dir(dir)?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| is_month_folder(name))
+        .collect();
+    months.sort();
+    let mut tasks = Vec::new();
+    for month in months {
+        let Ok(column) = task::read_column(&dir.join(&month)) else {
+            continue;
+        };
+        tasks.extend(column.into_iter().map(|task| ArchivedTask {
+            month: month.clone(),
+            task,
+        }));
+    }
+    Ok(tasks)
+}
+
+/// Whether `name` is a month folder name, `YYYY-MM` of a real month.
+fn is_month_folder(name: &str) -> bool {
+    name.len() == 7
+        && name.as_bytes()[4] == b'-'
+        && NaiveDate::parse_from_str(&format!("{name}-01"), DATE_FORMAT).is_ok()
+}
+
 /// `YYYY-MM` of a valid `YYYY-MM-DD` date.
 fn month_of(date: &str) -> Option<String> {
     NaiveDate::parse_from_str(date, DATE_FORMAT)
@@ -295,6 +335,44 @@ mod tests {
             &finished("Open", "2026-01-01"),
         );
         (root, config)
+    }
+
+    #[test]
+    fn reads_tasks_of_the_month_folders_only() {
+        let (root, _config) = filled_repo();
+        put(
+            &root,
+            &format!("done/2025-12/{OLDER}"),
+            &finished("Older", "2025-12-01"),
+        );
+        put(&root, "done/2025-12/notes.txt", "not a task");
+        put(
+            &root,
+            "done/images/20250101-100000-hhhh-x.md",
+            &finished("X", "2025-01-01"),
+        );
+        put(
+            &root,
+            "done/2025-13/20250101-100000-iiii-y.md",
+            &finished("Y", "2025-01-01"),
+        );
+        let archived = read_archive(&root.join("docs/planning/done"));
+        let missing = read_archive(&root.join("docs/planning/gone"));
+        std::fs::remove_dir_all(&root).unwrap();
+
+        let archived: Vec<(String, String)> = archived
+            .unwrap()
+            .into_iter()
+            .map(|a| (a.month, a.task.file_name))
+            .collect();
+        assert_eq!(
+            archived,
+            [
+                ("2025-12".to_string(), OLDER.to_string()),
+                ("2026-09".to_string(), TAKEN.to_string()),
+            ]
+        );
+        assert!(missing.is_err());
     }
 
     #[test]

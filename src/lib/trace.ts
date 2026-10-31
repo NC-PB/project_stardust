@@ -1,4 +1,9 @@
-import type { Node, SourceLine, Task_Serialize } from "@/bindings";
+import type {
+  ArchivedTask_Serialize,
+  Node,
+  SourceLine,
+  Task_Serialize,
+} from "@/bindings";
 import type { BoardColumn } from "@/lib/board";
 
 /** A task as seen from the Structure: the task and the column it lives in (`S-trace`). */
@@ -8,6 +13,8 @@ export interface TracedTask {
   title: string;
   fileName: string;
   column: string;
+  /** The month folder `YYYY-MM` of an archived task (`S-archive`); `null` directly in the column. */
+  month: string | null;
 }
 
 /** A ticked node that no task implements, neither it nor a node below it (`S-trace`). */
@@ -26,7 +33,10 @@ export interface UnknownImplements {
 
 /** The trace between tasks and nodes (`S-trace`). */
 export interface Trace {
-  /** Node id to the tasks implementing it, in column order then file order. */
+  /**
+   * Node id to the tasks implementing it, in column order then file order; archived tasks follow
+   * the tasks directly in the terminal column, by month.
+   */
   tasksByNode: Map<string, TracedTask[]>;
   /** Tasks outside the terminal column with an empty `implements`. */
   withoutImplements: TracedTask[];
@@ -36,8 +46,35 @@ export interface Trace {
   unknownImplements: UnknownImplements[];
 }
 
-function traced(task: Task_Serialize, column: string): TracedTask {
-  return { id: task.id, title: task.title, fileName: task.file_name, column };
+function traced(
+  task: Task_Serialize,
+  column: string,
+  month: string | null = null,
+): TracedTask {
+  return {
+    id: task.id,
+    title: task.title,
+    fileName: task.file_name,
+    column,
+    month,
+  };
+}
+
+/** Every task with its column: the board's columns in order, the archive after the terminal one. */
+function allTasks(
+  columns: BoardColumn[],
+  terminal: string,
+  archived: ArchivedTask_Serialize[],
+): { task: Task_Serialize; entry: TracedTask }[] {
+  const all: { task: Task_Serialize; entry: TracedTask }[] = [];
+  for (const column of columns) {
+    for (const task of column.tasks)
+      all.push({ task, entry: traced(task, column.name) });
+    if (column.name !== terminal) continue;
+    for (const { month, task } of archived)
+      all.push({ task, entry: traced(task, column.name, month) });
+  }
+  return all;
 }
 
 /** Every node id in the Structure, depth first. */
@@ -77,37 +114,36 @@ function collectUntraced(
 
 /**
  * Builds the trace between the tasks on the board and the nodes of the Structure (`S-trace`).
- * Tasks in every column, the terminal one included, implement their nodes and are checked for
- * unknown entries; only tasks outside `terminal` are listed for a missing `implements`, since
- * finished tasks are history. An entry repeated in one task counts once.
+ * Tasks in every column, the terminal one and its archive (`archived`, the month folders)
+ * included, implement their nodes and are checked for unknown entries; only tasks outside
+ * `terminal` are listed for a missing `implements`, since finished tasks are history. An entry
+ * repeated in one task counts once.
  */
 export function buildTrace(
   columns: BoardColumn[],
   structure: Node[],
   terminal: string,
+  archived: ArchivedTask_Serialize[] = [],
 ): Trace {
   const known = nodeIds(structure);
   const tasksByNode = new Map<string, TracedTask[]>();
   const withoutImplements: TracedTask[] = [];
   const unknownImplements: UnknownImplements[] = [];
 
-  for (const column of columns) {
-    for (const task of column.tasks) {
-      const entry = traced(task, column.name);
-      const entries = [
-        ...new Set(task.implements.map((id) => id.trim()).filter(Boolean)),
-      ];
-      if (entries.length === 0 && column.name !== terminal)
-        withoutImplements.push(entry);
-      for (const nodeId of entries) {
-        if (!known.has(nodeId)) {
-          unknownImplements.push({ task: entry, nodeId });
-          continue;
-        }
-        const list = tasksByNode.get(nodeId);
-        if (list === undefined) tasksByNode.set(nodeId, [entry]);
-        else list.push(entry);
+  for (const { task, entry } of allTasks(columns, terminal, archived)) {
+    const entries = [
+      ...new Set(task.implements.map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (entries.length === 0 && entry.column !== terminal)
+      withoutImplements.push(entry);
+    for (const nodeId of entries) {
+      if (!known.has(nodeId)) {
+        unknownImplements.push({ task: entry, nodeId });
+        continue;
       }
+      const list = tasksByNode.get(nodeId);
+      if (list === undefined) tasksByNode.set(nodeId, [entry]);
+      else list.push(entry);
     }
   }
 
@@ -127,4 +163,14 @@ export function tasksOfNode(
 /** How a task is named in the trace: its title, else its file name. */
 export function tracedTaskLabel(task: TracedTask): string {
   return task.title.trim() || task.fileName;
+}
+
+/** The task file below its column folder: `name.md`, or `YYYY-MM/name.md` when archived. */
+export function tracedTaskFile(task: TracedTask): string {
+  return task.month === null ? task.fileName : `${task.month}/${task.fileName}`;
+}
+
+/** The task file below the planning root, such as `done/2026-09/name.md`. */
+export function tracedTaskPath(task: TracedTask): string {
+  return `${task.column}/${tracedTaskFile(task)}`;
 }

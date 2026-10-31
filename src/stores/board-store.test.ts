@@ -3,11 +3,13 @@ import type { Config } from "@/bindings";
 
 const settings = new Map<string, unknown>();
 const readColumn = vi.fn();
+const readArchive = vi.fn();
 const moveTask = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
     readColumn: (...args: unknown[]) => readColumn(...args),
+    readArchive: (...args: unknown[]) => readArchive(...args),
     moveTask: (...args: unknown[]) => moveTask(...args),
   },
 }));
@@ -39,6 +41,10 @@ describe("useBoardStore", () => {
     readColumn.mockImplementation(async (dir: string) =>
       ok(`${dir.split("/").pop()}.md`),
     );
+    readArchive.mockResolvedValue({
+      status: "ok",
+      data: [{ month: "2026-09", task: { file_name: "archived.md" } }],
+    });
     useBoardStore.getState().clear();
   });
 
@@ -103,6 +109,50 @@ describe("useBoardStore", () => {
       .getState()
       .columns.map((column) => column.tasks[0].file_name);
     expect(files).toEqual(["moved.md", "next.md", "moved.md"]);
+  });
+
+  it("reads the archive of the terminal column beside the board, not as cards", async () => {
+    await useBoardStore.getState().load("/repo", config, []);
+    expect(readArchive).toHaveBeenCalledWith("/repo/docs/planning/done");
+    const { columns, archived } = useBoardStore.getState();
+    expect(archived.map((a) => `${a.month}/${a.task.file_name}`)).toEqual([
+      "2026-09/archived.md",
+    ]);
+    expect(columns[2].tasks.map((task) => task.file_name)).toEqual(["done.md"]);
+  });
+
+  it("has no archive when it cannot be read or the terminal column is missing", async () => {
+    readArchive.mockResolvedValue({ status: "error", error: "denied" });
+    await useBoardStore.getState().load("/repo", config, []);
+    expect(useBoardStore.getState().archived).toEqual([]);
+    readArchive.mockClear();
+    await useBoardStore.getState().load("/other", config, ["done"]);
+    expect(readArchive).not.toHaveBeenCalled();
+    expect(useBoardStore.getState().archived).toEqual([]);
+  });
+
+  it("re-reads the archive when a batch touches the terminal column only", async () => {
+    await useBoardStore.getState().load("/repo", config, []);
+    readArchive.mockClear();
+    await useBoardStore.getState().apply({
+      changes: [{ kind: "modified", path: "docs/planning/next/x.md" }],
+      config_changed: false,
+    });
+    expect(readArchive).not.toHaveBeenCalled();
+    readArchive.mockResolvedValue({ status: "ok", data: [] });
+    await useBoardStore.getState().apply({
+      changes: [
+        {
+          kind: "moved",
+          id: "x",
+          from: "docs/planning/done/x.md",
+          to: "docs/planning/done/2026-09/x.md",
+        },
+      ],
+      config_changed: false,
+    });
+    expect(readArchive).toHaveBeenCalledTimes(1);
+    expect(useBoardStore.getState().archived).toEqual([]);
   });
 
   it("ignores batches outside the columns", async () => {
