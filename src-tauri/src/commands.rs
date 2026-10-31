@@ -510,6 +510,16 @@ pub fn link_candidates(
         .unwrap_or_default())
 }
 
+/// The markdown files of the repository at `repo_root` outside its planning root that a link
+/// can be made to (`S-links`). Read again when `RepositoryChanged` says markdown changed.
+#[tauri::command]
+#[specta::specta]
+pub fn outside_link_candidates(repo_root: String) -> Vec<link_lookup::LinkCandidate> {
+    let repo_root = Path::new(&repo_root);
+    let config = config::load_config(repo_root).config;
+    link_lookup::outside_candidates(repo_root, &config.planning_root)
+}
+
 /// The markdown files of the repository at `repo_root` that link to the file at `path`
 /// (absolute), by path relative to the repository root, with their lines (`S-links`).
 #[tauri::command]

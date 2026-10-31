@@ -10,6 +10,23 @@ import { frontmatterLineCount } from "@/lib/editor";
 export const LINK_OFFER_LIMIT = 50;
 
 /**
+ * The files a link can be typed to: the files of the search index (`inside`, the planning
+ * root) and the markdown files outside the planning root (`outside`), sorted by path, each
+ * path once.
+ */
+export function mergeCandidates(
+  inside: LinkCandidate_Serialize[],
+  outside: LinkCandidate_Serialize[],
+): LinkCandidate_Serialize[] {
+  const byPath = new Map<string, LinkCandidate_Serialize>();
+  for (const candidate of [...outside, ...inside])
+    byPath.set(candidate.path, candidate);
+  return [...byPath.values()].sort((a, b) =>
+    a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+  );
+}
+
+/**
  * Where a link is being typed in the source (`S-links`):
  * - `target`: after `](`, the target typed so far is replaced by the relative path.
  * - `new`: after `[[`, the `[[` and what follows up to the cursor (and a `]]` the editor

@@ -14,6 +14,7 @@ const loadProposals = vi.fn();
 const applyProposals = vi.fn();
 const loadLinks = vi.fn();
 const applyLinks = vi.fn();
+const applyOutsideLinks = vi.fn();
 const sources = {
   braindump: "/repo/docs/planning/braindump.md",
   spec: "/repo/docs/planning/spec.md",
@@ -56,6 +57,7 @@ vi.mock("./link-store", () => ({
     getState: () => ({
       load: loadLinks,
       apply: applyLinks,
+      applyOutside: applyOutsideLinks,
       clear: () => {},
     }),
   },
@@ -298,6 +300,7 @@ describe("useProjectStore", () => {
     const change = { files_added_or_removed: true, markdown: false };
     await useProjectStore.getState().receiveOutside(change);
     expect(applyOutsideStaleness).toHaveBeenCalledWith(change);
+    expect(applyOutsideLinks).toHaveBeenCalledWith(change);
     expect(useProjectStore.getState().revision).toBe(0);
   });
 

@@ -165,6 +165,11 @@ export const commands = {
 	 */
 	linkCandidates: () => typedError<LinkCandidate_Serialize[], string>(__TAURI_INVOKE("link_candidates")),
 	/**
+	 *  The markdown files of the repository at `repo_root` outside its planning root that a link
+	 *  can be made to (`S-links`). Read again when `RepositoryChanged` says markdown changed.
+	 */
+	outsideLinkCandidates: (repoRoot: string) => __TAURI_INVOKE<LinkCandidate_Serialize[]>("outside_link_candidates", { repoRoot }),
+	/**
 	 *  The markdown files of the repository at `repo_root` that link to the file at `path`
 	 *  (absolute), by path relative to the repository root, with their lines (`S-links`).
 	 */

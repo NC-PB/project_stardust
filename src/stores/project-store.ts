@@ -133,7 +133,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     },
 
     receiveOutside: async (change) => {
-      await useStalenessStore.getState().applyOutside(change);
+      await Promise.all([
+        useStalenessStore.getState().applyOutside(change),
+        useLinkStore.getState().applyOutside(change),
+      ]);
     },
 
     receive: async (change) => {

@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChangeBatch, Config } from "@/bindings";
 
 const linkCandidates = vi.fn();
+const outsideLinkCandidates = vi.fn();
 const backlinks = vi.fn();
 const readText = vi.fn();
 
 vi.mock("@/bindings", () => ({
   commands: {
     linkCandidates: () => linkCandidates(),
+    outsideLinkCandidates: (...args: unknown[]) =>
+      outsideLinkCandidates(...args),
     backlinks: (...args: unknown[]) => backlinks(...args),
     readText: (...args: unknown[]) => readText(...args),
     parseTaskText: async () => null,
@@ -41,6 +44,7 @@ describe("useLinkStore", () => {
     useLinkStore.getState().clear();
     await useEditorStore.getState().close();
     linkCandidates.mockResolvedValue({ status: "ok", data: [candidate] });
+    outsideLinkCandidates.mockResolvedValue([]);
     backlinks.mockResolvedValue([backlink]);
     readText.mockResolvedValue({ status: "ok", data: "# Spec\n" });
   });
@@ -84,10 +88,47 @@ describe("useLinkStore", () => {
   it("reads both again after batches touching planning markdown", async () => {
     await useLinkStore.getState().load("/repo", config);
     linkCandidates.mockClear();
+    outsideLinkCandidates.mockClear();
     await useLinkStore.getState().apply(batch("src/main.rs"));
     expect(linkCandidates).not.toHaveBeenCalled();
     await useLinkStore.getState().apply(batch("docs/planning/inbox/b.md"));
     expect(linkCandidates).toHaveBeenCalledTimes(1);
+    expect(outsideLinkCandidates).not.toHaveBeenCalled();
+  });
+
+  it("offers markdown files outside the planning root with the indexed ones", async () => {
+    const readme = { path: "README.md", title: "README", id: null };
+    outsideLinkCandidates.mockResolvedValue([readme]);
+    await useLinkStore.getState().load("/repo", config);
+    expect(outsideLinkCandidates).toHaveBeenCalledWith("/repo");
+    expect(useLinkStore.getState().candidates).toEqual([readme, candidate]);
+  });
+
+  it("reads the outside candidates and backlinks again when markdown changed outside", async () => {
+    await useLinkStore.getState().load("/repo", config);
+    await useEditorStore
+      .getState()
+      .open("/repo", "/repo/docs/planning/spec.md");
+    await vi.waitFor(() =>
+      expect(useLinkStore.getState().backlinks).toEqual([backlink]),
+    );
+    const fromReadme = { file: "README.md", title: "README", lines: [3] };
+    backlinks.mockResolvedValue([backlink, fromReadme]);
+    linkCandidates.mockClear();
+    outsideLinkCandidates.mockClear();
+
+    await useLinkStore
+      .getState()
+      .applyOutside({ files_added_or_removed: true, markdown: false });
+    expect(outsideLinkCandidates).not.toHaveBeenCalled();
+    expect(useLinkStore.getState().backlinks).toEqual([backlink]);
+
+    await useLinkStore
+      .getState()
+      .applyOutside({ files_added_or_removed: false, markdown: true });
+    expect(outsideLinkCandidates).toHaveBeenCalledWith("/repo");
+    expect(linkCandidates).not.toHaveBeenCalled();
+    expect(useLinkStore.getState().backlinks).toEqual([backlink, fromReadme]);
   });
 
   it("opens a backlink at its first link", async () => {
