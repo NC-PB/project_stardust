@@ -1,7 +1,7 @@
 import type { Node, Question, SourceLine, Spec } from "@/bindings";
 
-/** The main area shows the board or the spec view (`S-spec-file`, `S-nodes`). */
-export type MainView = "board" | "spec";
+/** The main area shows the board, the spec view (`S-spec-file`, `S-nodes`) or the Stale view (`S-staleness`). */
+export type MainView = "board" | "spec" | "stale";
 
 /** The absolute path of a spec file; `file` is relative to the planning root (`S-spec-file`). */
 export function specPathOf(

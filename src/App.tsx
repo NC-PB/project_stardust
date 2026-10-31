@@ -8,6 +8,7 @@ import { SearchBox } from "@/components/search-box";
 import { SessionPanel } from "@/components/session-panel";
 import { SettingsMenu } from "@/components/settings-menu";
 import { SpecView } from "@/components/spec-view";
+import { StaleView } from "@/components/stale-view";
 import { ViewSwitch } from "@/components/view-switch";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
@@ -63,7 +64,13 @@ function App() {
       <SearchBox />
       <SessionPanel />
       <div className="flex min-h-0 w-full flex-1 gap-4">
-        {view === "spec" ? <SpecView /> : <Board />}
+        {view === "spec" ? (
+          <SpecView />
+        ) : view === "stale" ? (
+          <StaleView />
+        ) : (
+          <Board />
+        )}
         <Editor />
       </div>
       <p className="text-xs text-muted-foreground">{versionLabel(version)}</p>

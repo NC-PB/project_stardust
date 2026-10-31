@@ -6,9 +6,10 @@ import { useViewStore } from "@/stores/view-store";
 const VIEWS: { view: MainView; label: string }[] = [
   { view: "board", label: "Board" },
   { view: "spec", label: "Spec" },
+  { view: "stale", label: "Stale" },
 ];
 
-/** Switches the main area between the board and the spec view; shown once a project is open. */
+/** Switches the main area between the board, the spec view and the Stale view; shown once a project is open. */
 export function ViewSwitch() {
   const { view, show } = useViewStore();
   const ready = useSpecStore((state) => state.spec !== null);
