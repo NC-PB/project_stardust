@@ -122,23 +122,6 @@ export interface ShortcutKeys {
 export const isMac =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 
-/** Whether `event` is ⌘+`key` on macOS or Ctrl+`key` elsewhere, with no other modifier. */
-export function isShortcut(
-  event: ShortcutKeys,
-  key: string,
-  mac: boolean = isMac,
-): boolean {
-  const command = mac
-    ? event.metaKey && !event.ctrlKey
-    : event.ctrlKey && !event.metaKey;
-  return (
-    command &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === key
-  );
-}
-
 /**
  * The markdown file a relative link in the file at `fromPath` points to, or `null` for
  * anchors, URLs with a scheme, absolute paths and links to anything but `.md` files.

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { VerifyAreaButton } from "@/components/verify-area-button";
 import {
   clarifiedCount,
-  expandableKeys,
   hasDetails,
   isExpanded,
   nodeKey,
@@ -23,6 +22,7 @@ import {
   tickLabel,
 } from "@/lib/spec-view";
 import { repoRelative } from "@/lib/staleness";
+import { runCommand } from "@/stores/command-store";
 import { useEditorStore } from "@/stores/editor-store";
 import { useSpecStore } from "@/stores/spec-store";
 import { useViewStore } from "@/stores/view-store";
@@ -50,9 +50,7 @@ export function SpecView() {
   const spec = useSpecStore((state) => state.spec);
   const openAt = useOpenAt();
   const mindMap = useViewStore((state) => state.mindMap);
-  const toggleMindMap = useViewStore((state) => state.toggleMindMap);
   const questions = useViewStore((state) => state.questions);
-  const toggleQuestions = useViewStore((state) => state.toggleQuestions);
   if (spec === null || openAt === null) return null;
 
   return (
@@ -70,7 +68,7 @@ export function SpecView() {
             variant={questions ? "secondary" : "outline"}
             size="xs"
             aria-pressed={questions}
-            onClick={toggleQuestions}
+            onClick={() => runCommand("spec.questions")}
           >
             Questions
           </Button>
@@ -80,7 +78,7 @@ export function SpecView() {
             variant={mindMap ? "secondary" : "outline"}
             size="xs"
             aria-pressed={mindMap}
-            onClick={toggleMindMap}
+            onClick={() => runCommand("spec.mind-map")}
           >
             Mind map
           </Button>
@@ -147,8 +145,6 @@ function StructureTree({
   spec: Spec;
   openAt: (at: SourceLine) => void;
 }) {
-  const setAllExpanded = useViewStore((state) => state.setAllExpanded);
-  const keys = expandableKeys(spec.structure);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
@@ -156,14 +152,14 @@ function StructureTree({
         <Button
           variant="ghost"
           size="xs"
-          onClick={() => setAllExpanded(keys, true)}
+          onClick={() => runCommand("spec.expand-all")}
         >
           Expand all
         </Button>
         <Button
           variant="ghost"
           size="xs"
-          onClick={() => setAllExpanded(keys, false)}
+          onClick={() => runCommand("spec.collapse-all")}
         >
           Collapse all
         </Button>

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Board } from "@/components/board";
+import { CommandPalette, PaletteButton } from "@/components/command-palette";
 import { Editor } from "@/components/editor";
 import { ProjectPanel } from "@/components/project-panel";
 import { PromptNotice } from "@/components/prompt-notice";
@@ -55,7 +56,8 @@ function App() {
           <ProposalList />
         </div>
         <h1 className="text-2xl font-semibold">stardust</h1>
-        <div className="absolute right-0">
+        <div className="absolute right-0 flex items-center gap-2">
+          <PaletteButton />
           <SettingsMenu />
         </div>
       </header>
@@ -75,6 +77,7 @@ function App() {
       </div>
       <p className="text-xs text-muted-foreground">{versionLabel(version)}</p>
       <PromptNotice />
+      <CommandPalette />
     </main>
   );
 }

@@ -10,21 +10,11 @@ import {
   followFile,
   formValue,
   frontmatterLineCount,
-  isShortcut,
   resolveLink,
 } from "./editor";
 
 const field = (key: string): FormField =>
   FORM_FIELDS.find((candidate) => candidate.key === key) as FormField;
-
-const keys = (key: string, mods: Partial<Record<string, boolean>> = {}) => ({
-  key,
-  metaKey: false,
-  ctrlKey: false,
-  altKey: false,
-  shiftKey: false,
-  ...mods,
-});
 
 describe("frontmatter", () => {
   const text = "---\nid: x\ntitle: A\n---\n\n## Description\n";
@@ -114,18 +104,6 @@ describe("followFile", () => {
         changes: [{ kind: "modified", path: "docs/planning/next/a.md" }],
       }),
     ).toBeUndefined();
-  });
-});
-
-describe("shortcuts", () => {
-  it("use ⌘ on macOS and Ctrl elsewhere", () => {
-    expect(isShortcut(keys("e", { metaKey: true }), "e", true)).toBe(true);
-    expect(isShortcut(keys("e", { ctrlKey: true }), "e", true)).toBe(false);
-    expect(isShortcut(keys("E", { ctrlKey: true }), "e", false)).toBe(true);
-    expect(isShortcut(keys("e", { metaKey: true }), "e", false)).toBe(false);
-    expect(
-      isShortcut(keys("e", { ctrlKey: true, shiftKey: true }), "e", false),
-    ).toBe(false);
   });
 });
 

@@ -27,9 +27,9 @@ import { commitLabel } from "@/lib/commit-info";
 import { PROMPT_LABELS } from "@/lib/prompts";
 import type { StaleFlag } from "@/lib/staleness";
 import { useBoardStore } from "@/stores/board-store";
+import { runCommand } from "@/stores/command-store";
 import { useCommitStore } from "@/stores/commit-store";
 import { useEditorStore } from "@/stores/editor-store";
-import { usePromptStore } from "@/stores/prompt-store";
 
 /** Ages on the cards are recomputed this often. */
 const AGE_TICK_MS = 60_000;
@@ -64,7 +64,6 @@ export function Board() {
   } = useBoardStore();
   const openPath = useEditorStore((state) => state.path);
   const openFile = useEditorStore((state) => state.open);
-  const copyPrompt = usePromptStore((state) => state.copy);
   const [now, setNow] = useState(Date.now);
   const [dragged, setDragged] = useState<Card | null>(null);
   const staleFlags = useStaleFlags();
@@ -137,11 +136,7 @@ export function Board() {
             <Column
               triage={
                 index === 0
-                  ? () =>
-                      void copyPrompt(repoRoot, "triage-inbox", {
-                        task_path: null,
-                        node_id: null,
-                      })
+                  ? () => runCommand("prompt.triage-inbox")
                   : undefined
               }
               key={column.name}

@@ -15,7 +15,7 @@ import {
   offerLabel,
   projectStatus,
 } from "@/lib/project";
-import { useEditorStore } from "@/stores/editor-store";
+import { runCommand } from "@/stores/command-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useTerminalStore } from "@/stores/terminal-store";
 
@@ -34,17 +34,11 @@ export function ProjectPanel() {
     opening,
     dismissLinks,
     sources,
-    choose,
-    initialize,
     accept,
     dismiss,
   } = useProjectStore();
   const status = projectStatus(repoRoot, config);
-  const openFile = useEditorStore((state) => state.open);
   const terminal = useTerminalStore();
-  const openSource = (path: string) => {
-    if (repoRoot !== null) void openFile(repoRoot, path);
-  };
 
   return (
     <section className="flex w-full max-w-xl flex-col gap-4">
@@ -56,13 +50,16 @@ export function ProjectPanel() {
           {repoRoot !== null && (
             <Button
               variant="outline"
-              onClick={() => void terminal.open(repoRoot)}
+              onClick={() => runCommand("project.open-terminal")}
               title="Opens your terminal in the repository root"
             >
               Open terminal
             </Button>
           )}
-          <Button variant="outline" onClick={() => void choose()}>
+          <Button
+            variant="outline"
+            onClick={() => runCommand("project.open-repository")}
+          >
             Open repository
           </Button>
         </div>
@@ -82,7 +79,9 @@ export function ProjectPanel() {
       {status === "needs-init" && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm">This repository has no docs/planner.yml.</p>
-          <Button onClick={() => void initialize()}>Initialize</Button>
+          <Button onClick={() => runCommand("project.initialize")}>
+            Initialize
+          </Button>
         </div>
       )}
 
@@ -93,26 +92,28 @@ export function ProjectPanel() {
           </p>
           <div className="flex gap-2">
             {sources?.braindump && (
-              <SourceButton
-                label="Braindump"
-                path={sources.braindump}
-                onOpen={openSource}
-              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runCommand("project.open-braindump")}
+              >
+                Braindump
+              </Button>
             )}
             {sources?.spec && (
-              <SourceButton
-                label="Spec"
-                path={sources.spec}
-                onOpen={openSource}
-              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runCommand("project.open-spec")}
+              >
+                Spec
+              </Button>
             )}
-            {sources?.spec && repoRoot !== null && (
-              <SplitSpecButton repoRoot={repoRoot} />
-            )}
-            {repoRoot !== null && <GitattributesButton repoRoot={repoRoot} />}
-            {repoRoot !== null && <ChangelogButton repoRoot={repoRoot} />}
-            {repoRoot !== null && <ArchiveButton repoRoot={repoRoot} />}
-            {repoRoot !== null && <DoctorButton repoRoot={repoRoot} />}
+            {sources?.spec && repoRoot !== null && <SplitSpecButton />}
+            {repoRoot !== null && <GitattributesButton />}
+            {repoRoot !== null && <ChangelogButton />}
+            {repoRoot !== null && <ArchiveButton />}
+            {repoRoot !== null && <DoctorButton />}
           </div>
         </div>
       )}
@@ -220,22 +221,5 @@ function PathList({ title, paths }: { title: string; paths: string[] }) {
         ))}
       </ul>
     </div>
-  );
-}
-
-/** Opens a planning file other than a task in the editor (`S-make-task`). */
-function SourceButton({
-  label,
-  path,
-  onOpen,
-}: {
-  label: string;
-  path: string;
-  onOpen: (path: string) => void;
-}) {
-  return (
-    <Button variant="outline" size="sm" onClick={() => onOpen(path)}>
-      {label}
-    </Button>
   );
 }

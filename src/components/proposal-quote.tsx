@@ -1,8 +1,9 @@
-import { type ComponentProps, useEffect } from "react";
+import type { ComponentProps } from "react";
 import type { ExtraProps } from "react-markdown";
 import { Button } from "@/components/ui/button";
-import { frontmatterLineCount, isShortcut } from "@/lib/editor";
+import { frontmatterLineCount } from "@/lib/editor";
 import { findProposals } from "@/lib/proposals";
+import { runCommand } from "@/stores/command-store";
 import { useEditorStore } from "@/stores/editor-store";
 
 /**
@@ -52,32 +53,23 @@ export function ProposalQuote({
 }
 
 /**
- * The way back after Accept or Reject: an Undo button while the text is unchanged since,
- * and Ctrl/⌘+Z in read mode, where no source editor holds the history.
+ * The way back after Accept or Reject: an Undo button while the text is unchanged since; the
+ * command's Ctrl/⌘+Z acts outside text fields, so in source mode the editor keeps its own undo.
  */
 export function ProposalUndo() {
-  const { path, text, modes, proposalUndo, undoProposal } = useEditorStore();
-  const active = proposalUndo !== null && proposalUndo.after === text;
-  const readMode = path !== null && modes[path] === "read";
-
-  useEffect(() => {
-    if (!active || !readMode) return;
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable]")) return;
-      if (!isShortcut(event, "z")) return;
-      event.preventDefault();
-      undoProposal();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, readMode, undoProposal]);
-
+  const active = useEditorStore(
+    (state) =>
+      state.proposalUndo !== null && state.proposalUndo.after === state.text,
+  );
   if (!active) return null;
   return (
     <div className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
       <span className="flex-1">Proposal resolved.</span>
-      <Button variant="outline" size="xs" onClick={undoProposal}>
+      <Button
+        variant="outline"
+        size="xs"
+        onClick={() => runCommand("editor.undo-proposal")}
+      >
         Undo
       </Button>
     </div>

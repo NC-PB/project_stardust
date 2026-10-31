@@ -1,11 +1,13 @@
 import { useEffect, useId, useState } from "react";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { isMac } from "@/lib/editor";
+import { useMenuStore } from "@/stores/menu-store";
 import { useTerminalStore } from "@/stores/terminal-store";
 
 /** App settings, kept in the app data folder, never in a repository (`S-theme`, `S-terminal`). */
 export function SettingsMenu() {
   const { terminal, setTerminal } = useTerminalStore();
+  const { settings, setSettings } = useMenuStore();
   const [draft, setDraft] = useState(terminal);
   const id = useId();
 
@@ -14,7 +16,11 @@ export function SettingsMenu() {
   return (
     <div className="flex items-center gap-2">
       <ThemeSwitch />
-      <details className="relative text-xs">
+      <details
+        className="relative text-xs"
+        open={settings}
+        onToggle={(event) => setSettings(event.currentTarget.open)}
+      >
         <summary className="cursor-pointer rounded-md border px-2 py-0.5 text-muted-foreground hover:text-foreground">
           Settings
         </summary>

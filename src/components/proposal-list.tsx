@@ -1,5 +1,6 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { runCommand } from "@/stores/command-store";
+import { useMenuStore } from "@/stores/menu-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useProposalStore } from "@/stores/proposal-store";
 
@@ -10,7 +11,7 @@ import { useProposalStore } from "@/stores/proposal-store";
 export function ProposalList() {
   const repoRoot = useProjectStore((state) => state.repoRoot);
   const { proposals, open } = useProposalStore();
-  const [shown, setShown] = useState(false);
+  const { proposals: shown, setProposals: setShown } = useMenuStore();
 
   if (repoRoot === null) return null;
 
@@ -19,7 +20,7 @@ export function ProposalList() {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setShown(!shown)}
+        onClick={() => runCommand("proposals.toggle")}
         aria-expanded={shown}
       >
         Proposals
