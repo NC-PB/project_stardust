@@ -213,14 +213,14 @@ export const commands = {
 	 *  watcher did not pair are repaired by id, and a config change regenerates the planner
 	 *  block, before the event is sent. Stops the previous watcher; call again after the planning
 	 *  root changed. First repairs broken links in the whole repository by id and returns what
-	 *  it did.
+	 *  it did, with the reason the repository watcher could not start, if it could not.
 	 * 
 	 *  Async, and the walks run on a blocking thread, so a large repository does not freeze the
 	 *  window (`S-watcher`). The repair and the search index are done before the watcher starts,
 	 *  so they come before its first batch. An open superseded by a later `watch_project` or by
 	 *  `unwatch_project` while it walks installs nothing.
 	 */
-	watchProject: (repoRoot: string) => typedError<LinkRepair, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
+	watchProject: (repoRoot: string) => typedError<ProjectOpened_Serialize, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
 	/**  Stops watching and forgets the search index. */
 	unwatchProject: () => typedError<null, string>(__TAURI_INVOKE("unwatch_project")),
 	/**
@@ -1102,6 +1102,31 @@ export type PlanningChanged_Serialize = {
 	 *  created, removed or moved (`S-links`), and the broken links left in those files.
 	 */
 	repair: LinkRepair,
+};
+
+/**  What opening a project did besides starting the watchers (`S-watcher`). */
+export type ProjectOpened = ProjectOpened_Serialize | ProjectOpened_Deserialize;
+
+/**  What opening a project did besides starting the watchers (`S-watcher`). */
+export type ProjectOpened_Deserialize = {
+	/**  Links repaired by id in the whole repository before the watchers started (`S-links`). */
+	repair: LinkRepair,
+	/**
+	 *  Why the repository watcher could not start, if it could not. The planning watcher runs
+	 *  anyway; views reading files outside the planning root then follow planning batches only.
+	 */
+	repository_watch_error?: string | null,
+};
+
+/**  What opening a project did besides starting the watchers (`S-watcher`). */
+export type ProjectOpened_Serialize = {
+	/**  Links repaired by id in the whole repository before the watchers started (`S-links`). */
+	repair: LinkRepair,
+	/**
+	 *  Why the repository watcher could not start, if it could not. The planning watcher runs
+	 *  anyway; views reading files outside the planning root then follow planning batches only.
+	 */
+	repository_watch_error: string | null,
 };
 
 /**  A prompt of `templates/prompts.md`, named after its `## ` heading. */

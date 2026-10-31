@@ -54,6 +54,16 @@ interface ProjectState {
    * problems doing so (`S-links`). Shown and dismissed with `links`.
    */
   repair: LinkRepair | null;
+  /**
+   * Why the repository watcher could not start when the project was opened, if it could not
+   * (`S-watcher`). The planning watcher runs anyway. Kept until the project is opened again.
+   */
+  repositoryWatchError: string | null;
+  /**
+   * Whether `watch_project` is running for the open repository (`S-watcher`): the repair by
+   * id, the search index and the watchers are not done yet, so the board is not loaded.
+   */
+  opening: boolean;
   /** Dismisses the link notice: `links` and `repair`. */
   dismissLinks: () => void;
   /** Subscribes to changes on disk; returns the function that unsubscribes. */
@@ -73,12 +83,16 @@ interface ProjectState {
 
 /** The repository the app works on (`S-init`), remembered in app settings. */
 export const useProjectStore = create<ProjectState>()((set, get) => {
+  /** Counts calls of `watch_project`; only the latest may end `opening`. */
+  let watches = 0;
   /** Loads the config and, once the project exists, (re)starts the watcher and the board. */
   const load = async (repoRoot: string) => {
     const config = await commands.loadConfig(repoRoot);
     set({ config });
     if (!config.found) {
-      set({ sources: null });
+      // An open of another repository still running no longer counts.
+      watches++;
+      set({ sources: null, repositoryWatchError: null, opening: false });
       useBoardStore.getState().clear();
       useSpecStore.getState().clear();
       useProposalStore.getState().clear();
@@ -89,11 +103,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     }
     set({ sources: await commands.sourceFiles(repoRoot) });
     // Runs off the main thread and can take a while on a large repository (`S-watcher`).
-    const watched = await commands.watchProject(repoRoot);
+    const watch = ++watches;
+    set({ opening: true });
+    const watched = await commands.watchProject(repoRoot).finally(() => {
+      if (watch === watches) set({ opening: false });
+    });
     // Another repository was opened meanwhile; its own load fills the stores.
     if (get().repoRoot !== repoRoot) return;
     if (watched.status === "error") set({ error: watched.error });
-    else if (hasRepairNotice(watched.data)) set({ repair: watched.data });
+    else {
+      set({
+        repositoryWatchError: watched.data.repository_watch_error ?? null,
+      });
+      if (hasRepairNotice(watched.data.repair))
+        set({ repair: watched.data.repair });
+    }
     await Promise.all([
       useBoardStore
         .getState()
@@ -119,6 +143,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
     revision: 0,
     links: null,
     repair: null,
+    repositoryWatchError: null,
+    opening: false,
 
     listen: async () => {
       const stops = await Promise.all([
@@ -189,6 +215,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
         lastChange: null,
         links: null,
         repair: null,
+        repositoryWatchError: null,
       });
       await writeSetting(REPO_ROOT_SETTING, repoRoot);
       await load(repoRoot);

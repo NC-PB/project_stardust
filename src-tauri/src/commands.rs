@@ -560,6 +560,16 @@ struct Watchers {
     _repository: Option<repo_watch::RepositoryWatcher>,
 }
 
+/// What opening a project did besides starting the watchers (`S-watcher`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
+pub struct ProjectOpened {
+    /// Links repaired by id in the whole repository before the watchers started (`S-links`).
+    pub repair: link_repair::LinkRepair,
+    /// Why the repository watcher could not start, if it could not. The planning watcher runs
+    /// anyway; views reading files outside the planning root then follow planning batches only.
+    pub repository_watch_error: Option<String>,
+}
+
 /// Sent once per burst of changes outside the planning root, in folders that are not hidden,
 /// `node_modules` or `target` (`S-watcher`). Says only what kind of files changed.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
@@ -589,7 +599,7 @@ pub struct PlanningChanged {
 /// watcher did not pair are repaired by id, and a config change regenerates the planner
 /// block, before the event is sent. Stops the previous watcher; call again after the planning
 /// root changed. First repairs broken links in the whole repository by id and returns what
-/// it did.
+/// it did, with the reason the repository watcher could not start, if it could not.
 ///
 /// Async, and the walks run on a blocking thread, so a large repository does not freeze the
 /// window (`S-watcher`). The repair and the search index are done before the watcher starts,
@@ -602,7 +612,7 @@ pub async fn watch_project(
     state: tauri::State<'_, WatchState>,
     search_state: tauri::State<'_, SearchState>,
     repo_root: String,
-) -> Result<link_repair::LinkRepair, String> {
+) -> Result<ProjectOpened, String> {
     let open = state.opens.next();
     let opens = Arc::clone(&state.opens);
     let current = Arc::clone(&state.current);
@@ -621,12 +631,12 @@ fn open_project(
     open: u64,
     index: &Arc<Mutex<Option<search::SearchIndex>>>,
     repo_root: String,
-) -> Result<link_repair::LinkRepair, String> {
+) -> Result<ProjectOpened, String> {
     {
         // The previous watcher stops first, so it does not report the repairs below.
         let mut current = current.lock().map_err(|err| err.to_string())?;
         if !opens.is_current(open) {
-            return Ok(link_repair::LinkRepair::default());
+            return Ok(ProjectOpened::default());
         }
         *current = None;
         *index.lock().map_err(|err| err.to_string())? = None;
@@ -638,16 +648,23 @@ fn open_project(
     let repair = link_repair::repair_links(&root, &planning_root, &link_repair::RepairScope::All);
     let built = search::SearchIndex::build(&root, &config.planning_root);
     if !opens.is_current(open) {
-        return Ok(repair);
+        return Ok(ProjectOpened {
+            repair,
+            repository_watch_error: None,
+        });
     }
     let batch_index = Arc::clone(index);
     let outside_app = app.clone();
     // Code files and markdown outside the planning root (`S-staleness`, `S-links`). Without it
-    // the planning watcher still runs; those views then follow only planning batches.
-    let repository = repo_watch::watch(&root, &planning_root, move |change| {
-        let _ = RepositoryChanged { change }.emit(&outside_app);
-    })
-    .ok();
+    // the planning watcher still runs; those views then follow only planning batches, and the
+    // app says why.
+    let (repository, repository_watch_error) =
+        match repo_watch::watch(&root, &planning_root, move |change| {
+            let _ = RepositoryChanged { change }.emit(&outside_app);
+        }) {
+            Ok(watcher) => (Some(watcher), None),
+            Err(err) => (None, Some(err)),
+        };
     let watcher = watch::watch(Path::new(&repo_root), &config, move |batch| {
         // Every move is seen here once, whether the board or an agent made it.
         let links = links::rewrite_after_moves(&root, &planning_root, &batch.moves());
@@ -690,7 +707,10 @@ fn open_project(
             _repository: repository,
         });
     }
-    Ok(repair)
+    Ok(ProjectOpened {
+        repair,
+        repository_watch_error,
+    })
 }
 
 /// The relative links in the repository at `repo_root` that do not resolve and cannot be
