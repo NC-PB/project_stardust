@@ -22,12 +22,14 @@ describe("doctor helpers", () => {
       finding("duplicate_id", "b.md"),
       finding("broken_link", "a.md", 9),
       finding("dependency_error", "b.md", 5),
+      finding("parent_error", "b.md", 6),
       finding("untraced", "c.md"),
     ]);
     expect(groups.map((g) => [g.label, g.findings.length])).toEqual([
       ["Duplicate ids", 2],
       ["Broken links", 1],
       ["Dependency errors", 1],
+      ["Parent errors", 1],
       ["Untraced tasks", 1],
     ]);
     expect(findingGroups([])).toEqual([]);

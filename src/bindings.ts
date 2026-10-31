@@ -778,6 +778,11 @@ export type FindingKind =
  */
 "dependency_error" | 
 /**
+ *  A `parent` that cannot mean anything: the task's own id, or an id that no task file
+ *  carries, in the columns or the archive (`S-subtasks`).
+ */
+"parent_error" | 
+/**
  *  A task outside the terminal column without `implements`, or an `implements` entry
  *  naming no node of the Structure (`S-trace`).
  */
