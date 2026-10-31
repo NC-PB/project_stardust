@@ -19,6 +19,9 @@ const DATE_FORMAT: &str = "%Y-%m-%d";
 
 /// The issue of a filename without a task id; the doctor reports it as a missing id.
 pub const NO_FILENAME_ID: &str = "the filename does not start with a task id (`<id>-<slug>.md`)";
+/// The issue of a required field that is missing or empty; the doctor reports it for `id` as a
+/// missing id.
+pub const MISSING_FIELD: &str = "required field is missing";
 
 /// One task file as read from disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -146,7 +149,7 @@ pub fn parse_task(file_name: &str, text: &str) -> Task {
         issues: &mut issues,
     };
 
-    let frontmatter_id: Option<String> = read.optional("id", check_id);
+    let frontmatter_id: Option<String> = read.required("id", check_id);
     let id = match (&from_filename, frontmatter_id) {
         (Some(name), Some(front)) if name.id != front => {
             read.issue(
@@ -272,7 +275,7 @@ impl Reader<'_> {
     ) -> Option<T> {
         let present = self.fields.get(key).is_some_and(|value| !value.is_null());
         if !present {
-            self.issue(key, "required field is missing".into());
+            self.issue(key, MISSING_FIELD.into());
         }
         self.optional(key, check)
     }
@@ -686,7 +689,43 @@ mod tests {
         let task = parse_task("20261030-220003-9910-task-file-model.md", "Just text\n");
         assert_eq!(task.id.as_deref(), Some("20261030-220003-9910"));
         assert_eq!(task.title, "task file model");
-        assert_eq!(issue_keys(&task), [None, Some("title"), Some("created")]);
+        assert_eq!(
+            issue_keys(&task),
+            [None, Some("id"), Some("title"), Some("created")]
+        );
+    }
+
+    #[test]
+    fn a_missing_or_empty_frontmatter_id_is_reported() {
+        for file in [
+            "---
+title: T
+created: 2026-10-30
+---
+",
+            "---
+id:
+title: T
+created: 2026-10-30
+---
+",
+        ] {
+            let task = parse_task("20261030-220003-9910-t.md", file);
+            assert_eq!(task.id.as_deref(), Some("20261030-220003-9910"));
+            assert_eq!(issue_keys(&task), [Some("id")]);
+            assert_eq!(task.issues[0].message, MISSING_FIELD);
+        }
+        // Without an id in the filename either, both are reported.
+        let task = parse_task(
+            "loose-note.md",
+            "---
+title: T
+created: 2026-10-30
+---
+",
+        );
+        assert_eq!(task.id, None);
+        assert_eq!(issue_keys(&task), [None, Some("id")]);
     }
 
     #[test]
@@ -702,7 +741,7 @@ mod tests {
 
     #[test]
     fn invalid_values_are_reported_by_field() {
-        let file = "---\ntitle: ''\ncreated: 30.10.2026\npriority: 9\ntags: board\ndepends_on: [nope]\nparent: 20261030-220003-9910\ncompleted:\n---\n";
+        let file = "---\nid: 20261030-220003-9910\ntitle: ''\ncreated: 30.10.2026\npriority: 9\ntags: board\ndepends_on: [nope]\nparent: 20261030-220003-9910\ncompleted:\n---\n";
         let task = parse_task("20261030-220003-9910-t.md", file);
         assert_eq!(
             issue_keys(&task),
