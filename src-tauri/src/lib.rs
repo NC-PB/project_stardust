@@ -31,6 +31,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::draft_changelog,
             commands::write_changelog,
             commands::read_column,
+            commands::read_archive,
             commands::read_task,
             commands::set_task_field,
             commands::remove_task_field,

@@ -101,6 +101,11 @@ export const commands = {
 	writeChangelog: (repoRoot: string, expected: string | null, text: string) => typedError<null, string>(__TAURI_INVOKE("write_changelog", { repoRoot, expected, text })),
 	/**  Every task file directly in the column folder `dir`, broken ones included. */
 	readColumn: (dir: string) => typedError<Task_Serialize[], string>(__TAURI_INVOKE("read_column", { dir })),
+	/**
+	 *  Every task file in the month folders `YYYY-MM/` of the terminal column folder `dir`
+	 *  (`S-archive`), for trace; never shown on the board (D-20261031-030552-k3qa).
+	 */
+	readArchive: (dir: string) => typedError<ArchivedTask_Serialize[], string>(__TAURI_INVOKE("read_archive", { dir })),
 	/**  One task file. */
 	readTask: (path: string) => __TAURI_INVOKE<Task_Serialize>("read_task", { path }),
 	/**  Sets one frontmatter field of the task file at `path`, leaving the rest of the file as is. */
@@ -352,6 +357,32 @@ export type ArchiveSkip = {
 	reason: string,
 };
 
+/**
+ *  A task in a month folder of the archive (`S-archive`), read for trace and the changelog,
+ *  never shown as a card (D-20261031-030552-k3qa).
+ */
+export type ArchivedTask = ArchivedTask_Serialize | ArchivedTask_Deserialize;
+
+/**
+ *  A task in a month folder of the archive (`S-archive`), read for trace and the changelog,
+ *  never shown as a card (D-20261031-030552-k3qa).
+ */
+export type ArchivedTask_Deserialize = {
+	/**  The month folder, `YYYY-MM`. */
+	month: string,
+	task: Task_Deserialize,
+};
+
+/**
+ *  A task in a month folder of the archive (`S-archive`), read for trace and the changelog,
+ *  never shown as a card (D-20261031-030552-k3qa).
+ */
+export type ArchivedTask_Serialize = {
+	/**  The month folder, `YYYY-MM`. */
+	month: string,
+	task: Task_Serialize,
+};
+
 /**  A domain area: `- Name (kind): description`. */
 export type Area = Area_Serialize | Area_Deserialize;
 
@@ -429,7 +460,10 @@ export type ChangelogDraft_Deserialize = {
 	/**  Which tasks count, in words, such as `finished on or after 2026-10-01`. */
 	range: string,
 	groups: ChangelogGroup_Deserialize[],
-	/**  Task files in the terminal column without a valid `completed` date; not in the draft. */
+	/**
+	 *  Task files in the terminal column and its archive without a valid `completed` date, by
+	 *  path below the column folder; not in the draft.
+	 */
 	skipped: string[],
 	/**  The markdown added to the file; empty when there are no entries. */
 	section: string,
@@ -446,7 +480,10 @@ export type ChangelogDraft_Serialize = {
 	/**  Which tasks count, in words, such as `finished on or after 2026-10-01`. */
 	range: string,
 	groups: ChangelogGroup_Serialize[],
-	/**  Task files in the terminal column without a valid `completed` date; not in the draft. */
+	/**
+	 *  Task files in the terminal column and its archive without a valid `completed` date, by
+	 *  path below the column folder; not in the draft.
+	 */
 	skipped: string[],
 	/**  The markdown added to the file; empty when there are no entries. */
 	section: string,

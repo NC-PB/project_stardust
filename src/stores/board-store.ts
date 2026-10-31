@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { type ChangeBatch, type Config, commands } from "@/bindings";
+import {
+  type ArchivedTask_Serialize,
+  type ChangeBatch,
+  type Config,
+  commands,
+} from "@/bindings";
 import {
   type BoardColumn,
   columnDir,
@@ -19,6 +24,11 @@ interface BoardState {
   config: Config | null;
   /** The columns listed in `columns`, in config order (`S-board-columns`). */
   columns: BoardColumn[];
+  /**
+   * The tasks in the month folders of the terminal column (`S-archive`), for trace only; never
+   * shown as cards or counted (D-20261031-030552-k3qa). Empty when they cannot be read.
+   */
+  archived: ArchivedTask_Serialize[];
   /** The previous visit of this project; files changed after it are new. */
   since: number | null;
   /** Cards must carry every one of these tags (`S-board-filter`); kept for this session only. */
@@ -54,6 +64,17 @@ async function readBoardColumn(
     : { name, tasks: [], missing: false, error: result.error };
 }
 
+/** The archived tasks of the terminal column; none when the folder cannot be read. */
+async function readArchived(
+  repoRoot: string,
+  config: Config,
+): Promise<ArchivedTask_Serialize[]> {
+  const result = await commands.readArchive(
+    columnDir(repoRoot, config.planning_root, config.terminal),
+  );
+  return result.status === "ok" ? result.data : [];
+}
+
 /** Records now as the last visit of `repoRoot`; returns the visit before. */
 async function recordVisit(repoRoot: string): Promise<number | null> {
   const visits = (await readSetting<Visits>(LAST_VISITS_SETTING)) ?? {};
@@ -70,6 +91,7 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
   repoRoot: null,
   config: null,
   columns: [],
+  archived: [],
   since: null,
   tagFilter: [],
   moveError: null,
@@ -83,21 +105,28 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
             repoRoot,
             config,
             columns: [],
+            archived: [],
             since: null,
             tagFilter: [],
             moveError: null,
           },
     );
     const since = sameProject ? get().since : await recordVisit(repoRoot);
-    const columns = await Promise.all(
-      config.columns.map((name) =>
-        missing.includes(name)
-          ? { name, tasks: [], missing: true, error: null }
-          : readBoardColumn(repoRoot, config, name),
+    const terminalMissing =
+      missing.includes(config.terminal) ||
+      !config.columns.includes(config.terminal);
+    const [columns, archived] = await Promise.all([
+      Promise.all(
+        config.columns.map((name) =>
+          missing.includes(name)
+            ? { name, tasks: [], missing: true, error: null }
+            : readBoardColumn(repoRoot, config, name),
+        ),
       ),
-    );
+      terminalMissing ? [] : readArchived(repoRoot, config),
+    ]);
     if (get().repoRoot !== repoRoot) return;
-    set({ columns, since });
+    set({ columns, archived, since });
   },
 
   apply: async (batch) => {
@@ -105,9 +134,11 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
     if (repoRoot === null || config === null) return;
     const names = touchedColumns(batch, config.planning_root, config.columns);
     if (names.length === 0) return;
-    const read = await Promise.all(
-      names.map((name) => readBoardColumn(repoRoot, config, name)),
-    );
+    // The archive lives in the terminal column folder, so its changes touch that column.
+    const [read, archived] = await Promise.all([
+      Promise.all(names.map((name) => readBoardColumn(repoRoot, config, name))),
+      names.includes(config.terminal) ? readArchived(repoRoot, config) : null,
+    ]);
     // Seen while open: these changes are not new at the next visit.
     await recordVisit(repoRoot);
     if (get().repoRoot !== repoRoot) return;
@@ -115,6 +146,7 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
       columns: state.columns.map(
         (column) => read.find((fresh) => fresh.name === column.name) ?? column,
       ),
+      archived: archived ?? state.archived,
     }));
   },
 
@@ -158,6 +190,7 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
       repoRoot: null,
       config: null,
       columns: [],
+      archived: [],
       since: null,
       tagFilter: [],
       moveError: null,

@@ -251,6 +251,14 @@ pub fn read_column(dir: String) -> Result<Vec<task::Task>, String> {
     task::read_column(Path::new(&dir)).map_err(|err| err.to_string())
 }
 
+/// Every task file in the month folders `YYYY-MM/` of the terminal column folder `dir`
+/// (`S-archive`), for trace; never shown on the board (D-20261031-030552-k3qa).
+#[tauri::command]
+#[specta::specta]
+pub fn read_archive(dir: String) -> Result<Vec<archive::ArchivedTask>, String> {
+    archive::read_archive(Path::new(&dir)).map_err(|err| err.to_string())
+}
+
 /// One task file.
 #[tauri::command]
 #[specta::specta]

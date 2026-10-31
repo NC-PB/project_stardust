@@ -11,6 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use super::archive;
 use super::config::Config;
 use super::files::{self, SaveOutcome};
 use super::git;
@@ -78,7 +79,8 @@ pub struct ChangelogDraft {
     /// Which tasks count, in words, such as `finished on or after 2026-10-01`.
     pub range: String,
     pub groups: Vec<ChangelogGroup>,
-    /// Task files in the terminal column without a valid `completed` date; not in the draft.
+    /// Task files in the terminal column and its archive without a valid `completed` date, by
+    /// path below the column folder; not in the draft.
     pub skipped: Vec<String>,
     /// The markdown added to the file; empty when there are no entries.
     pub section: String,
@@ -186,8 +188,27 @@ pub fn draft_changelog(
         config.planning_root.trim_end_matches('/'),
         config.terminal
     );
-    let tasks = task::read_column(&repo_root.join(&column))
-        .map_err(|err| format!("Cannot read the column `{}`: {err}", config.terminal))?;
+    let dir = repo_root.join(&column);
+    let cannot_read =
+        |err: std::io::Error| format!("Cannot read the column `{}`: {err}", config.terminal);
+    // Tasks directly in the column, then those in its month folders (`S-archive`), each with
+    // its path below the column folder.
+    let mut tasks: Vec<(String, Task)> = task::read_column(&dir)
+        .map_err(cannot_read)?
+        .into_iter()
+        .map(|task| (task.file_name.clone(), task))
+        .collect();
+    tasks.extend(
+        archive::read_archive(&dir)
+            .map_err(cannot_read)?
+            .into_iter()
+            .map(|archived| {
+                (
+                    format!("{}/{}", archived.month, archived.task.file_name),
+                    archived.task,
+                )
+            }),
+    );
     let (groups, skipped) = group_tasks(&tasks, &column, &from, inclusive);
     let section = render_section(today, &groups);
 
@@ -214,19 +235,20 @@ pub fn draft_changelog(
 }
 
 /// The tasks completed since `from` (on that day too when `inclusive`), grouped by their first
-/// tag, and the file names of tasks without a `completed` date. `column` is the column folder
+/// tag, and the paths of tasks without a `completed` date. Each task comes with its path below
+/// the column folder (`YYYY-MM/name.md` for an archived one); `column` is the column folder
 /// relative to the repository root.
 fn group_tasks(
-    tasks: &[Task],
+    tasks: &[(String, Task)],
     column: &str,
     from: &str,
     inclusive: bool,
 ) -> (Vec<ChangelogGroup>, Vec<String>) {
     let mut entries: Vec<(String, ChangelogEntry)> = Vec::new();
     let mut skipped = Vec::new();
-    for task in tasks {
+    for (file, task) in tasks {
         let Some(completed) = &task.completed else {
-            skipped.push(task.file_name.clone());
+            skipped.push(file.clone());
             continue;
         };
         let counts = if inclusive {
@@ -249,7 +271,7 @@ fn group_tasks(
                 id: task.id.clone(),
                 title: task.title.split_whitespace().collect::<Vec<_>>().join(" "),
                 completed: completed.clone(),
-                path: format!("{column}/{}", task.file_name),
+                path: format!("{column}/{file}"),
             },
         ));
     }
@@ -523,6 +545,68 @@ mod tests {
         );
         assert_eq!(draft.text, format!("# Changelog\n\n{}", draft.section));
         assert_eq!(draft.groups.len(), 3);
+    }
+
+    #[test]
+    fn includes_archived_tasks_linked_at_their_archive_path() {
+        let (root, config) = scratch_repo();
+        fill(&root);
+        std::fs::create_dir_all(root.join("docs/planning/done/2026-09")).unwrap();
+        std::fs::create_dir_all(root.join("docs/planning/done/notes")).unwrap();
+        put_task(
+            &root,
+            "done/2026-09",
+            "20260901-100000-hhhh-archived.md",
+            "title: Archived\ntags: [board]\ncompleted: 2026-09-20",
+        );
+        put_task(
+            &root,
+            "done/2026-09",
+            "20260901-100000-iiii-too-old.md",
+            "title: Too old\ncompleted: 2026-09-01",
+        );
+        put_task(
+            &root,
+            "done/2026-09",
+            "20260901-100000-kkkk-undated.md",
+            "title: Undated archived",
+        );
+        put_task(
+            &root,
+            "done/notes",
+            "20260901-100000-jjjj-not-archive.md",
+            "title: Not archive\ncompleted: 2026-09-21",
+        );
+        let draft = draft_changelog(&root, &config, &date("2026-09-15"), TODAY);
+        std::fs::remove_dir_all(&root).unwrap();
+        let draft = draft.unwrap();
+
+        let board: Vec<&str> = draft.groups[0]
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert_eq!(
+            board,
+            [
+                "docs/planning/done/2026-09/20260901-100000-hhhh-archived.md",
+                "docs/planning/done/20261001-100000-aaaa-old.md",
+                "docs/planning/done/20261005-100000-eeee-cards.md",
+                "docs/planning/done/20261010-100000-bbbb-board-sort.md",
+            ]
+        );
+        assert!(draft.section.contains(
+            "- Archived ([20260901-100000-hhhh](docs/planning/done/2026-09/20260901-100000-hhhh-archived.md))\n"
+        ));
+        assert!(!draft.section.contains("Too old"));
+        assert!(!draft.section.contains("Not archive"));
+        assert_eq!(
+            draft.skipped,
+            [
+                "20261005-100000-ffff-undated.md",
+                "2026-09/20260901-100000-kkkk-undated.md"
+            ]
+        );
     }
 
     #[test]
