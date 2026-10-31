@@ -1,3 +1,4 @@
+import { commands } from "@/bindings";
 import {
   type CommandContext,
   type CommandId,
@@ -197,6 +198,7 @@ const RUNS: Record<CommandId, () => void> = {
   "theme.light": chooseTheme("light"),
   "theme.dark": chooseTheme("dark"),
   "settings.open": () => useMenuStore.getState().setSettings(true),
+  "capture.open": () => void commands.openQuickCapture(),
 };
 
 /**

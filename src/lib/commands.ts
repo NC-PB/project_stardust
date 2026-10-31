@@ -249,6 +249,7 @@ export const COMMANDS = [
   { id: "theme.light", name: "Theme: Light", available: always },
   { id: "theme.dark", name: "Theme: Dark", available: always },
   { id: "settings.open", name: "Settings: terminal", available: always },
+  { id: "capture.open", name: "Quick capture", available: always },
 ] as const satisfies readonly CommandSpec[];
 
 export type CommandId = (typeof COMMANDS)[number]["id"];
