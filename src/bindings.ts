@@ -74,6 +74,11 @@ export const commands = {
 	 */
 	changelogTags: (repoRoot: string) => __TAURI_INVOKE<TagList_Serialize>("changelog_tags", { repoRoot }),
 	/**
+	 *  How many commits of `HEAD` mention each task id and the date of the newest, from one
+	 *  read-only `git log` run (`S-commit-info`). Unavailable without git or outside a repository.
+	 */
+	commitInfo: (repoRoot: string) => __TAURI_INVOKE<CommitInfo_Serialize>("commit_info", { repoRoot }),
+	/**
 	 *  The changelog entries for the tasks finished since `since` and `CHANGELOG.md` with them at
 	 *  the top (`S-changelog`). Writes nothing.
 	 */
@@ -328,6 +333,29 @@ export type ChangelogGroup_Deserialize = {
 export type ChangelogGroup_Serialize = {
 	tag: string,
 	entries: ChangelogEntry_Serialize[],
+};
+
+/**  Commit info for every task id mentioned in the history of `HEAD`. */
+export type CommitInfo = CommitInfo_Serialize | CommitInfo_Deserialize;
+
+/**  Commit info for every task id mentioned in the history of `HEAD`. */
+export type CommitInfo_Deserialize = {
+	/**  Whether git could be read here; `false` without git or outside a repository. */
+	available: boolean,
+	/**  Why git could not be read, when it could not. */
+	reason?: string | null,
+	/**  By id. */
+	tasks: TaskCommits[],
+};
+
+/**  Commit info for every task id mentioned in the history of `HEAD`. */
+export type CommitInfo_Serialize = {
+	/**  Whether git could be read here; `false` without git or outside a repository. */
+	available: boolean,
+	/**  Why git could not be read, when it could not. */
+	reason: string | null,
+	/**  By id. */
+	tasks: TaskCommits[],
 };
 
 /**  The contents of `docs/planner.yml`. Paths are relative to the repository root. */
@@ -1097,6 +1125,16 @@ export type TagList_Serialize = {
 
 /**  One task file as read from disk. */
 export type Task = Task_Serialize | Task_Deserialize;
+
+/**  The commits whose message mentions one task id. */
+export type TaskCommits = {
+	/**  The task id, such as `20261031-021023-31v3`. */
+	id: string,
+	/**  Commits of the current branch (`HEAD`) mentioning the id; each counts once. */
+	count: number,
+	/**  Committer date (`YYYY-MM-DD`) of the newest of them. */
+	last: string,
+};
 
 /**  The parts of a task filename `<id>-<slug>.md`. */
 export type TaskFilename = {

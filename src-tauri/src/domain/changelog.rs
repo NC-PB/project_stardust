@@ -7,13 +7,13 @@
 
 use std::io::ErrorKind;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::config::Config;
 use super::files::{self, SaveOutcome};
+use super::git;
 use super::task::{self, Task};
 
 /// The changelog file, relative to the repository root.
@@ -91,13 +91,12 @@ pub struct ChangelogDraft {
 /// The tags of the repository at `repo_root`, from read-only `git log`.
 pub fn list_tags(repo_root: &Path) -> TagList {
     let args = [
-        "log",
         "--tags",
         "--no-walk",
         "--decorate=short",
         "--format=%ci%x09%D",
     ];
-    match git(repo_root, &args) {
+    match git::log(repo_root, &args) {
         Ok(out) => TagList {
             available: true,
             reason: None,
@@ -145,45 +144,13 @@ pub fn tag_date(repo_root: &Path, tag: &str) -> Result<String, String> {
         return Err(format!("`{tag}` is not a tag name"));
     }
     let reference = format!("refs/tags/{tag}");
-    let out = git(repo_root, &["log", "-1", "--format=%ci", &reference, "--"])
+    let out = git::log(repo_root, &["-1", "--format=%ci", &reference, "--"])
         .map_err(|reason| format!("No date for tag `{tag}`: {reason}"))?;
     out.trim()
         .get(..10)
         .filter(|date| chrono::NaiveDate::parse_from_str(date, DATE_FORMAT).is_ok())
         .map(str::to_string)
         .ok_or_else(|| format!("No date for tag `{tag}`"))
-}
-
-/// Runs `git` with `args` in `repo_root` and returns its output. Only ever called with `log`.
-fn git(repo_root: &Path, args: &[&str]) -> Result<String, String> {
-    debug_assert_eq!(args.first(), Some(&"log"), "only `git log` may run");
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(repo_root)
-        .args(args)
-        .stdin(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    let output = command.output().map_err(|err| match err.kind() {
-        ErrorKind::NotFound => "git was not found".to_string(),
-        _ => format!("git could not run: {err}"),
-    })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let first = stderr.lines().next().unwrap_or("").trim();
-        let first = first.strip_prefix("fatal: ").unwrap_or(first);
-        return Err(if first.is_empty() {
-            "git log failed".to_string()
-        } else {
-            first.to_string()
-        });
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// The draft for the repository at `repo_root`: the finished tasks since `since`, under a
@@ -462,6 +429,7 @@ mod tests {
     use super::*;
     use crate::domain::{config, ids};
     use std::path::PathBuf;
+    use std::process::{Command, Stdio};
 
     const TODAY: &str = "2026-10-31";
 

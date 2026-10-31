@@ -184,6 +184,14 @@ pub fn changelog_tags(repo_root: String) -> changelog::TagList {
     changelog::list_tags(Path::new(&repo_root))
 }
 
+/// How many commits of `HEAD` mention each task id and the date of the newest, from one
+/// read-only `git log` run (`S-commit-info`). Unavailable without git or outside a repository.
+#[tauri::command]
+#[specta::specta]
+pub fn commit_info(repo_root: String) -> domain::commit_info::CommitInfo {
+    domain::commit_info::commit_info(Path::new(&repo_root))
+}
+
 /// The changelog entries for the tasks finished since `since` and `CHANGELOG.md` with them at
 /// the top (`S-changelog`). Writes nothing.
 #[tauri::command]

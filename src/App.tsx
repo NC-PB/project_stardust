@@ -11,6 +11,7 @@ import { SpecView } from "@/components/spec-view";
 import { ViewSwitch } from "@/components/view-switch";
 import { versionLabel } from "@/lib/version";
 import { useAppStore } from "@/stores/app-store";
+import { useCommitStore } from "@/stores/commit-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useTerminalStore } from "@/stores/terminal-store";
 import { useThemeStore } from "@/stores/theme-store";
@@ -21,6 +22,7 @@ function App() {
   const loadVersion = useAppStore((state) => state.loadVersion);
   const restore = useProjectStore((state) => state.restore);
   const listen = useProjectStore((state) => state.listen);
+  const refreshCommitsOnFocus = useCommitStore((state) => state.refreshOnFocus);
   const startTheme = useThemeStore((state) => state.start);
   const loadTerminal = useTerminalStore((state) => state.load);
   const view = useViewStore((state) => state.view);
@@ -41,6 +43,9 @@ function App() {
       void unlisten.then((stop) => stop());
     };
   }, [listen]);
+
+  // Commits happen outside the planning root, so they are read again when the window gets focus.
+  useEffect(() => refreshCommitsOnFocus(), [refreshCommitsOnFocus]);
 
   return (
     <main className="flex h-screen flex-col items-center gap-6 p-6">

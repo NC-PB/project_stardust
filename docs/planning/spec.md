@@ -124,12 +124,12 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
     - Implemented in `src-tauri/src/domain/board.rs` (`move_task`); command `move_task(repo_root, file_name, from, to)`. Frontend: `src/lib/board.ts` (`moveCard`), `src/stores/board-store.ts` (`moveTask`, `moveError`), `src/components/board.tsx` with `@dnd-kit/core`.
   - [x] Cards `S-board-card`
     - Show title, tags, age since last change, sub-task count, blocked marker, new-since-last-visit marker, commit info (`S-commit-info`).
-    - Commit info is not built yet (phase 4).
+    - Commit info: `n commits · YYYY-MM-DD`, the number of commits mentioning the task id and the date of the newest, with an explanation on hover; nothing when no commit mentions the id or git cannot be read (`S-commit-info`).
     - Age is the time since the file's last change on disk (`modified` of a task), in the largest fitting unit: now, m, h, d, mo, y; recomputed every minute.
     - The sub-task count counts tasks in any column whose `parent` is the card's id (`S-subtasks`).
     - Blocked: a `depends_on` id whose task is in a column other than the terminal one (`S-dependencies`); the marker names the ids on hover. An id found in no column (archived or deleted) does not block (D-20261030-231221-spj4).
     - New: the file changed after the previous visit of the project. A visit is recorded when the project is opened and with every batch seen while it is open; last visits are kept per repository in the app settings, never in the repository. On the first visit nothing is new (D-20261030-231221-spj4).
-    - Implemented in `src/lib/board.ts` (`cardsOf`, `ageLabel`, `isNewSince`).
+    - Implemented in `src/lib/board.ts` (`cardsOf`, `ageLabel`, `isNewSince`), `src/components/board.tsx`; commit info from `src/stores/commit-store.ts` and `src/lib/commit-info.ts` (`commitLabel`).
   - [x] Tag filter `S-board-filter`
     - Filtering by one or more tags hides cards without them, in all columns: a card stays only when it carries every selected tag (D-20261030-231541-84sn).
     - The tag bar above the board lists every tag on the board; clicking a tag there or on a card adds it to the filter or removes it. "Clear filter" empties the filter in one action.
@@ -172,6 +172,9 @@ Ticked = clarified. Criteria are sub-bullets. Domain areas first, then their par
   - [x] Commit info `S-commit-info`
     - Cards show how many commits mention the task id and the date of the last one, from read-only `git log` (`R-no-git-writes`).
     - This is information only. A mention never moves a card or marks it done.
+    - One `git log` run reads the history of `HEAD` for all tasks: commits whose message holds the id as a word count once each; an id right after `-` (`D-...`, `Q-...`) does not count. The date is the committer date of the newest of them (D-20261031-023623-qztq).
+    - Read when the project opens and whenever the app window gets focus; the watcher does not see commits. Without git, outside a repository or in a repository without commits nothing is shown and nothing fails.
+    - Implemented in `src-tauri/src/domain/commit_info.rs` (`commit_info`, command `commit_info(repo_root)`) over `src-tauri/src/domain/git.rs` (`log`, the one place git runs, shared with `S-changelog`); `src/stores/commit-store.ts` (`useCommitStore`: `load`, `refreshOnFocus`), `src/lib/commit-info.ts`, `src/components/board.tsx`.
   - [x] Changelog draft `S-changelog`
     - Writes `CHANGELOG.md` entries from the terminal column since a date or tag, grouped by tag, after preview.
     - A Changelog button in the project bar opens a form: tasks finished since a date (on or after it) or since a git tag (after the committer date of its commit). Tags and their dates come from read-only `git log` (`R-no-git-writes`); without git or outside a repository the tag option is disabled with the reason, and the date option still works. The newest tag is preselected when there is one.
@@ -882,6 +885,12 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Rejected: a field on `Card` filled by `cardsOf` (spec files are not cards, and the Stale view needs the flags without the board's sort and filter); markers in the spec view's section list (sections and files do not match one to one in the single file form); flagging inside the file text (`R-plain-markdown`, and the tool would write to files only to show state).
 - Consequences: `S-staleness` criteria. The flags are recomputed every minute and whenever the board, the spec or the missing paths change; the Stale view can list `stalenessFlags` as it is.
 
+### D-20261031-023623-qztq · Commit info: one `git log` pass over `HEAD`, read on project open and window focus
+- Context: `S-commit-info` asks for the number of commits mentioning a task id and the date of the last one, from read-only `git log`, but not which commits count, what a mention is, or when the info is read again. Commits happen outside the planning root, so the watcher never sees them.
+- Decision: one `git log --extended-regexp --grep=<id pattern>` run returns every commit of `HEAD` whose message holds something shaped like a task id; Rust counts each distinct id once per commit and keeps the committer date of the newest commit (by commit time) per id. A mention is `YYYYMMDD-HHMMSS-xxxx` not inside a longer word and not right after `-`, so question and decision ids do not count; a file name such as `done/<id>-slug.md` does. The result holds every id found, and cards look up their own. It is read when the project opens and whenever the app window gets focus (a DOM `focus` event). Running git moved from `changelog.rs` to `git.rs`, whose `log` adds `log` itself so no other git command can be run. The card shows `n commits · YYYY-MM-DD`; the hover text says it is information only.
+- Rejected: one `git log` per card (a process per task); `--all` (commits on unmerged or deleted branches would count for the checkout at hand); after watcher batches (commits are not in the planning root, and a batch usually comes before the commit); a timer (runs git while nobody looks); counting ids from the task list only (the list changes with every batch and would need another run); `tauri-plugin-shell` (D-20261031-003519-cfn5).
+- Consequences: `S-commit-info`, `S-board-card` criteria. A commit made by an agent while the app keeps focus shows after the next focus or project open. On a very long history the run happens at every focus; nothing caches it. Commits on other branches or worktrees show only once merged into `HEAD`. A task id written in upper case is not counted.
+
 ## Glossary
 
 - Planning root: the folder holding the planning files, `docs/planning` by default.
@@ -922,3 +931,4 @@ Append-only. Ids: `D-YYYYMMDD-HHMMSS-xxxx`.
 - Image root: the folder dropped images are copied into, `images_root` in the config, `docs/images` by default; kept out of version control (D-20260919-104200-9f03).
 - Staleness flag: a note that a file needs attention: a task waiting too long in the ready column, a spec file due for review, or a task naming a code path that does not exist. Computed, never written to a file.
 - Code path: inline code in a task that looks like a relative file path, such as `src/lib/board.ts`.
+- Commit info: how many commits of `HEAD` mention a task id and the date of the newest, read from `git log`; information only.
