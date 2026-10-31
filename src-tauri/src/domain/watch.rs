@@ -17,6 +17,7 @@ use walkdir::WalkDir;
 
 use super::config::{CONFIG_PATH, Config};
 use super::ids;
+use super::links::Move;
 
 /// A batch is sent once no event arrived for this long.
 const QUIET: Duration = Duration::from_millis(150);
@@ -55,6 +56,41 @@ pub struct ChangeBatch {
 impl ChangeBatch {
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty() && !self.config_changed
+    }
+
+    /// The moved files of the batch, for rewriting the links to and in them (`S-links`): the
+    /// moved tasks, and a file without an id that was removed in one folder and created in
+    /// another under the same name, when that name is removed and created once each.
+    pub fn moves(&self) -> Vec<Move> {
+        let mut moves: Vec<Move> = Vec::new();
+        let mut removed: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        let mut created: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for change in &self.changes {
+            match change {
+                FileChange::Moved { from, to, .. } => moves.push(Move {
+                    from: from.clone(),
+                    to: to.clone(),
+                }),
+                FileChange::Removed { path } => removed
+                    .entry(path.rsplit('/').next().unwrap_or(path))
+                    .or_default()
+                    .push(path),
+                FileChange::Created { path } => created
+                    .entry(path.rsplit('/').next().unwrap_or(path))
+                    .or_default()
+                    .push(path),
+                FileChange::Modified { .. } => {}
+            }
+        }
+        for (file, from) in &removed {
+            if let ([from], Some([to])) = (from.as_slice(), created.get(file).map(Vec::as_slice)) {
+                moves.push(Move {
+                    from: from.to_string(),
+                    to: to.to_string(),
+                });
+            }
+        }
+        moves
     }
 }
 
@@ -294,6 +330,42 @@ mod tests {
             }]
         );
         assert_eq!(known, set(&[A_DONE, B]));
+        let batch = ChangeBatch {
+            changes,
+            config_changed: false,
+        };
+        assert_eq!(
+            batch.moves(),
+            [Move {
+                from: A.into(),
+                to: A_DONE.into()
+            }]
+        );
+    }
+
+    #[test]
+    fn files_without_id_count_as_moved_for_links_when_their_name_is_unique() {
+        let removed = |path: &str| FileChange::Removed { path: path.into() };
+        let created = |path: &str| FileChange::Created { path: path.into() };
+        let batch = ChangeBatch {
+            changes: vec![
+                created("p/notes/braindump.md"),
+                created("p/a/x.md"),
+                created("p/b/x.md"),
+                created("p/new.md"),
+                removed("p/braindump.md"),
+                removed("p/c/x.md"),
+                removed("p/old.md"),
+            ],
+            config_changed: false,
+        };
+        assert_eq!(
+            batch.moves(),
+            [Move {
+                from: "p/braindump.md".into(),
+                to: "p/notes/braindump.md".into()
+            }]
+        );
     }
 
     #[test]

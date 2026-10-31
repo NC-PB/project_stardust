@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Config, ConfigReport_Serialize, InitReport } from "@/bindings";
-import { describeBatch, offerLabel, offersOf, projectStatus } from "./project";
+import {
+  describeBatch,
+  describeLinks,
+  hasLinkNotice,
+  offerLabel,
+  offersOf,
+  projectStatus,
+} from "./project";
 
 const report = (found: boolean) => ({ found }) as ConfigReport_Serialize;
 
@@ -67,5 +74,27 @@ describe("describeBatch", () => {
         config_changed: true,
       }),
     ).toBe("2 created, 1 moved, 1 removed, config changed");
+  });
+});
+
+describe("describeLinks", () => {
+  const file = (name: string) => ({ file: name, changes: [] });
+
+  it("names the files whose links were rewritten", () => {
+    expect(describeLinks({ rewritten: [], problems: ["x"] })).toBeNull();
+    expect(describeLinks({ rewritten: [file("a.md")], problems: [] })).toBe(
+      "Links rewritten in 1 file: a.md",
+    );
+    expect(
+      describeLinks({ rewritten: [file("a.md"), file("b.md")], problems: [] }),
+    ).toBe("Links rewritten in 2 files: a.md, b.md");
+  });
+
+  it("has a notice when links were rewritten or could not be", () => {
+    expect(hasLinkNotice({ rewritten: [], problems: [] })).toBe(false);
+    expect(hasLinkNotice({ rewritten: [], problems: ["x"] })).toBe(true);
+    expect(hasLinkNotice({ rewritten: [file("a.md")], problems: [] })).toBe(
+      true,
+    );
   });
 });

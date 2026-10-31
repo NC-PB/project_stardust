@@ -78,6 +78,8 @@ const initReport = {
   offer_planner_block: true,
 };
 
+const NO_LINKS = { rewritten: [], problems: [] };
+
 describe("useProjectStore", () => {
   beforeEach(() => {
     settings.clear();
@@ -92,6 +94,7 @@ describe("useProjectStore", () => {
       error: null,
       lastChange: null,
       revision: 0,
+      links: null,
     });
   });
 
@@ -218,6 +221,7 @@ describe("useProjectStore", () => {
       },
       block_written: [],
       block_error: null,
+      links: NO_LINKS,
     };
     await useProjectStore.getState().receive(fileChange);
     expect(useProjectStore.getState().revision).toBe(1);
@@ -230,6 +234,7 @@ describe("useProjectStore", () => {
       batch: { changes: [], config_changed: true },
       block_written: ["AGENTS.md"],
       block_error: null,
+      links: NO_LINKS,
     });
     expect(useProjectStore.getState().revision).toBe(2);
     expect(loadConfig).toHaveBeenCalledWith("/repo");
@@ -241,9 +246,47 @@ describe("useProjectStore", () => {
       batch: { changes: [], config_changed: true },
       block_written: [],
       block_error: "AGENTS.md: markers out of order",
+      links: NO_LINKS,
     });
     expect(useProjectStore.getState().error).toBe(
       "AGENTS.md: markers out of order",
     );
+  });
+
+  it("keeps the last rewritten links until dismissed", async () => {
+    const links = {
+      rewritten: [
+        {
+          file: "docs/planning/next/b.md",
+          changes: [{ line: 1, old: "a.md", new: "../done/a.md" }],
+        },
+      ],
+      problems: [],
+    };
+    await useProjectStore.getState().receive({
+      batch: {
+        changes: [{ kind: "moved", id: "x", from: "a", to: "b" }],
+        config_changed: false,
+      },
+      block_written: [],
+      block_error: null,
+      links,
+    });
+    expect(useProjectStore.getState().links).toEqual(links);
+
+    // The rewrites come back as a batch of their own, which does not hide them.
+    await useProjectStore.getState().receive({
+      batch: {
+        changes: [{ kind: "modified", path: "docs/planning/next/b.md" }],
+        config_changed: false,
+      },
+      block_written: [],
+      block_error: null,
+      links: NO_LINKS,
+    });
+    expect(useProjectStore.getState().links).toEqual(links);
+
+    useProjectStore.getState().dismissLinks();
+    expect(useProjectStore.getState().links).toBeNull();
   });
 });

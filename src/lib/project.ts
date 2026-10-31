@@ -3,6 +3,7 @@ import type {
   Config,
   ConfigReport_Serialize,
   InitReport,
+  MoveLinks,
 } from "@/bindings";
 
 /** What the project panel shows: no repository chosen, one without a config, or a project. */
@@ -47,4 +48,20 @@ export function describeBatch(batch: ChangeBatch): string {
     .map((kind) => `${counts.get(kind)} ${kind}`);
   if (batch.config_changed) parts.push("config changed");
   return parts.join(", ");
+}
+
+/**
+ * One line about the links rewritten after files moved (`S-links`), such as "Links rewritten
+ * in 2 files: a.md, b.md", or `null` when none were.
+ */
+export function describeLinks(links: MoveLinks): string | null {
+  const files = links.rewritten.map((file) => file.file);
+  if (files.length === 0) return null;
+  const count = files.length === 1 ? "1 file" : `${files.length} files`;
+  return `Links rewritten in ${count}: ${files.join(", ")}`;
+}
+
+/** Whether a link report has anything to show. */
+export function hasLinkNotice(links: MoveLinks): boolean {
+  return links.rewritten.length > 0 || links.problems.length > 0;
 }

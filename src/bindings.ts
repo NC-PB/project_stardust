@@ -171,7 +171,8 @@ export const commands = {
 	addImagesToGitignore: (repoRoot: string) => typedError<boolean, string>(__TAURI_INVOKE("add_images_to_gitignore", { repoRoot })),
 	/**
 	 *  Watches the planning root and the config of the repository at `repo_root`, sending
-	 *  `PlanningChanged` events. A config change regenerates the planner block first. Stops the
+	 *  `PlanningChanged` events. Moved files get their links rewritten, and a config change
+	 *  regenerates the planner block, before the event is sent. Stops the
 	 *  previous watcher; call again after the planning root changed.
 	 */
 	watchProject: (repoRoot: string) => typedError<null, string>(__TAURI_INVOKE("watch_project", { repoRoot })),
@@ -632,6 +633,14 @@ export type MissingCodePath = {
 	line: number,
 };
 
+/**  What [`rewrite_after_moves`] did. */
+export type MoveLinks = {
+	/**  The files whose links were rewritten, with each change, in walk order. */
+	rewritten: FileLinks[],
+	/**  Files whose links could not be rewritten, and why. */
+	problems: string[],
+};
+
 /**  A node of the Structure. */
 export type Node = Node_Serialize | Node_Deserialize;
 
@@ -687,6 +696,11 @@ export type PlanningChanged_Deserialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error?: string | null,
+	/**
+	 *  Links rewritten because files in the batch moved (`S-links`). The rewritten files come
+	 *  back in a later batch as modified.
+	 */
+	links: MoveLinks,
 };
 
 /**  Sent once per burst of changes under the planning root or to the config. */
@@ -696,6 +710,11 @@ export type PlanningChanged_Serialize = {
 	block_written: string[],
 	/**  Why the planner block could not be regenerated, if it could not. */
 	block_error: string | null,
+	/**
+	 *  Links rewritten because files in the batch moved (`S-links`). The rewritten files come
+	 *  back in a later batch as modified.
+	 */
+	links: MoveLinks,
 };
 
 /**  A prompt of `templates/prompts.md`, named after its `## ` heading. */
