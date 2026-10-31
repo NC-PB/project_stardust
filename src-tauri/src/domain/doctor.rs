@@ -40,7 +40,8 @@ pub enum FindingKind {
     MissingImage,
     /// Frontmatter that is not valid, or a field that is missing or has an invalid value.
     FrontmatterError,
-    /// A `depends_on` entry that cannot mean anything: the task's own id (`S-dependencies`).
+    /// A `depends_on` entry that cannot mean anything: the task's own id, or an id that no task
+    /// file carries, in the columns or the archive (`S-dependencies`).
     DependencyError,
     /// A task outside the terminal column without `implements`, or an `implements` entry
     /// naming no node of the Structure (`S-trace`).
@@ -140,6 +141,12 @@ pub fn doctor(repo_root: &Path, config: &Config) -> DoctorReport {
     report
         .findings
         .extend(tasks.iter().filter_map(self_dependency));
+    // A folder that could not be read hides the ids of its tasks, so no id is called unknown then.
+    if report.problems.is_empty() {
+        for file in &tasks {
+            report.findings.extend(unknown_dependencies(file, &by_id));
+        }
+    }
     report.findings.extend(untraced(repo_root, config, &tasks));
     report
         .findings
@@ -412,6 +419,28 @@ fn self_dependency(file: &TaskFile) -> Option<Finding> {
             id: id.to_string(),
         }),
     })
+}
+
+/// The findings for the `depends_on` ids of `file` that no task file carries, in the columns or
+/// the archive: a typo or a deleted task. The board does not block on them
+/// (D-20261030-231221-spj4). One finding per id, an id repeated in the field counting once. No
+/// fix: the user may have meant another task.
+fn unknown_dependencies(file: &TaskFile, by_id: &BTreeMap<&str, Vec<&TaskFile>>) -> Vec<Finding> {
+    let mut seen = HashSet::new();
+    file.task
+        .depends_on
+        .iter()
+        .filter(|id| !by_id.contains_key(id.as_str()) && seen.insert(id.as_str()))
+        .map(|id| Finding {
+            kind: FindingKind::DependencyError,
+            file: file.file.clone(),
+            line: field_line(file.text.as_deref(), "depends_on"),
+            message: format!(
+                "`depends_on` names `{id}`, which no task file carries, in the columns or the archive"
+            ),
+            fix: None,
+        })
+        .collect()
 }
 
 /// Tasks outside the terminal column without `implements`, and `implements` entries naming no
@@ -802,7 +831,7 @@ mod tests {
             &root,
             &format!("{p}/inbox/{C}-self.md"),
             &format!(
-                "---\nid: {C}\ntitle: Self\ncreated: 2026-10-01\ndepends_on: [{A}, {C}]\nimplements: [S-feature]\n---\n"
+                "---\nid: {C}\ntitle: Self\ncreated: 2026-10-01\ndepends_on: [{A}, {C}, 20261001-100000-zzzz]\nimplements: [S-feature]\n---\n"
             ),
         );
         put(&root, &format!("{p}/done/{A}x-ignored.md"), "no task");
@@ -879,6 +908,11 @@ mod tests {
                     FindingKind::FrontmatterError,
                     next(&format!("{F}-bad-yaml.md")),
                     1
+                ),
+                (
+                    FindingKind::DependencyError,
+                    format!("{p}/inbox/{C}-self.md"),
+                    5
                 ),
                 (
                     FindingKind::DependencyError,
@@ -1073,6 +1107,11 @@ mod tests {
             "---\nid: {A}\ntitle: Self\ncreated: 2026-10-01\ndepends_on: [{B}, {A}, {C}]\nimplements: [S-feature] # keep\n---\n\nBody\n"
         );
         put(&root, &file, &text);
+        put(
+            &root,
+            &format!("{p}/done/{C}-third.md"),
+            &task(C, "S-feature", ""),
+        );
         // A dependency on another task is not a finding.
         put(
             &root,
@@ -1138,6 +1177,80 @@ mod tests {
                 .all(|f| f.kind != FindingKind::DependencyError || f.file != file),
             "{:?}",
             again.findings
+        );
+    }
+
+    #[test]
+    fn an_unknown_dependency_id_is_reported_without_a_fix() {
+        let (root, config) = scratch();
+        let p = "docs/planning";
+        put(&root, &format!("{p}/spec.md"), SPEC);
+        const Z: &str = "20261001-100000-zzzz";
+        const Y: &str = "20261001-100000-yyyy";
+        // Ids in a column, in the archive and in a file with a mismatched frontmatter id (the
+        // filename wins) are known; `Z` and `Y` name no task file.
+        put(
+            &root,
+            &format!("{p}/inbox/{B}-column.md"),
+            &task(B, "S-feature", ""),
+        );
+        put(
+            &root,
+            &format!("{p}/done/2026-09/{C}-archived.md"),
+            &task(C, "S-feature", ""),
+        );
+        put(
+            &root,
+            &format!("{p}/next/{D}-mismatch.md"),
+            &task(E, "S-feature", ""),
+        );
+        let file = format!("{p}/next/{A}-depends.md");
+        put(
+            &root,
+            &file,
+            &format!(
+                "---\nid: {A}\ntitle: Depends\ncreated: 2026-10-01\nimplements: [S-feature]\ndepends_on:\n  - {B}\n  - {Z}\n  - {C}\n  - {D}\n  - {Z}\n  - {Y}\n---\n"
+            ),
+        );
+        // The mismatched frontmatter id is not the task's id.
+        let other = format!("{p}/next/{F}-frontmatter-id.md");
+        put(
+            &root,
+            &other,
+            &format!(
+                "---\nid: {F}\ntitle: Other\ncreated: 2026-10-01\ndepends_on: [{E}]\nimplements: [S-feature]\n---\n"
+            ),
+        );
+
+        let report = doctor(&root, &config);
+        let found: Vec<&Finding> = report
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::DependencyError)
+            .collect();
+        assert_eq!(found.len(), 3, "{:?}", report.findings);
+        assert_eq!(found[0].file, file);
+        assert_eq!(found[0].line, 6);
+        assert!(found[0].message.contains(Z), "{}", found[0].message);
+        assert_eq!(found[1].file, file);
+        assert!(found[1].message.contains(Y), "{}", found[1].message);
+        assert_eq!(found[2].file, other);
+        assert!(found[2].message.contains(E), "{}", found[2].message);
+        assert!(found.iter().all(|f| f.fix.is_none()));
+
+        // A column that cannot be read hides its ids: no id is called unknown then.
+        std::fs::remove_dir_all(root.join(p).join("inbox")).unwrap();
+        std::fs::write(root.join(p).join("inbox"), "not a folder").unwrap();
+        let unreadable = doctor(&root, &config);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(!unreadable.problems.is_empty());
+        assert!(
+            unreadable
+                .findings
+                .iter()
+                .all(|f| f.kind != FindingKind::DependencyError),
+            "{:?}",
+            unreadable.findings
         );
     }
 
@@ -1313,7 +1426,7 @@ mod tests {
         let today = now.format("%Y-%m-%d").to_string();
 
         // A task in the first column linking to the spec, to the task made before it and,
-        // every tenth, to an image.
+        // every tenth, to an image, and depending on the task made before it.
         let make = |n: usize, previous: Option<&str>| -> String {
             let path = make_task::make_task(
                 &root,
@@ -1330,6 +1443,11 @@ mod tests {
                 &FieldValue::List(vec!["S-feature".into()]),
             )
             .unwrap();
+            // Each task depends on the one before, so some depend on archived tasks.
+            if let Some(previous) = previous {
+                let id = ids::parse_task_filename(previous).unwrap().id;
+                text = task::set_field(&text, "depends_on", &FieldValue::List(vec![id])).unwrap();
+            }
             text.push_str("\nSee the [spec](../spec.md).\n");
             if let Some(previous) = previous {
                 text.push_str(&format!("After [the task before]({previous}).\n"));

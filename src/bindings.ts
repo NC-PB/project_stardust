@@ -772,7 +772,10 @@ export type FindingKind =
 "missing_image" | 
 /**  Frontmatter that is not valid, or a field that is missing or has an invalid value. */
 "frontmatter_error" | 
-/**  A `depends_on` entry that cannot mean anything: the task's own id (`S-dependencies`). */
+/**
+ *  A `depends_on` entry that cannot mean anything: the task's own id, or an id that no task
+ *  file carries, in the columns or the archive (`S-dependencies`).
+ */
 "dependency_error" | 
 /**
  *  A task outside the terminal column without `implements`, or an `implements` entry
