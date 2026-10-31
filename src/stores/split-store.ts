@@ -6,6 +6,7 @@ import {
 } from "@/bindings";
 import { useEditorStore } from "./editor-store";
 import { useProjectStore } from "./project-store";
+import { settleInTab } from "./tab-snapshots";
 
 interface SplitState {
   repoRoot: string | null;
@@ -35,7 +36,7 @@ export const useSplitStore = create<SplitState>()((set, get) => ({
   preview: async (repoRoot) => {
     set({ repoRoot, plan: null, report: null, error: null });
     const plan = await commands.planSpecSplit(repoRoot);
-    if (get().repoRoot === repoRoot) set({ plan });
+    settleInTab(useSplitStore, repoRoot, { plan });
   },
 
   confirm: async () => {
@@ -50,16 +51,21 @@ export const useSplitStore = create<SplitState>()((set, get) => ({
     }
     await editor.save();
     const result = await commands.splitSpec(repoRoot);
-    if (get().repoRoot !== repoRoot) return;
     if (result.status === "error") {
-      set({ plan: null, error: `Spec not split: ${result.error}` });
+      settleInTab(useSplitStore, repoRoot, {
+        plan: null,
+        error: `Spec not split: ${result.error}`,
+      });
       return;
     }
-    set({ plan: null, report: result.data, error: null });
+    settleInTab(useSplitStore, repoRoot, {
+      plan: null,
+      report: result.data,
+      error: null,
+    });
     // The single spec file is gone, so the project bar no longer offers it.
     const sources = await commands.sourceFiles(repoRoot);
-    if (useProjectStore.getState().repoRoot === repoRoot)
-      useProjectStore.setState({ sources });
+    settleInTab(useProjectStore, repoRoot, { sources });
   },
 
   cancel: () => set({ plan: null }),

@@ -4,6 +4,7 @@ import {
   type GitattributesPlan,
   type GitattributesReport,
 } from "@/bindings";
+import { settleInTab } from "./tab-snapshots";
 
 interface GitattributesState {
   repoRoot: string | null;
@@ -31,7 +32,7 @@ export const useGitattributesStore = create<GitattributesState>()(
     preview: async (repoRoot) => {
       set({ repoRoot, plan: null, report: null, error: null });
       const plan = await commands.planGitattributes(repoRoot);
-      if (get().repoRoot === repoRoot) set({ plan });
+      settleInTab(useGitattributesStore, repoRoot, { plan });
     },
 
     confirm: async () => {
@@ -44,15 +45,13 @@ export const useGitattributesStore = create<GitattributesState>()(
       )
         return;
       const result = await commands.addGitattributes(repoRoot, plan.missing);
-      if (get().repoRoot !== repoRoot) return;
-      if (result.status === "error") {
-        set({
-          plan: null,
-          error: `.gitattributes not changed: ${result.error}`,
-        });
-        return;
-      }
-      set({ plan: null, report: result.data, error: null });
+      settleInTab(
+        useGitattributesStore,
+        repoRoot,
+        result.status === "error"
+          ? { plan: null, error: `.gitattributes not changed: ${result.error}` }
+          : { plan: null, report: result.data, error: null },
+      );
     },
 
     cancel: () => set({ plan: null }),

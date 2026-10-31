@@ -4,6 +4,8 @@ const settings = new Map<string, unknown>();
 const pick = vi.fn<() => Promise<string | null>>();
 const unwatchProject = vi.fn();
 const loadConfig = vi.fn();
+const doctor = vi.fn();
+const moveTask = vi.fn();
 type Listener = (event: { payload: unknown }) => void;
 const listeners: Record<string, Listener> = {};
 
@@ -14,6 +16,8 @@ vi.mock("@/bindings", () => ({
       get: (_, name) => {
         if (name === "unwatchProject") return unwatchProject;
         if (name === "loadConfig") return loadConfig;
+        if (name === "doctor") return doctor;
+        if (name === "moveTask") return moveTask;
         return async () => ({ status: "ok", data: null });
       },
     },
@@ -48,6 +52,7 @@ const { useWorkspaceStore, WORKSPACE_SETTING, RECENT_SETTING } = await import(
   "./workspace-store"
 );
 const { useBoardStore } = await import("./board-store");
+const { useDoctorStore } = await import("./doctor-store");
 const { useEditorStore } = await import("./editor-store");
 const { useMenuStore } = await import("./menu-store");
 const { useProjectStore } = await import("./project-store");
@@ -228,5 +233,68 @@ describe("useWorkspaceStore", () => {
     expect(useWorkspaceStore.getState().active).toBe("/a");
     expect(useWorkspaceStore.getState().error).not.toBeNull();
     useEditorStore.setState({ conflict: null, text: "", saved: "" });
+  });
+
+  it("shows the answer of a check or move that arrived while its tab was hidden", async () => {
+    await useWorkspaceStore.getState().open("/a");
+    let answer: (report: unknown) => void = () => {};
+    doctor.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const checking = useDoctorStore.getState().check("/a");
+    useBoardStore.setState({
+      repoRoot: "/a",
+      config: {
+        planning_root: "docs/planning",
+        columns: ["inbox", "done"],
+        terminal: "done",
+      } as never,
+      columns: [
+        {
+          name: "inbox",
+          tasks: [{ file_name: "t.md" }],
+          missing: false,
+          error: null,
+        },
+        { name: "done", tasks: [], missing: false, error: null },
+      ] as never,
+    });
+    let refuse: (result: unknown) => void = () => {};
+    moveTask.mockReturnValueOnce(
+      new Promise((resolve) => {
+        refuse = resolve;
+      }),
+    );
+    const moving = useBoardStore.getState().moveTask("t.md", "inbox", "done");
+    expect(useDoctorStore.getState().checking).toBe(true);
+
+    await useWorkspaceStore.getState().open("/b");
+    const report = { findings: [], unreadable: [] };
+    answer(report);
+    refuse({ status: "error", error: "changed on disk" });
+    await checking;
+    await moving;
+    // The shown tab is not touched.
+    expect(useDoctorStore.getState()).toMatchObject({
+      repoRoot: null,
+      report: null,
+      checking: false,
+    });
+    expect(useBoardStore.getState().moveError).toBeNull();
+
+    await useWorkspaceStore.getState().open("/a");
+    expect(useDoctorStore.getState()).toMatchObject({
+      repoRoot: "/a",
+      report,
+      checking: false,
+    });
+    const board = useBoardStore.getState();
+    expect(board.moveError).toBe("changed on disk");
+    expect(board.columns[0].tasks.map((task) => task.file_name)).toEqual([
+      "t.md",
+    ]);
+    useDoctorStore.getState().close();
   });
 });

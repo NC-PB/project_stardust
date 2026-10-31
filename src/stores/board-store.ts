@@ -13,6 +13,7 @@ import {
 } from "@/lib/board";
 import { useEditorStore } from "./editor-store";
 import { readSetting, writeSetting } from "./settings";
+import { settleInTab } from "./tab-snapshots";
 
 /** Last visit per repository root, in milliseconds since the epoch. */
 const LAST_VISITS_SETTING = "lastVisits";
@@ -166,9 +167,10 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
     )
       await editor.save();
     const result = await commands.moveTask(repoRoot, fileName, from, to);
-    if (result.status === "ok" || get().repoRoot !== repoRoot) return;
-    // A failed move leaves the file where it was; the next batch re-reads anything else.
-    set((state) => ({
+    // A move that happened is in the watcher's batch, queued for a hidden tab. A failed move
+    // leaves the file where it was, so the card goes back, also in a hidden tab's state.
+    if (result.status === "ok") return;
+    settleInTab(useBoardStore, repoRoot, (state) => ({
       columns: moveCard(state.columns, fileName, to, from),
       moveError: result.error,
     }));

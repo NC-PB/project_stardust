@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { type ArchivePlan, type ArchiveReport, commands } from "@/bindings";
+import { settleInTab } from "./tab-snapshots";
 
 interface ArchiveState {
   repoRoot: string | null;
@@ -26,7 +27,7 @@ export const useArchiveStore = create<ArchiveState>()((set, get) => ({
   preview: async (repoRoot) => {
     set({ repoRoot, plan: null, report: null, error: null });
     const plan = await commands.planArchive(repoRoot);
-    if (get().repoRoot === repoRoot) set({ plan });
+    settleInTab(useArchiveStore, repoRoot, { plan });
   },
 
   confirm: async () => {
@@ -42,12 +43,13 @@ export const useArchiveStore = create<ArchiveState>()((set, get) => ({
       repoRoot,
       plan.moves.map((move) => move.file_name),
     );
-    if (get().repoRoot !== repoRoot) return;
-    if (result.status === "error") {
-      set({ plan: null, error: `Nothing archived: ${result.error}` });
-      return;
-    }
-    set({ plan: null, report: result.data, error: null });
+    settleInTab(
+      useArchiveStore,
+      repoRoot,
+      result.status === "error"
+        ? { plan: null, error: `Nothing archived: ${result.error}` }
+        : { plan: null, report: result.data, error: null },
+    );
   },
 
   cancel: () => set({ plan: null }),

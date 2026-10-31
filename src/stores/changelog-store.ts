@@ -10,6 +10,7 @@ import {
   type SinceMode,
   sinceOf,
 } from "@/lib/changelog";
+import { settleInTab } from "./tab-snapshots";
 
 interface ChangelogState {
   repoRoot: string | null;
@@ -63,14 +64,16 @@ export const useChangelogStore = create<ChangelogState>()((set, get) => ({
       ...(sameRepo ? {} : { date: "", tag: "" }),
     });
     const tags = await commands.changelogTags(repoRoot);
-    if (get().repoRoot !== repoRoot) return;
     const newest = tags.tags[0]?.name;
-    if (newest !== undefined && (!sameRepo || get().tag === "")) {
-      // The newest tag is the usual start of the next release's entries.
-      set({ tags, mode: "tag", tag: newest });
-    } else {
-      set({ tags, ...(tags.available ? {} : { mode: "date" }) });
-    }
+    settleInTab(
+      useChangelogStore,
+      repoRoot,
+      (state): Partial<ChangelogState> =>
+        newest !== undefined && (!sameRepo || state.tag === "")
+          ? // The newest tag is the usual start of the next release's entries.
+            { tags, mode: "tag", tag: newest }
+          : { tags, ...(tags.available ? {} : { mode: "date" }) },
+    );
   },
 
   setMode: (mode) => set({ mode, draft: null }),
@@ -90,9 +93,13 @@ export const useChangelogStore = create<ChangelogState>()((set, get) => ({
     }
     set({ draft: null, written: null, error: null });
     const result = await commands.draftChangelog(repoRoot, since);
-    if (get().repoRoot !== repoRoot) return;
-    if (result.status === "error") set({ error: result.error });
-    else set({ draft: result.data });
+    settleInTab(
+      useChangelogStore,
+      repoRoot,
+      result.status === "error"
+        ? { error: result.error }
+        : { draft: result.data },
+    );
   },
 
   confirm: async () => {
@@ -103,13 +110,15 @@ export const useChangelogStore = create<ChangelogState>()((set, get) => ({
       draft.existing,
       draft.text,
     );
-    if (get().repoRoot !== repoRoot) return;
     if (result.status === "error") {
-      set({ draft: null, error: `Changelog not written: ${result.error}` });
+      settleInTab(useChangelogStore, repoRoot, {
+        draft: null,
+        error: `Changelog not written: ${result.error}`,
+      });
       return;
     }
     const count = entriesLabel(entryCount(draft.groups));
-    set({
+    settleInTab(useChangelogStore, repoRoot, {
       draft: null,
       open: false,
       error: null,
